@@ -5,7 +5,7 @@ import re
 from docx import Document
 import pdfplumber
 import os
-from anthropic import Anthropic
+from openai import OpenAI
 
 class ResumeParser:
     """Parse DOCX and PDF resumes into structured data using Claude AI"""
@@ -19,10 +19,10 @@ class ResumeParser:
             'certifications': ['certifications', 'certificates', 'licenses', 'credentials']
         }
 
-        # Initialize Claude API
-        self.claude_api_key = os.getenv('CLAUDE_API_KEY')
-        if self.claude_api_key:
-            self.client = Anthropic(api_key=self.claude_api_key)
+        # Initialize OpenAI API
+        self.openai_api_key = os.getenv('OPENAI_API_KEY')
+        if self.openai_api_key:
+            self.client = OpenAI(api_key=self.openai_api_key)
             self.use_ai_parsing = True
         else:
             self.use_ai_parsing = False
@@ -246,38 +246,28 @@ IMPORTANT:
 }}"""
 
         try:
-            message = self.client.messages.create(
-                model="claude-sonnet-4-20250514",
+            response = self.client.chat.completions.create(
+                model="gpt-4o",
                 max_tokens=8000,
                 temperature=0.2,
+                response_format={"type": "json_object"},
                 messages=[
+                    {"role": "system", "content": "You are a resume parser that extracts structured information and returns only valid JSON."},
                     {"role": "user", "content": prompt}
                 ]
             )
 
-            response_text = message.content[0].text
+            response_text = response.choices[0].message.content
 
-            print(f"Claude AI Response (first 500 chars): {response_text[:500]}")
+            print(f"OpenAI GPT-4 Response (first 500 chars): {response_text[:500]}")
 
-            # Extract JSON from response (Claude might wrap it in markdown or text)
-            # Try to find JSON block in markdown first
-            json_block_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response_text, re.DOTALL)
-            if json_block_match:
-                json_str = json_block_match.group(1)
-            else:
-                # Try to find raw JSON
-                json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
-                if json_match:
-                    json_str = json_match.group(0)
-                else:
-                    json_str = response_text
-
+            # With response_format="json_object", OpenAI returns clean JSON
             try:
-                parsed_data = json.loads(json_str)
+                parsed_data = json.loads(response_text)
             except json.JSONDecodeError as je:
                 print(f"JSON decode error: {je}")
-                print(f"Attempted to parse: {json_str[:1000]}")
-                raise ValueError(f"Failed to parse JSON from Claude response: {str(je)}")
+                print(f"Attempted to parse: {response_text[:1000]}")
+                raise ValueError(f"Failed to parse JSON from OpenAI response: {str(je)}")
 
             # Validate required fields exist
             if not isinstance(parsed_data, dict):
