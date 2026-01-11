@@ -36,9 +36,11 @@ class Settings(BaseSettings):
             # Check for Railway's DATABASE_URL (PostgreSQL)
             railway_db = os.getenv("DATABASE_URL")
             if railway_db:
-                # Railway uses postgres://, but SQLAlchemy needs postgresql+asyncpg://
+                # Railway uses postgres:// or postgresql://, but SQLAlchemy async needs postgresql+asyncpg://
                 if railway_db.startswith("postgres://"):
                     self.database_url = railway_db.replace("postgres://", "postgresql+asyncpg://", 1)
+                elif railway_db.startswith("postgresql://"):
+                    self.database_url = railway_db.replace("postgresql://", "postgresql+asyncpg://", 1)
                 else:
                     self.database_url = railway_db
             else:
