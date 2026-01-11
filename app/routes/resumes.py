@@ -7,6 +7,7 @@ from app.models.user import User
 from app.middleware.auth import get_current_user, get_current_user_optional
 from app.services.resume_parser import ResumeParser
 from app.utils.file_handler import FileHandler
+from app.utils.logger import logger
 import json
 
 router = APIRouter()
@@ -22,37 +23,31 @@ async def upload_resume(
     """Upload and parse resume (optional authentication)"""
 
     try:
-        print(f"=== UPLOAD START ===")
-        print(f"Received file: {file.filename}")
-        print(f"Content type: {file.content_type}")
-        print(f"File size: {file.size if hasattr(file, 'size') else 'unknown'}")
+        logger.info("=== UPLOAD START ===")
+        logger.info(f"Received file: {file.filename}, Content-Type: {file.content_type}, Size: {file.size if hasattr(file, 'size') else 'unknown'}")
 
         # Save file
-        print(f"Step 1: Saving file...")
+        logger.info("Step 1: Saving file...")
         try:
             file_info = await file_handler.save_upload(file, category="resumes")
-            print(f"File saved successfully: {file_info['file_path']}")
+            logger.info(f"File saved successfully: {file_info['file_path']}")
         except Exception as e:
-            print(f"ERROR in file saving: {type(e).__name__}: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"File save failed: {type(e).__name__}: {str(e)}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"File save failed: {str(e)}")
 
         # Parse resume
-        print(f"Step 2: Parsing resume...")
+        logger.info("Step 2: Parsing resume...")
         try:
             parsed_data = resume_parser.parse_file(file_info['file_path'])
-            print(f"Resume parsed: {len(parsed_data.get('skills', []))} skills, {len(parsed_data.get('experience', []))} jobs")
+            logger.info(f"Resume parsed: {len(parsed_data.get('skills', []))} skills, {len(parsed_data.get('experience', []))} jobs")
         except Exception as e:
-            print(f"ERROR in parsing: {type(e).__name__}: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Parsing failed: {type(e).__name__}: {str(e)}", exc_info=True)
             # Cleanup file if parsing fails
             file_handler.delete_file(file_info['file_path'])
             raise HTTPException(status_code=500, detail=f"Resume parsing failed: {str(e)}")
 
         # Save to database
-        print(f"Step 3: Saving to database...")
+        logger.info("Step 3: Saving to database...")
         try:
             resume = BaseResume(
                 user_id=current_user.id if current_user else None,
@@ -74,16 +69,14 @@ async def upload_resume(
             await db.commit()
             await db.refresh(resume)
 
-            print(f"Resume saved to database with ID: {resume.id}")
+            logger.info(f"Resume saved to database with ID: {resume.id}")
         except Exception as e:
-            print(f"ERROR in database save: {type(e).__name__}: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Database save failed: {type(e).__name__}: {str(e)}", exc_info=True)
             # Cleanup file if database save fails
             file_handler.delete_file(file_info['file_path'])
             raise HTTPException(status_code=500, detail=f"Database save failed: {str(e)}")
 
-        print(f"=== UPLOAD SUCCESS ===")
+        logger.info("=== UPLOAD SUCCESS ===")
 
         # Check for parsing warnings
         response = {
@@ -98,9 +91,9 @@ async def upload_resume(
         if parsing_warnings:
             response['warnings'] = parsing_warnings
             response['parsing_method'] = parsed_data.get('parsing_method', 'unknown')
-            print(f"⚠️  PARSING WARNINGS: {len(parsing_warnings)} warnings")
+            logger.warning(f"Parsing warnings detected: {len(parsing_warnings)} warnings")
             for warning in parsing_warnings:
-                print(f"  - {warning}")
+                logger.warning(f"  - {warning}")
 
         return response
 
@@ -109,9 +102,7 @@ async def upload_resume(
         raise
     except Exception as e:
         # Catch any unexpected errors
-        print(f"UNEXPECTED ERROR in upload_resume: {type(e).__name__}: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        logger.critical(f"UNEXPECTED ERROR in upload_resume: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
 
 @router.get("/list")
@@ -194,8 +185,8 @@ async def delete_resume(
     if resume.user_id and not current_user:
         raise HTTPException(status_code=401, detail="Authentication required to delete this resume")
 
-    print(f"=== DELETING RESUME ID {resume_id} ===")
-    print(f"Base resume file: {resume.file_path}")
+    logger.info(f"=== DELETING RESUME ID {resume_id} ===")
+    logger.info(f"Base resume file: {resume.file_path}")
 
     # Step 1: Find and delete all tailored resume files
     tailored_result = await db.execute(
@@ -209,31 +200,31 @@ async def delete_resume(
         if tailored.docx_path:
             if file_handler.delete_file(tailored.docx_path):
                 deleted_files.append(tailored.docx_path)
-                print(f"Deleted tailored DOCX: {tailored.docx_path}")
+                logger.debug(f"Deleted tailored DOCX: {tailored.docx_path}")
             else:
-                print(f"WARNING: Failed to delete {tailored.docx_path}")
+                logger.warning(f"Failed to delete {tailored.docx_path}")
 
         # Delete PDF file if exists
         if tailored.pdf_path:
             if file_handler.delete_file(tailored.pdf_path):
                 deleted_files.append(tailored.pdf_path)
-                print(f"Deleted tailored PDF: {tailored.pdf_path}")
+                logger.debug(f"Deleted tailored PDF: {tailored.pdf_path}")
             else:
-                print(f"WARNING: Failed to delete {tailored.pdf_path}")
+                logger.warning(f"Failed to delete {tailored.pdf_path}")
 
-    print(f"Deleted {len(deleted_files)} tailored resume files")
+    logger.info(f"Deleted {len(deleted_files)} tailored resume files")
 
     # Step 2: Delete base resume file from disk
     if file_handler.delete_file(resume.file_path):
-        print(f"Deleted base resume file: {resume.file_path}")
+        logger.info(f"Deleted base resume file: {resume.file_path}")
     else:
-        print(f"WARNING: Failed to delete base resume: {resume.file_path}")
+        logger.warning(f"Failed to delete base resume: {resume.file_path}")
 
     # Step 3: Delete from database (CASCADE will handle tailored_resumes)
     await db.delete(resume)
     await db.commit()
 
-    print(f"=== RESUME DELETED ===")
+    logger.info("=== RESUME DELETED ===")
 
     return {
         "success": True,

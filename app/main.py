@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.database import init_db
 from app.routes import resumes, tailoring, auth
+from app.utils.logger import logger
 
 settings = get_settings()
 
@@ -20,9 +21,9 @@ app.add_middleware(
 # Startup: Initialize database
 @app.on_event("startup")
 async def startup_event():
-    print("Starting ResumeAI Backend...")
+    logger.info("Starting ResumeAI Backend...")
     await init_db()
-    print(f"Backend ready at http://{settings.backend_host}:{settings.backend_port}")
+    logger.info(f"Backend ready at http://{settings.backend_host}:{settings.backend_port}")
 
 # Health check endpoint
 @app.get("/health")
@@ -45,10 +46,10 @@ async def root():
 # Request logging middleware
 @app.middleware("http")
 async def log_requests(request, call_next):
-    print(f"Incoming request: {request.method} {request.url.path}")
-    print(f"Headers: {dict(request.headers)}")
+    logger.info(f"{request.method} {request.url.path}")
+    logger.debug(f"Headers: {dict(request.headers)}")
     response = await call_next(request)
-    print(f"Response status: {response.status_code}")
+    logger.info(f"Response: {response.status_code}")
     return response
 
 # Register routes
