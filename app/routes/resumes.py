@@ -120,11 +120,12 @@ async def list_resumes(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """List user's resumes (requires authentication)"""
-    # Only show authenticated user's resumes
+    """List user's resumes (requires authentication, excludes deleted resumes)"""
+    # Only show authenticated user's non-deleted resumes
     result = await db.execute(
         select(BaseResume)
         .where(BaseResume.user_id == current_user.id)
+        .where(BaseResume.is_deleted == False)  # Filter out soft-deleted resumes
         .order_by(BaseResume.uploaded_at.desc())
     )
 
@@ -149,12 +150,16 @@ async def get_resume(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get resume details (requires authentication)"""
+    """Get resume details (requires authentication, excludes deleted resumes)"""
     result = await db.execute(select(BaseResume).where(BaseResume.id == resume_id))
     resume = result.scalar_one_or_none()
 
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
+
+    # Check if resume is deleted
+    if resume.is_deleted:
+        raise HTTPException(status_code=404, detail="Resume has been deleted")
 
     # Ownership verification
     if resume.user_id and resume.user_id != current_user.id:
@@ -190,6 +195,10 @@ async def delete_resume(
 
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
+
+    # Check if already deleted
+    if resume.is_deleted:
+        raise HTTPException(status_code=400, detail="Resume is already deleted")
 
     # If authenticated, validate ownership
     if current_user and resume.user_id != current_user.id:
@@ -234,14 +243,37 @@ async def delete_resume(
     else:
         logger.warning(f"Failed to delete base resume: {resume.file_path}")
 
-    # Step 3: Delete from database (CASCADE will handle tailored_resumes)
-    await db.delete(resume)
+    # Step 3: Mark as deleted in database (soft delete with audit trail)
+    from datetime import datetime
+    resume.is_deleted = True
+    resume.deleted_at = datetime.utcnow()
+    resume.deleted_by = current_user.id if current_user else None
+
+    # Mark all tailored resumes as deleted too
+    for tailored in tailored_resumes:
+        tailored.is_deleted = True
+        tailored.deleted_at = datetime.utcnow()
+        tailored.deleted_by = current_user.id if current_user else None
+
+    db.add(resume)
+    for tailored in tailored_resumes:
+        db.add(tailored)
     await db.commit()
 
-    logger.info("=== RESUME DELETED ===")
+    # Audit log
+    logger.info(f"=== RESUME SOFT-DELETED ===")
+    logger.info(f"Deleted by: User ID {current_user.id if current_user else 'Anonymous'}")
+    logger.info(f"Deleted at: {resume.deleted_at.isoformat()}")
+    logger.info(f"Base resume ID: {resume.id}, Tailored resumes: {len(tailored_resumes)}")
 
     return {
         "success": True,
         "message": f"Resume and {len(tailored_resumes)} tailored versions deleted",
-        "deleted_files": len(deleted_files) + 1
+        "deleted_files": len(deleted_files) + 1,
+        "audit": {
+            "deleted_by": current_user.id if current_user else None,
+            "deleted_at": resume.deleted_at.isoformat(),
+            "resume_id": resume.id,
+            "tailored_count": len(tailored_resumes)
+        }
     }

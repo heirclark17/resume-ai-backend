@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, Float
+from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, Float, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
@@ -28,6 +28,11 @@ class BaseResume(Base):
     # Metadata
     uploaded_at = Column(DateTime, default=datetime.utcnow, index=True)  # Index for sorting by date
 
+    # Soft delete fields (audit trail)
+    is_deleted = Column(Boolean, default=False, index=True)  # Index for filtering
+    deleted_at = Column(DateTime, nullable=True)  # When was it deleted
+    deleted_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)  # Who deleted it
+
     # Relationships
     user = relationship("User", back_populates="resumes")
     tailored_resumes = relationship("TailoredResume", back_populates="base_resume", cascade="all, delete-orphan")
@@ -53,8 +58,14 @@ class TailoredResume(Base):
     docx_path = Column(String)
     pdf_path = Column(String)
 
+    # Metadata
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)  # Index for sorting by date
+
+    # Soft delete fields (audit trail)
+    is_deleted = Column(Boolean, default=False, index=True)  # Index for filtering
+    deleted_at = Column(DateTime, nullable=True)  # When was it deleted
+    deleted_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)  # Who deleted it
+
     # Relationships
     base_resume = relationship("BaseResume", back_populates="tailored_resumes")
     job = relationship("Job", back_populates="tailored_resumes")
-
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)  # Index for sorting by date

@@ -241,7 +241,7 @@ async def tailor_resume(
 
 @router.get("/tailored/{tailored_id}")
 async def get_tailored_resume(tailored_id: int, db: AsyncSession = Depends(get_db)):
-    """Get a tailored resume by ID"""
+    """Get a tailored resume by ID (excludes deleted resumes)"""
     result = await db.execute(
         select(TailoredResume).where(TailoredResume.id == tailored_id)
     )
@@ -249,6 +249,10 @@ async def get_tailored_resume(tailored_id: int, db: AsyncSession = Depends(get_d
 
     if not tailored:
         raise HTTPException(status_code=404, detail="Tailored resume not found")
+
+    # Check if deleted
+    if tailored.is_deleted:
+        raise HTTPException(status_code=404, detail="Tailored resume has been deleted")
 
     return {
         "id": tailored.id,
@@ -266,9 +270,11 @@ async def get_tailored_resume(tailored_id: int, db: AsyncSession = Depends(get_d
 
 @router.get("/list")
 async def list_tailored_resumes(db: AsyncSession = Depends(get_db)):
-    """List all tailored resumes"""
+    """List all tailored resumes (excludes deleted resumes)"""
     result = await db.execute(
-        select(TailoredResume).order_by(TailoredResume.created_at.desc())
+        select(TailoredResume)
+        .where(TailoredResume.is_deleted == False)  # Filter out soft-deleted resumes
+        .order_by(TailoredResume.created_at.desc())
     )
     tailored_resumes = result.scalars().all()
 
