@@ -201,51 +201,55 @@ class ResumeParser:
     def _parse_with_ai(self, resume_text: str) -> Dict:
         """Parse resume using Claude AI for better accuracy"""
 
-        prompt = f"""Extract structured information from this resume and return it as valid JSON.
+        prompt = f"""You are a resume parser. Extract structured information from this resume and return ONLY a valid JSON object.
 
-Resume Text:
+RESUME TEXT:
 {resume_text}
 
-Extract the following sections:
-1. **summary**: The professional summary or objective statement (even if not explicitly labeled as "summary")
-2. **skills**: List of technical skills and competencies (as array of strings)
-3. **experience**: Work experience entries as array of objects with:
-   - title: Job title
-   - company: Company name
-   - location: Location (city, state)
-   - dates: Date range
-   - bullets: Array of bullet points describing responsibilities and accomplishments
-4. **education**: Education details as string
-5. **certifications**: Certifications and credentials as string
+INSTRUCTIONS:
+1. **summary**: Extract the professional summary paragraph. This is typically the opening paragraph after the contact info that describes the candidate's background, experience, and expertise. Look for paragraphs with phrases like "years of experience", "proven ability", "background in", etc.
 
-Requirements:
-- For summary: Extract the opening paragraph that describes professional background (may be under a title like "CYBERSECURITY PROGRAM & PROJECT MANAGER" or similar)
-- For experience: Extract ALL work experience entries, including job title, company, location, date range, and all bullet points
-- For skills: Combine skills from sections like "CORE SKILLS", "TECHNOLOGIES", "TECHNICAL SKILLS" etc.
-- Return ONLY valid JSON, no other text
+2. **skills**: Extract ALL skills from ANY section with keywords: "SKILLS", "CORE SKILLS", "TECHNICAL SKILLS", "TECHNOLOGIES", "COMPETENCIES", "EXPERTISE". Return as an array of individual skill strings (not full sentences).
 
-Return JSON in this exact format:
+3. **experience**: Extract ALL work experience entries in chronological order. For EACH job, extract:
+   - title: The job title (e.g., "Cybersecurity Implementation Project Manager")
+   - company: Company name (e.g., "T-Mobile")
+   - location: City and state (e.g., "Houston, TX")
+   - dates: Full date range (e.g., "2024 - May 2025")
+   - bullets: ALL bullet points describing responsibilities and accomplishments
+
+4. **education**: Extract degree, major, institution, and year as a single string
+
+5. **certifications**: Extract ALL certifications and credentials as a single string (can include line breaks)
+
+IMPORTANT:
+- Extract the ACTUAL summary paragraph text, not job descriptions
+- Include EVERY skill listed (programming languages, tools, frameworks, soft skills)
+- Include EVERY work experience entry from most recent to oldest
+- Include ALL bullet points for each job
+- Return ONLY the JSON object, no markdown formatting, no explanation
+
 {{
-  "summary": "string",
-  "skills": ["skill1", "skill2", ...],
+  "summary": "The professional summary paragraph text here",
+  "skills": ["Skill 1", "Skill 2", "Skill 3"],
   "experience": [
     {{
       "title": "Job Title",
       "company": "Company Name",
       "location": "City, State",
       "dates": "YYYY - YYYY",
-      "bullets": ["bullet 1", "bullet 2", ...]
+      "bullets": ["First bullet point", "Second bullet point"]
     }}
   ],
-  "education": "string",
-  "certifications": "string"
+  "education": "Degree, Major, Institution, Year",
+  "certifications": "Certification 1\\nCertification 2"
 }}"""
 
         try:
             message = self.client.messages.create(
                 model="claude-sonnet-4-20250514",
-                max_tokens=4000,
-                temperature=0.1,
+                max_tokens=8000,
+                temperature=0.2,
                 messages=[
                     {"role": "user", "content": prompt}
                 ]
@@ -253,12 +257,31 @@ Return JSON in this exact format:
 
             response_text = message.content[0].text
 
-            # Extract JSON from response (Claude might wrap it in markdown)
-            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
-            if json_match:
-                parsed_data = json.loads(json_match.group(0))
+            print(f"Claude AI Response (first 500 chars): {response_text[:500]}")
+
+            # Extract JSON from response (Claude might wrap it in markdown or text)
+            # Try to find JSON block in markdown first
+            json_block_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response_text, re.DOTALL)
+            if json_block_match:
+                json_str = json_block_match.group(1)
             else:
-                parsed_data = json.loads(response_text)
+                # Try to find raw JSON
+                json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+                if json_match:
+                    json_str = json_match.group(0)
+                else:
+                    json_str = response_text
+
+            try:
+                parsed_data = json.loads(json_str)
+            except json.JSONDecodeError as je:
+                print(f"JSON decode error: {je}")
+                print(f"Attempted to parse: {json_str[:1000]}")
+                raise ValueError(f"Failed to parse JSON from Claude response: {str(je)}")
+
+            # Validate required fields exist
+            if not isinstance(parsed_data, dict):
+                raise ValueError("Parsed data is not a dictionary")
 
             # Transform experience format to match expected structure
             experience_transformed = []
@@ -270,14 +293,19 @@ Return JSON in this exact format:
                     'bullets': job.get('bullets', [])
                 })
 
-            return {
+            result = {
                 'summary': parsed_data.get('summary', ''),
-                'skills': parsed_data.get('skills', []),
+                'skills': parsed_data.get('skills', []) if isinstance(parsed_data.get('skills'), list) else [],
                 'experience': experience_transformed,
                 'education': parsed_data.get('education', ''),
                 'certifications': parsed_data.get('certifications', '')
             }
 
+            print(f"Parsed resume successfully: {len(result['experience'])} jobs, {len(result['skills'])} skills")
+            return result
+
         except Exception as e:
             print(f"Error parsing with AI: {e}")
+            import traceback
+            traceback.print_exc()
             raise
