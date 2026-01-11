@@ -10,9 +10,6 @@ class Settings(BaseSettings):
     # Test Mode
     test_mode: bool = False
 
-    # Database - Railway provides DATABASE_URL, fallback to SQLite for local
-    database_url: str = None
-
     # File Storage
     upload_dir: str = "./uploads"
     resumes_dir: str = "./resumes"
@@ -29,23 +26,32 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        # Auto-detect database URL
-        if self.database_url is None:
-            # Check for Railway's DATABASE_URL (PostgreSQL)
-            railway_db = os.getenv("DATABASE_URL")
-            if railway_db:
-                # Railway uses postgres:// or postgresql://, but SQLAlchemy async needs postgresql+asyncpg://
-                if railway_db.startswith("postgres://"):
-                    self.database_url = railway_db.replace("postgres://", "postgresql+asyncpg://", 1)
-                elif railway_db.startswith("postgresql://"):
-                    self.database_url = railway_db.replace("postgresql://", "postgresql+asyncpg://", 1)
-                else:
-                    self.database_url = railway_db
+    @property
+    def database_url(self) -> str:
+        """
+        Get database URL with proper async driver
+        Railway provides DATABASE_URL as postgres:// or postgresql://
+        We need to convert it to postgresql+asyncpg:// for async support
+        """
+        railway_db = os.getenv("DATABASE_URL")
+
+        if railway_db:
+            print(f"[CONFIG] Railway DATABASE_URL detected: {railway_db[:30]}...")
+            # Convert to async driver
+            if railway_db.startswith("postgres://"):
+                url = railway_db.replace("postgres://", "postgresql+asyncpg://", 1)
+                print(f"[CONFIG] Converted to: {url[:30]}...")
+                return url
+            elif railway_db.startswith("postgresql://"):
+                url = railway_db.replace("postgresql://", "postgresql+asyncpg://", 1)
+                print(f"[CONFIG] Converted to: {url[:30]}...")
+                return url
             else:
-                # Fallback to local SQLite
-                self.database_url = "sqlite+aiosqlite:///./database/resume_ai.db"
+                print(f"[CONFIG] Using DATABASE_URL as-is")
+                return railway_db
+        else:
+            print("[CONFIG] No DATABASE_URL found, using SQLite")
+            return "sqlite+aiosqlite:///./database/resume_ai.db"
 
 @lru_cache()
 def get_settings() -> Settings:
