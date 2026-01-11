@@ -55,10 +55,11 @@ async def log_requests(request, call_next):
 app.include_router(resumes.router, prefix="/api/resumes", tags=["Resumes"])
 app.include_router(tailoring.router, prefix="/api/tailor", tags=["Tailoring"])
 
+# Railway deployment - use railway.json startCommand instead
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
-        "backend.app.main:app",
+        "app.main:app",  # Fixed: removed 'backend.' prefix
         host=settings.backend_host,
         port=settings.backend_port,
         reload=settings.debug
