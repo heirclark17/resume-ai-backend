@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database import get_db
@@ -14,13 +14,23 @@ router = APIRouter()
 file_handler = FileHandler()
 resume_parser = ResumeParser()
 
+# Get limiter from main app (set in app.state.limiter)
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+limiter = Limiter(key_func=get_remote_address)
+
 @router.post("/upload")
+@limiter.limit("5/minute")  # Rate limit: 5 uploads per minute per IP
 async def upload_resume(
+    request: Request,
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
-    """Upload and parse resume (optional authentication)"""
+    """Upload and parse resume (optional authentication)
+
+    Rate limited to 5 uploads per minute per IP address to prevent abuse.
+    """
 
     try:
         logger.info("=== UPLOAD START ===")

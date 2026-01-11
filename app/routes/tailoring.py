@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
@@ -19,6 +19,11 @@ settings = get_settings()
 
 router = APIRouter()
 
+# Rate limiter for expensive AI operations
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+limiter = Limiter(key_func=get_remote_address)
+
 from typing import List
 
 class TailorRequest(BaseModel):
@@ -33,12 +38,16 @@ class BatchTailorRequest(BaseModel):
     job_urls: List[str]  # Max 10 URLs
 
 @router.post("/tailor")
+@limiter.limit("10/hour")  # Rate limit: 10 tailoring operations per hour per IP
 async def tailor_resume(
+    http_request: Request,
     request: TailorRequest,
     db: AsyncSession = Depends(get_db)
 ):
     """
     Tailor a resume for a specific job
+
+    Rate limited to 10 tailoring operations per hour per IP (expensive AI operations).
 
     Process:
     1. Fetch base resume from database
@@ -184,7 +193,7 @@ async def tailor_resume(
         quality_score = QualityScorer.calculate_quality_score(
             base_resume_data=base_resume_data,
             tailored_content=tailored_content,
-            company_research=company_research_data
+            company_research=company_research
         )
         print(f"Quality score: {quality_score:.1f}/100")
 
@@ -280,12 +289,16 @@ async def list_tailored_resumes(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/tailor/batch")
+@limiter.limit("2/hour")  # Rate limit: 2 batch operations per hour per IP (very expensive)
 async def tailor_resume_batch(
+    http_request: Request,
     request: BatchTailorRequest,
     db: AsyncSession = Depends(get_db)
 ):
     """
     Tailor a resume for multiple jobs (up to 10)
+
+    Rate limited to 2 batch operations per hour per IP (can process up to 10 jobs each).
 
     Returns results for each job URL with success/failure status
     """
@@ -345,8 +358,8 @@ async def tailor_resume_batch(
                 job_url=job_url
             )
 
-            # Call single tailor endpoint
-            result = await tailor_resume(tailor_req, db)
+            # Call single tailor endpoint (pass http_request for rate limiting)
+            result = await tailor_resume(http_request, tailor_req, db)
 
             results.append({
                 "job_url": job_url,
