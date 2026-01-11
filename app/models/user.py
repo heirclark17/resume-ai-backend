@@ -3,6 +3,7 @@ from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
 import secrets
+import bcrypt
 
 class User(Base):
     __tablename__ = "users"
@@ -26,12 +27,34 @@ class User(Base):
         """Generate a secure random API key"""
         return secrets.token_urlsafe(32)
 
+    @staticmethod
+    def hash_api_key(api_key: str) -> str:
+        """Hash an API key using bcrypt"""
+        salt = bcrypt.gensalt()
+        hashed = bcrypt.hashpw(api_key.encode('utf-8'), salt)
+        return hashed.decode('utf-8')
+
+    @staticmethod
+    def verify_api_key(api_key: str, hashed_key: str) -> bool:
+        """Verify an API key against its hash"""
+        try:
+            return bcrypt.checkpw(api_key.encode('utf-8'), hashed_key.encode('utf-8'))
+        except Exception:
+            return False
+
     @classmethod
     def create_user(cls, email: str, username: str):
-        """Factory method to create user with API key"""
+        """Factory method to create user with hashed API key"""
+        # Generate plaintext key (to return to user)
+        plaintext_key = secrets.token_urlsafe(32)
+
+        # Store hashed version in database
         user = cls(
             email=email,
             username=username,
-            api_key=secrets.token_urlsafe(32)
+            api_key=cls.hash_api_key(plaintext_key)
         )
+
+        # Attach plaintext key for one-time return (not stored)
+        user._plaintext_api_key = plaintext_key
         return user

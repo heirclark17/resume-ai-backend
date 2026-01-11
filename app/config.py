@@ -18,7 +18,13 @@ class Settings(BaseSettings):
     # App Settings
     app_name: str = "ResumeAI"
     app_version: str = "1.0.0"
-    debug: bool = True
+    debug: bool = os.getenv("DEBUG", "false").lower() == "true"
+
+    # CORS Settings
+    allowed_origins: str = os.getenv(
+        "ALLOWED_ORIGINS",
+        "http://localhost:5173,http://localhost:3000"  # Default for local dev
+    )
 
     # API Settings
     backend_host: str = "0.0.0.0"  # Changed to 0.0.0.0 for Railway
@@ -37,15 +43,18 @@ class Settings(BaseSettings):
         railway_db = os.getenv("DATABASE_URL")
 
         if railway_db:
-            print(f"[CONFIG] Railway DATABASE_URL detected: {railway_db[:30]}...")
+            # Sanitize URL for logging (hide credentials)
+            sanitized = self._sanitize_db_url(railway_db)
+            print(f"[CONFIG] Railway DATABASE_URL detected: {sanitized}")
+
             # Convert to async driver
             if railway_db.startswith("postgres://"):
                 url = railway_db.replace("postgres://", "postgresql+asyncpg://", 1)
-                print(f"[CONFIG] Converted to: {url[:30]}...")
+                print(f"[CONFIG] Converted to: {self._sanitize_db_url(url)}")
                 return url
             elif railway_db.startswith("postgresql://"):
                 url = railway_db.replace("postgresql://", "postgresql+asyncpg://", 1)
-                print(f"[CONFIG] Converted to: {url[:30]}...")
+                print(f"[CONFIG] Converted to: {self._sanitize_db_url(url)}")
                 return url
             else:
                 print(f"[CONFIG] Using DATABASE_URL as-is")
@@ -53,6 +62,16 @@ class Settings(BaseSettings):
         else:
             print("[CONFIG] No DATABASE_URL found, using SQLite")
             return "sqlite+aiosqlite:///./database/resume_ai.db"
+
+    @staticmethod
+    def _sanitize_db_url(url: str) -> str:
+        """Sanitize database URL by masking credentials"""
+        import re
+        # Pattern: postgresql://username:password@host:port/database
+        # Replace password with ***
+        pattern = r"(postgresql[+\w]*://[^:]+:)([^@]+)(@.+)"
+        sanitized = re.sub(pattern, r"\1***\3", url)
+        return sanitized
 
 @lru_cache()
 def get_settings() -> Settings:

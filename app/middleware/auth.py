@@ -24,11 +24,25 @@ async def get_current_user(
             headers={"WWW-Authenticate": "ApiKey"}
         )
 
-    # Look up user by API key
-    result = await db.execute(
-        select(User).where(User.api_key == x_api_key)
-    )
-    user = result.scalar_one_or_none()
+    # Get all active users (we need to check hashed keys)
+    result = await db.execute(select(User))
+    users = result.scalars().all()
+
+    # Find user by verifying API key against hashed keys
+    user = None
+    for potential_user in users:
+        # Try hashed comparison first (new format)
+        if User.verify_api_key(x_api_key, potential_user.api_key):
+            user = potential_user
+            break
+        # Fallback: Check if it's a plaintext key (migration compatibility)
+        elif potential_user.api_key == x_api_key:
+            user = potential_user
+            # Auto-migrate: rehash the key
+            potential_user.api_key = User.hash_api_key(x_api_key)
+            db.add(potential_user)
+            await db.commit()
+            break
 
     if not user:
         raise HTTPException(

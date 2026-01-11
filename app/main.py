@@ -9,13 +9,14 @@ settings = get_settings()
 
 app = FastAPI(title=settings.app_name, version=settings.app_version)
 
-# CORS - Allow Electron renderer to communicate
+# CORS - Explicit origins for security
+allowed_origins = [origin.strip() for origin in settings.allowed_origins.split(",")]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for local Electron app
+    allow_origins=allowed_origins,  # Explicit origins from config
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "X-API-Key", "Authorization"],
 )
 
 # Startup: Initialize database
@@ -47,7 +48,15 @@ async def root():
 @app.middleware("http")
 async def log_requests(request, call_next):
     logger.info(f"{request.method} {request.url.path}")
-    logger.debug(f"Headers: {dict(request.headers)}")
+
+    # Sanitize headers before logging (remove sensitive data)
+    if logger.level <= 10:  # DEBUG level
+        sanitized_headers = {
+            k: v if k.lower() not in ['x-api-key', 'authorization', 'cookie'] else '***REDACTED***'
+            for k, v in request.headers.items()
+        }
+        logger.debug(f"Headers: {sanitized_headers}")
+
     response = await call_next(request)
     logger.info(f"Response: {response.status_code}")
     return response

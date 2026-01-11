@@ -6,6 +6,8 @@ from docx import Document
 import pdfplumber
 import os
 from openai import OpenAI
+from app.utils.file_encryption import FileEncryption
+import io
 
 class ResumeParser:
     """Parse DOCX and PDF resumes into structured data using Claude AI"""
@@ -18,6 +20,9 @@ class ResumeParser:
             'education': ['education', 'academic background', 'qualifications'],
             'certifications': ['certifications', 'certificates', 'licenses', 'credentials']
         }
+
+        # Initialize encryption for secure file handling
+        self.encryption = FileEncryption()
 
         # Initialize OpenAI API
         self.openai_api_key = os.getenv('OPENAI_API_KEY')
@@ -51,7 +56,11 @@ class ResumeParser:
 
     def parse_docx(self, file_path: str) -> Dict:
         """Parse DOCX resume"""
-        doc = Document(file_path)
+        # Decrypt file before parsing (files encrypted at rest for security)
+        decrypted_bytes = self.encryption.decrypt_file(file_path)
+
+        # Parse from decrypted bytes
+        doc = Document(io.BytesIO(decrypted_bytes))
 
         # Extract all text with paragraph breaks
         full_text = '\n'.join([para.text for para in doc.paragraphs if para.text.strip()])
@@ -91,10 +100,14 @@ class ResumeParser:
 
     def parse_pdf(self, file_path: str) -> Dict:
         """Parse PDF resume using pdfplumber for better text extraction"""
+        # Decrypt file before parsing (files encrypted at rest for security)
+        decrypted_bytes = self.encryption.decrypt_file(file_path)
+
         full_text = ''
 
         try:
-            with pdfplumber.open(file_path) as pdf:
+            # Parse from decrypted bytes
+            with pdfplumber.open(io.BytesIO(decrypted_bytes)) as pdf:
                 for page in pdf.pages:
                     # Extract text with layout preserved
                     page_text = page.extract_text()

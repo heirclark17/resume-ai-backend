@@ -4,6 +4,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional
 from fastapi import UploadFile, HTTPException
+from app.utils.file_encryption import FileEncryption
 
 class FileHandler:
     """Handle file uploads and storage"""
@@ -15,6 +16,9 @@ class FileHandler:
         # Create subdirectories
         self.resumes_dir = self.base_dir / "resumes"
         self.resumes_dir.mkdir(exist_ok=True)
+
+        # Initialize encryption
+        self.encryption = FileEncryption()
 
     async def save_upload(self, file: UploadFile, category: str = "resumes") -> dict:
         """
@@ -84,13 +88,19 @@ class FileHandler:
                 file_path.unlink()
             raise HTTPException(status_code=500, detail=f"File save failed: {str(e)}")
 
-        # Get final file size
+        # Get final file size (before encryption)
         file_size = file_path.stat().st_size
+
+        # Encrypt file at rest for security
+        encryption_success = self.encryption.encrypt_file(file_path)
+        if not encryption_success:
+            print(f"⚠️  WARNING: Failed to encrypt {file_path}, file saved as plaintext")
 
         return {
             "file_path": str(file_path),
             "filename": safe_filename,
-            "size": file_size
+            "size": file_size,
+            "encrypted": encryption_success
         }
 
     def delete_file(self, file_path: str) -> bool:

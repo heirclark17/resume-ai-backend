@@ -107,20 +107,16 @@ async def upload_resume(
 
 @router.get("/list")
 async def list_resumes(
-    current_user: User = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """List resumes (optionally filtered by user)"""
-    # If authenticated, only show user's resumes
-    if current_user:
-        result = await db.execute(
-            select(BaseResume)
-            .where(BaseResume.user_id == current_user.id)
-            .order_by(BaseResume.uploaded_at.desc())
-        )
-    else:
-        # No auth - show all resumes (backward compatibility)
-        result = await db.execute(select(BaseResume).order_by(BaseResume.uploaded_at.desc()))
+    """List user's resumes (requires authentication)"""
+    # Only show authenticated user's resumes
+    result = await db.execute(
+        select(BaseResume)
+        .where(BaseResume.user_id == current_user.id)
+        .order_by(BaseResume.uploaded_at.desc())
+    )
 
     resumes = result.scalars().all()
 
@@ -138,13 +134,21 @@ async def list_resumes(
     }
 
 @router.get("/{resume_id}")
-async def get_resume(resume_id: int, db: AsyncSession = Depends(get_db)):
-    """Get resume details"""
+async def get_resume(
+    resume_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get resume details (requires authentication)"""
     result = await db.execute(select(BaseResume).where(BaseResume.id == resume_id))
     resume = result.scalar_one_or_none()
 
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
+
+    # Ownership verification
+    if resume.user_id and resume.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied: You don't own this resume")
 
     return {
         "id": resume.id,

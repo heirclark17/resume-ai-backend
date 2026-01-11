@@ -48,11 +48,14 @@ async def register_user(
     if existing_user:
         raise HTTPException(status_code=400, detail="Username already taken")
 
-    # Create new user
+    # Create new user with hashed API key
     user = User.create_user(
         email=user_data.email,
         username=user_data.username
     )
+
+    # Get plaintext key before it's lost (only available during creation)
+    plaintext_api_key = user._plaintext_api_key
 
     db.add(user)
     await db.commit()
@@ -62,8 +65,9 @@ async def register_user(
         "id": user.id,
         "email": user.email,
         "username": user.username,
-        "api_key": user.api_key,
-        "created_at": user.created_at.isoformat()
+        "api_key": plaintext_api_key,  # Return plaintext key ONCE (hashed in DB)
+        "created_at": user.created_at.isoformat(),
+        "warning": "Save this API key - it won't be shown again!"
     }
 
 
