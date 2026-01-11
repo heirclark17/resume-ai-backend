@@ -22,8 +22,8 @@ class Job(Base):
     requirements = Column(Text)
 
     # Relationships
-    tailored_resumes = relationship("TailoredResume", back_populates="job")
-    company_research = relationship("CompanyResearch", back_populates="job", uselist=False)
+    tailored_resumes = relationship("TailoredResume", back_populates="job", cascade="all, delete-orphan")
+    company_research = relationship("CompanyResearch", back_populates="job", uselist=False, cascade="all, delete-orphan")
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

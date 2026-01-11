@@ -133,18 +133,58 @@ async def get_resume(resume_id: int, db: AsyncSession = Depends(get_db)):
 
 @router.post("/{resume_id}/delete")
 async def delete_resume(resume_id: int, db: AsyncSession = Depends(get_db)):
-    """Delete resume"""
+    """Delete resume and all associated tailored resumes and files"""
+    from app.models.resume import TailoredResume
+
     result = await db.execute(select(BaseResume).where(BaseResume.id == resume_id))
     resume = result.scalar_one_or_none()
 
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
 
-    # Delete file from disk
-    file_handler.delete_file(resume.file_path)
+    print(f"=== DELETING RESUME ID {resume_id} ===")
+    print(f"Base resume file: {resume.file_path}")
 
-    # Delete from database
+    # Step 1: Find and delete all tailored resume files
+    tailored_result = await db.execute(
+        select(TailoredResume).where(TailoredResume.base_resume_id == resume_id)
+    )
+    tailored_resumes = tailored_result.scalars().all()
+
+    deleted_files = []
+    for tailored in tailored_resumes:
+        # Delete DOCX file if exists
+        if tailored.docx_path:
+            if file_handler.delete_file(tailored.docx_path):
+                deleted_files.append(tailored.docx_path)
+                print(f"Deleted tailored DOCX: {tailored.docx_path}")
+            else:
+                print(f"WARNING: Failed to delete {tailored.docx_path}")
+
+        # Delete PDF file if exists
+        if tailored.pdf_path:
+            if file_handler.delete_file(tailored.pdf_path):
+                deleted_files.append(tailored.pdf_path)
+                print(f"Deleted tailored PDF: {tailored.pdf_path}")
+            else:
+                print(f"WARNING: Failed to delete {tailored.pdf_path}")
+
+    print(f"Deleted {len(deleted_files)} tailored resume files")
+
+    # Step 2: Delete base resume file from disk
+    if file_handler.delete_file(resume.file_path):
+        print(f"Deleted base resume file: {resume.file_path}")
+    else:
+        print(f"WARNING: Failed to delete base resume: {resume.file_path}")
+
+    # Step 3: Delete from database (CASCADE will handle tailored_resumes)
     await db.delete(resume)
     await db.commit()
 
-    return {"success": True, "message": "Resume deleted"}
+    print(f"=== RESUME DELETED ===")
+
+    return {
+        "success": True,
+        "message": f"Resume and {len(tailored_resumes)} tailored versions deleted",
+        "deleted_files": len(deleted_files) + 1
+    }

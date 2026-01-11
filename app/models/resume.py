@@ -21,14 +21,14 @@ class BaseResume(Base):
     uploaded_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
-    tailored_resumes = relationship("TailoredResume", back_populates="base_resume")
+    tailored_resumes = relationship("TailoredResume", back_populates="base_resume", cascade="all, delete-orphan")
 
 class TailoredResume(Base):
     __tablename__ = "tailored_resumes"
 
     id = Column(Integer, primary_key=True, index=True)
-    base_resume_id = Column(Integer, ForeignKey("base_resumes.id"), nullable=False)
-    job_id = Column(Integer, ForeignKey("jobs.id"), nullable=False)
+    base_resume_id = Column(Integer, ForeignKey("base_resumes.id", ondelete="CASCADE"), nullable=False)
+    job_id = Column(Integer, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False)
 
     # Tailored sections
     tailored_summary = Column(Text)

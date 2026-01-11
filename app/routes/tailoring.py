@@ -17,12 +17,18 @@ settings = get_settings()
 
 router = APIRouter()
 
+from typing import List
+
 class TailorRequest(BaseModel):
     base_resume_id: int
     job_url: str = None
     company: str = None
     job_title: str = None
     job_description: str = None
+
+class BatchTailorRequest(BaseModel):
+    base_resume_id: int
+    job_urls: List[str]  # Max 10 URLs
 
 @router.post("/tailor")
 async def tailor_resume(
@@ -251,4 +257,98 @@ async def list_tailored_resumes(db: AsyncSession = Depends(get_db)):
             }
             for tr in tailored_resumes
         ]
+    }
+
+
+@router.post("/tailor/batch")
+async def tailor_resume_batch(
+    request: BatchTailorRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Tailor a resume for multiple jobs (up to 10)
+
+    Returns results for each job URL with success/failure status
+    """
+    # Validate URL limit
+    if len(request.job_urls) > 10:
+        raise HTTPException(
+            status_code=400,
+            detail="Maximum 10 job URLs allowed per batch"
+        )
+
+    if len(request.job_urls) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="At least 1 job URL required"
+        )
+
+    print(f"=== BATCH TAILORING START ===")
+    print(f"Base Resume ID: {request.base_resume_id}")
+    print(f"Job URLs: {len(request.job_urls)}")
+
+    # Verify base resume exists
+    result = await db.execute(
+        select(BaseResume).where(BaseResume.id == request.base_resume_id)
+    )
+    base_resume = result.scalar_one_or_none()
+
+    if not base_resume:
+        raise HTTPException(status_code=404, detail="Base resume not found")
+
+    # Process each job URL
+    results = []
+    for idx, job_url in enumerate(request.job_urls, 1):
+        print(f"\n--- Processing Job {idx}/{len(request.job_urls)} ---")
+        print(f"URL: {job_url}")
+
+        try:
+            # Create individual tailor request
+            tailor_req = TailorRequest(
+                base_resume_id=request.base_resume_id,
+                job_url=job_url
+            )
+
+            # Call single tailor endpoint
+            result = await tailor_resume(tailor_req, db)
+
+            results.append({
+                "job_url": job_url,
+                "success": True,
+                "data": result
+            })
+            print(f"✓ Job {idx} completed successfully")
+
+        except HTTPException as e:
+            # HTTP exceptions from tailor_resume
+            results.append({
+                "job_url": job_url,
+                "success": False,
+                "error": e.detail,
+                "error_code": e.status_code
+            })
+            print(f"✗ Job {idx} failed: {e.detail}")
+
+        except Exception as e:
+            # Unexpected exceptions
+            results.append({
+                "job_url": job_url,
+                "success": False,
+                "error": str(e)
+            })
+            print(f"✗ Job {idx} failed unexpectedly: {str(e)}")
+
+    # Calculate summary
+    succeeded = sum(1 for r in results if r["success"])
+    failed = len(results) - succeeded
+
+    print(f"\n=== BATCH TAILORING COMPLETE ===")
+    print(f"Total: {len(results)} | Succeeded: {succeeded} | Failed: {failed}")
+
+    return {
+        "success": True,
+        "total": len(results),
+        "succeeded": succeeded,
+        "failed": failed,
+        "results": results
     }

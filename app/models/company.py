@@ -8,7 +8,7 @@ class CompanyResearch(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     company_name = Column(String, nullable=False, index=True)
-    job_id = Column(Integer, ForeignKey("jobs.id"), nullable=False)
+    job_id = Column(Integer, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False)
 
     # 5-step research results
     mission_values = Column(Text)  # Step 1
