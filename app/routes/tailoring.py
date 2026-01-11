@@ -144,13 +144,15 @@ async def tailor_resume(
         docx_gen = DOCXGenerator()
 
         # Extract candidate info from base resume
-        candidate_name = "Justin Washington"  # TODO: Extract from resume or settings
+        candidate_name = base_resume.candidate_name or "Candidate Name"
         contact_info = {
-            "email": "justinwashington@gmail.com",
-            "phone": "(555) 123-4567",
-            "location": "Houston, TX",
-            "linkedin": "linkedin.com/in/justintwashington"
+            "email": base_resume.candidate_email or "",
+            "phone": base_resume.candidate_phone or "",
+            "location": base_resume.candidate_location or "",
+            "linkedin": base_resume.candidate_linkedin or ""
         }
+
+        print(f"Using candidate info: {candidate_name}, {contact_info.get('email', 'N/A')}")
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"{timestamp}_{job.company.replace(' ', '_')}_{job.title.replace(' ', '_')}.docx"

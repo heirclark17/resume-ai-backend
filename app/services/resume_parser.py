@@ -110,12 +110,46 @@ class ResumeParser:
     def _extract_sections(self, text: str) -> Dict:
         """Extract sections from resume text"""
         result = {
+            'candidate_name': '',
+            'candidate_email': '',
+            'candidate_phone': '',
+            'candidate_location': '',
+            'candidate_linkedin': '',
             'summary': '',
             'skills': [],
             'experience': [],
             'education': '',
             'certifications': ''
         }
+
+        # Try to extract contact info from first few lines
+        lines = text.split('\n')[:10]  # Check first 10 lines for contact info
+        for line in lines:
+            line = line.strip()
+
+            # Extract email
+            if not result['candidate_email']:
+                email_match = re.search(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', line)
+                if email_match:
+                    result['candidate_email'] = email_match.group()
+
+            # Extract phone
+            if not result['candidate_phone']:
+                phone_match = re.search(r'\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}', line)
+                if phone_match:
+                    result['candidate_phone'] = phone_match.group()
+
+            # Extract LinkedIn
+            if not result['candidate_linkedin']:
+                if 'linkedin.com' in line.lower():
+                    result['candidate_linkedin'] = line
+
+        # Extract name from first line (usually the candidate's name)
+        if lines and len(lines[0].strip()) > 0 and len(lines[0].strip()) < 50:
+            potential_name = lines[0].strip()
+            # Check if it looks like a name (not email, not phone, not URL)
+            if '@' not in potential_name and 'http' not in potential_name.lower() and not re.search(r'\d{3}[-.\s]?\d{3}', potential_name):
+                result['candidate_name'] = potential_name
 
         # Split into lines
         lines = [line.strip() for line in text.split('\n') if line.strip()]
@@ -223,29 +257,45 @@ RESUME TEXT:
 {resume_text}
 
 INSTRUCTIONS:
-1. **summary**: Extract the professional summary paragraph. This is typically the opening paragraph after the contact info that describes the candidate's background, experience, and expertise. Look for paragraphs with phrases like "years of experience", "proven ability", "background in", etc.
+1. **candidate_name**: Extract the candidate's full name (usually at the top of the resume)
 
-2. **skills**: Extract ALL skills from ANY section with keywords: "SKILLS", "CORE SKILLS", "TECHNICAL SKILLS", "TECHNOLOGIES", "COMPETENCIES", "EXPERTISE". Return as an array of individual skill strings (not full sentences).
+2. **candidate_email**: Extract the email address
 
-3. **experience**: Extract ALL work experience entries in chronological order. For EACH job, extract:
+3. **candidate_phone**: Extract the phone number
+
+4. **candidate_location**: Extract the city/state location (e.g., "Houston, TX")
+
+5. **candidate_linkedin**: Extract LinkedIn URL or profile handle if present
+
+6. **summary**: Extract the professional summary paragraph. This is typically the opening paragraph after the contact info that describes the candidate's background, experience, and expertise. Look for paragraphs with phrases like "years of experience", "proven ability", "background in", etc.
+
+7. **skills**: Extract ALL skills from ANY section with keywords: "SKILLS", "CORE SKILLS", "TECHNICAL SKILLS", "TECHNOLOGIES", "COMPETENCIES", "EXPERTISE". Return as an array of individual skill strings (not full sentences).
+
+8. **experience**: Extract ALL work experience entries in chronological order. For EACH job, extract:
    - title: The job title (e.g., "Cybersecurity Implementation Project Manager")
    - company: Company name (e.g., "T-Mobile")
    - location: City and state (e.g., "Houston, TX")
    - dates: Full date range (e.g., "2024 - May 2025")
    - bullets: ALL bullet points describing responsibilities and accomplishments
 
-4. **education**: Extract degree, major, institution, and year as a single string
+9. **education**: Extract degree, major, institution, and year as a single string
 
-5. **certifications**: Extract ALL certifications and credentials as a single string (can include line breaks)
+10. **certifications**: Extract ALL certifications and credentials as a single string (can include line breaks)
 
 IMPORTANT:
 - Extract the ACTUAL summary paragraph text, not job descriptions
 - Include EVERY skill listed (programming languages, tools, frameworks, soft skills)
 - Include EVERY work experience entry from most recent to oldest
 - Include ALL bullet points for each job
+- If a field is not found, use empty string or empty array
 - Return ONLY the JSON object, no markdown formatting, no explanation
 
 {{
+  "candidate_name": "Full Name",
+  "candidate_email": "email@example.com",
+  "candidate_phone": "(555) 123-4567",
+  "candidate_location": "City, State",
+  "candidate_linkedin": "linkedin.com/in/username",
   "summary": "The professional summary paragraph text here",
   "skills": ["Skill 1", "Skill 2", "Skill 3"],
   "experience": [
@@ -300,6 +350,11 @@ IMPORTANT:
                 })
 
             result = {
+                'candidate_name': parsed_data.get('candidate_name', ''),
+                'candidate_email': parsed_data.get('candidate_email', ''),
+                'candidate_phone': parsed_data.get('candidate_phone', ''),
+                'candidate_location': parsed_data.get('candidate_location', ''),
+                'candidate_linkedin': parsed_data.get('candidate_linkedin', ''),
                 'summary': parsed_data.get('summary', ''),
                 'skills': parsed_data.get('skills', []) if isinstance(parsed_data.get('skills'), list) else [],
                 'experience': experience_transformed,
@@ -307,7 +362,7 @@ IMPORTANT:
                 'certifications': parsed_data.get('certifications', '')
             }
 
-            print(f"Parsed resume successfully: {len(result['experience'])} jobs, {len(result['skills'])} skills")
+            print(f"Parsed resume successfully: {len(result['experience'])} jobs, {len(result['skills'])} skills, candidate: {result.get('candidate_name', 'N/A')}")
             return result
 
         except Exception as e:

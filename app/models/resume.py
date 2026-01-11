@@ -11,6 +11,13 @@ class BaseResume(Base):
     filename = Column(String, nullable=False)
     file_path = Column(String, nullable=False)
 
+    # Candidate information (extracted from resume)
+    candidate_name = Column(String, nullable=True)
+    candidate_email = Column(String, nullable=True)
+    candidate_phone = Column(String, nullable=True)
+    candidate_location = Column(String, nullable=True)
+    candidate_linkedin = Column(String, nullable=True)
+
     # Parsed sections
     summary = Column(Text)
     skills = Column(Text)  # JSON string
