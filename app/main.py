@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from backend.app.config import get_settings
-from backend.app.database import init_db
-from backend.app.routes import resumes, tailoring
+from app.config import get_settings
+from app.database import init_db
+from app.routes import resumes, tailoring
 
 settings = get_settings()
 

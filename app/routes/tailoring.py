@@ -2,14 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
-from backend.app.database import get_db
-from backend.app.models.resume import BaseResume, TailoredResume
-from backend.app.models.job import Job
-from backend.app.models.company import CompanyResearch
-from backend.app.services.perplexity_client import PerplexityClient
-from backend.app.services.claude_tailor import ClaudeTailor
-from backend.app.services.docx_generator import DOCXGenerator
-from backend.app.config import get_settings
+from app.database import get_db
+from app.models.resume import BaseResume, TailoredResume
+from app.models.job import Job
+from app.models.company import CompanyResearch
+from app.services.perplexity_client import PerplexityClient
+from app.services.claude_tailor import ClaudeTailor
+from app.services.docx_generator import DOCXGenerator
+from app.config import get_settings
 import json
 from datetime import datetime
 

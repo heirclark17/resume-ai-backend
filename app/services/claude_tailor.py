@@ -1,5 +1,5 @@
 from anthropic import Anthropic
-from backend.app.config import get_settings
+from app.config import get_settings
 import json
 
 settings = get_settings()

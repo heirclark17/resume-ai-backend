@@ -1,5 +1,5 @@
 from openai import OpenAI
-from backend.app.config import get_settings
+from app.config import get_settings
 
 settings = get_settings()
 

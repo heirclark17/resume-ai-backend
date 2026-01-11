@@ -5,7 +5,7 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 import os
 from datetime import datetime
-from backend.app.config import get_settings
+from app.config import get_settings
 
 settings = get_settings()
 

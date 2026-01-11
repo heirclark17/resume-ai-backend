@@ -1,10 +1,10 @@
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from backend.app.database import get_db
-from backend.app.models.resume import BaseResume
-from backend.app.services.resume_parser import ResumeParser
-from backend.app.utils.file_handler import FileHandler
+from app.database import get_db
+from app.models.resume import BaseResume
+from app.services.resume_parser import ResumeParser
+from app.utils.file_handler import FileHandler
 import json
 
 router = APIRouter()
