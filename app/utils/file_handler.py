@@ -18,7 +18,7 @@ class FileHandler:
 
     async def save_upload(self, file: UploadFile, category: str = "resumes") -> dict:
         """
-        Save uploaded file to disk
+        Save uploaded file to disk with size validation BEFORE write
 
         Args:
             file: UploadFile from FastAPI
@@ -40,6 +40,15 @@ class FileHandler:
                 detail=f"Invalid file type. Allowed: {allowed_extensions}"
             )
 
+        # Validate size BEFORE writing (check Content-Length header)
+        max_size = 10 * 1024 * 1024  # 10MB
+        if hasattr(file, 'size') and file.size is not None:
+            if file.size > max_size:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"File too large ({file.size} bytes). Maximum allowed: {max_size} bytes (10MB)"
+                )
+
         # Create unique filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         safe_filename = f"{timestamp}_{file.filename}"
@@ -49,21 +58,34 @@ class FileHandler:
         save_dir.mkdir(exist_ok=True)
         file_path = save_dir / safe_filename
 
-        # Save file
+        # Save file with streaming size limit
         try:
+            bytes_written = 0
             with file_path.open("wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
+                while chunk := await file.read(8192):  # Read 8KB chunks
+                    bytes_written += len(chunk)
+
+                    # Check size limit during streaming
+                    if bytes_written > max_size:
+                        buffer.close()
+                        file_path.unlink()  # Delete partial file
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"File exceeds maximum size of {max_size} bytes (10MB)"
+                        )
+
+                    buffer.write(chunk)
+        except HTTPException:
+            # Re-raise our size limit exception
+            raise
         except Exception as e:
+            # Clean up partial file on error
+            if file_path.exists():
+                file_path.unlink()
             raise HTTPException(status_code=500, detail=f"File save failed: {str(e)}")
 
-        # Get file size
+        # Get final file size
         file_size = file_path.stat().st_size
-
-        # Validate size (max 10MB)
-        max_size = 10 * 1024 * 1024  # 10MB
-        if file_size > max_size:
-            file_path.unlink()  # Delete file
-            raise HTTPException(status_code=400, detail="File too large (max 10MB)")
 
         return {
             "file_path": str(file_path),
