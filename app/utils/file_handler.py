@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Optional
 from fastapi import UploadFile, HTTPException
 from app.utils.file_encryption import FileEncryption
+import filetype
 
 class FileHandler:
     """Handle file uploads and storage"""
@@ -90,6 +91,42 @@ class FileHandler:
 
         # Get final file size (before encryption)
         file_size = file_path.stat().st_size
+
+        # Validate MIME type using magic bytes (not just extension)
+        kind = filetype.guess(str(file_path))
+        if kind is None:
+            # File type could not be determined
+            file_path.unlink()  # Delete file
+            raise HTTPException(
+                status_code=400,
+                detail="Could not determine file type. File may be corrupted or unsupported."
+            )
+
+        # Verify file type matches expected types
+        allowed_mimes = {
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',  # .docx
+            'application/pdf'  # .pdf
+        }
+
+        if kind.mime not in allowed_mimes:
+            file_path.unlink()  # Delete file
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid file type. Detected: {kind.mime}. Expected: DOCX or PDF"
+            )
+
+        # Verify extension matches detected MIME type
+        expected_ext = {
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+            'application/pdf': '.pdf'
+        }
+
+        if file_ext != expected_ext.get(kind.mime, ''):
+            file_path.unlink()  # Delete file
+            raise HTTPException(
+                status_code=400,
+                detail=f"File extension mismatch. Extension: {file_ext}, Detected type: {kind.mime}"
+            )
 
         # Encrypt file at rest for security
         encryption_success = self.encryption.encrypt_file(file_path)
