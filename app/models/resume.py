@@ -26,7 +26,7 @@ class BaseResume(Base):
     certifications = Column(Text)
 
     # Metadata
-    uploaded_at = Column(DateTime, default=datetime.utcnow)
+    uploaded_at = Column(DateTime, default=datetime.utcnow, index=True)  # Index for sorting by date
 
     # Relationships
     user = relationship("User", back_populates="resumes")
@@ -36,8 +36,8 @@ class TailoredResume(Base):
     __tablename__ = "tailored_resumes"
 
     id = Column(Integer, primary_key=True, index=True)
-    base_resume_id = Column(Integer, ForeignKey("base_resumes.id", ondelete="CASCADE"), nullable=False)
-    job_id = Column(Integer, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False)
+    base_resume_id = Column(Integer, ForeignKey("base_resumes.id", ondelete="CASCADE"), nullable=False, index=True)
+    job_id = Column(Integer, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True)
 
     # Tailored sections
     tailored_summary = Column(Text)
@@ -46,7 +46,7 @@ class TailoredResume(Base):
     alignment_statement = Column(Text)  # Company values alignment
 
     # Quality metrics
-    quality_score = Column(Float)  # 0-100
+    quality_score = Column(Float, index=True)  # 0-100, indexed for filtering/sorting
     changes_count = Column(Integer)  # Number of changes made
 
     # Export paths
@@ -57,4 +57,4 @@ class TailoredResume(Base):
     base_resume = relationship("BaseResume", back_populates="tailored_resumes")
     job = relationship("Job", back_populates="tailored_resumes")
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)  # Index for sorting by date
