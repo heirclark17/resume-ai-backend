@@ -56,14 +56,22 @@ class ResumeParser:
         # Extract all text with paragraph breaks
         full_text = '\n'.join([para.text for para in doc.paragraphs if para.text.strip()])
 
+        print(f"[DOCX Parser] Extracted {len(full_text)} characters from DOCX")
+
         # Use AI parsing if available
         if self.use_ai_parsing:
             try:
-                return self._parse_with_ai(full_text)
+                print(f"[DOCX Parser] Attempting AI parsing with OpenAI GPT-4o...")
+                result = self._parse_with_ai(full_text)
+                print(f"[DOCX Parser] AI parsing SUCCESS - Summary length: {len(result.get('summary', ''))}, Skills: {len(result.get('skills', []))}, Jobs: {len(result.get('experience', []))}")
+                return result
             except Exception as e:
-                print(f"AI parsing failed, falling back to regex: {e}")
+                print(f"[DOCX Parser] AI parsing FAILED, falling back to regex: {e}")
+                import traceback
+                traceback.print_exc()
                 return self._extract_sections(full_text)
         else:
+            print(f"[DOCX Parser] AI parsing disabled (no OPENAI_API_KEY), using regex")
             return self._extract_sections(full_text)
 
     def parse_pdf(self, file_path: str) -> Dict:
@@ -78,17 +86,25 @@ class ResumeParser:
                     if page_text:
                         full_text += page_text + '\n'
         except Exception as e:
-            print(f"Error extracting PDF text: {e}")
+            print(f"[PDF Parser] Error extracting PDF text: {e}")
             raise ValueError(f"Failed to extract text from PDF: {str(e)}")
+
+        print(f"[PDF Parser] Extracted {len(full_text)} characters from PDF")
 
         # Use AI parsing if available
         if self.use_ai_parsing:
             try:
-                return self._parse_with_ai(full_text)
+                print(f"[PDF Parser] Attempting AI parsing with OpenAI GPT-4o...")
+                result = self._parse_with_ai(full_text)
+                print(f"[PDF Parser] AI parsing SUCCESS - Summary length: {len(result.get('summary', ''))}, Skills: {len(result.get('skills', []))}, Jobs: {len(result.get('experience', []))}")
+                return result
             except Exception as e:
-                print(f"AI parsing failed, falling back to regex: {e}")
+                print(f"[PDF Parser] AI parsing FAILED, falling back to regex: {e}")
+                import traceback
+                traceback.print_exc()
                 return self._extract_sections(full_text)
         else:
+            print(f"[PDF Parser] AI parsing disabled (no OPENAI_API_KEY), using regex")
             return self._extract_sections(full_text)
 
     def _extract_sections(self, text: str) -> Dict:
