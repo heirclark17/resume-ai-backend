@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.database import init_db
-from app.routes import resumes, tailoring
+from app.routes import resumes, tailoring, auth
 
 settings = get_settings()
 
@@ -52,6 +52,7 @@ async def log_requests(request, call_next):
     return response
 
 # Register routes
+app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(resumes.router, prefix="/api/resumes", tags=["Resumes"])
 app.include_router(tailoring.router, prefix="/api/tailor", tags=["Tailoring"])
 

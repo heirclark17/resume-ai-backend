@@ -7,6 +7,7 @@ class BaseResume(Base):
     __tablename__ = "base_resumes"
 
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)  # Nullable for migration
     filename = Column(String, nullable=False)
     file_path = Column(String, nullable=False)
 
@@ -21,6 +22,7 @@ class BaseResume(Base):
     uploaded_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
+    user = relationship("User", back_populates="resumes")
     tailored_resumes = relationship("TailoredResume", back_populates="base_resume", cascade="all, delete-orphan")
 
 class TailoredResume(Base):

@@ -3,6 +3,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database import get_db
 from app.models.resume import BaseResume
+from app.models.user import User
+from app.middleware.auth import get_current_user, get_current_user_optional
 from app.services.resume_parser import ResumeParser
 from app.utils.file_handler import FileHandler
 import json
@@ -14,9 +16,10 @@ resume_parser = ResumeParser()
 @router.post("/upload")
 async def upload_resume(
     file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
-    """Upload and parse resume"""
+    """Upload and parse resume (optional authentication)"""
 
     try:
         print(f"=== UPLOAD START ===")
@@ -52,6 +55,7 @@ async def upload_resume(
         print(f"Step 3: Saving to database...")
         try:
             resume = BaseResume(
+                user_id=current_user.id if current_user else None,
                 filename=file_info['filename'],
                 file_path=file_info['file_path'],
                 summary=parsed_data.get('summary', ''),
@@ -93,9 +97,22 @@ async def upload_resume(
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
 
 @router.get("/list")
-async def list_resumes(db: AsyncSession = Depends(get_db)):
-    """List all resumes"""
-    result = await db.execute(select(BaseResume).order_by(BaseResume.uploaded_at.desc()))
+async def list_resumes(
+    current_user: User = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db)
+):
+    """List resumes (optionally filtered by user)"""
+    # If authenticated, only show user's resumes
+    if current_user:
+        result = await db.execute(
+            select(BaseResume)
+            .where(BaseResume.user_id == current_user.id)
+            .order_by(BaseResume.uploaded_at.desc())
+        )
+    else:
+        # No auth - show all resumes (backward compatibility)
+        result = await db.execute(select(BaseResume).order_by(BaseResume.uploaded_at.desc()))
+
     resumes = result.scalars().all()
 
     return {
@@ -132,8 +149,12 @@ async def get_resume(resume_id: int, db: AsyncSession = Depends(get_db)):
     }
 
 @router.post("/{resume_id}/delete")
-async def delete_resume(resume_id: int, db: AsyncSession = Depends(get_db)):
-    """Delete resume and all associated tailored resumes and files"""
+async def delete_resume(
+    resume_id: int,
+    current_user: User = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete resume and all associated tailored resumes and files (requires ownership)"""
     from app.models.resume import TailoredResume
 
     result = await db.execute(select(BaseResume).where(BaseResume.id == resume_id))
@@ -141,6 +162,14 @@ async def delete_resume(resume_id: int, db: AsyncSession = Depends(get_db)):
 
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
+
+    # If authenticated, validate ownership
+    if current_user and resume.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You don't have permission to delete this resume")
+
+    # If resume has a user_id but no current_user, require auth
+    if resume.user_id and not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required to delete this resume")
 
     print(f"=== DELETING RESUME ID {resume_id} ===")
     print(f"Base resume file: {resume.file_path}")
