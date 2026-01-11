@@ -9,6 +9,7 @@ from app.models.company import CompanyResearch
 from app.services.perplexity_client import PerplexityClient
 from app.services.claude_tailor import ClaudeTailor
 from app.services.docx_generator import DOCXGenerator
+from app.utils.url_validator import URLValidator
 from app.config import get_settings
 import json
 from datetime import datetime
@@ -53,6 +54,12 @@ async def tailor_resume(
         print(f"Company: {request.company}")
         print(f"Job Title: {request.job_title}")
         print(f"Job URL: {request.job_url}")
+
+        # Validate job URL for SSRF protection
+        if request.job_url:
+            print(f"Validating job URL for SSRF protection...")
+            request.job_url = URLValidator.validate_job_url(request.job_url)
+            print(f"✓ URL validated successfully")
 
         # Step 1: Fetch base resume
         print("Step 1: Fetching base resume...")
@@ -288,6 +295,23 @@ async def tailor_resume_batch(
     print(f"=== BATCH TAILORING START ===")
     print(f"Base Resume ID: {request.base_resume_id}")
     print(f"Job URLs: {len(request.job_urls)}")
+
+    # Validate all URLs for SSRF protection
+    print("Validating all job URLs for SSRF protection...")
+    validated_urls = []
+    for idx, job_url in enumerate(request.job_urls, 1):
+        try:
+            validated_url = URLValidator.validate_job_url(job_url)
+            validated_urls.append(validated_url)
+            print(f"  ✓ URL {idx}/{len(request.job_urls)} validated")
+        except HTTPException as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid URL #{idx}: {e.detail}"
+            )
+
+    request.job_urls = validated_urls
+    print(f"✓ All {len(validated_urls)} URLs validated successfully")
 
     # Verify base resume exists
     result = await db.execute(

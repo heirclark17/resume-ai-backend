@@ -1,0 +1,158 @@
+import re
+import ipaddress
+from urllib.parse import urlparse
+from fastapi import HTTPException
+
+
+class URLValidator:
+    """Validate URLs to prevent SSRF attacks"""
+
+    # Allowed job board domains (whitelist)
+    ALLOWED_DOMAINS = {
+        'linkedin.com',
+        'www.linkedin.com',
+        'indeed.com',
+        'www.indeed.com',
+        'glassdoor.com',
+        'www.glassdoor.com',
+        'monster.com',
+        'www.monster.com',
+        'ziprecruiter.com',
+        'www.ziprecruiter.com',
+        'careerbuilder.com',
+        'www.careerbuilder.com',
+        'dice.com',
+        'www.dice.com',
+        'simplyhired.com',
+        'www.simplyhired.com',
+        'greenhouse.io',
+        'lever.co',
+        'workday.com',
+        'wd1.myworkdaysite.com',
+        'wd5.myworkdaysite.com',
+        'myworkday.com',
+        'fa.em2.oraclecloud.com',  # Oracle Taleo
+        'fa.em3.oraclecloud.com',
+        'jpmc.fa.oraclecloud.com',  # JPMorgan
+        'careers.microsoft.com',
+        'careers.google.com',
+        'amazon.jobs',
+        'jobs.apple.com',
+        'jobs.cisco.com',
+        'jobs.oracle.com',
+    }
+
+    # Blocked internal/private IP ranges
+    BLOCKED_IP_RANGES = [
+        ipaddress.ip_network('127.0.0.0/8'),      # Localhost
+        ipaddress.ip_network('10.0.0.0/8'),       # Private network
+        ipaddress.ip_network('172.16.0.0/12'),    # Private network
+        ipaddress.ip_network('192.168.0.0/16'),   # Private network
+        ipaddress.ip_network('169.254.0.0/16'),   # Link-local (AWS metadata)
+        ipaddress.ip_network('::1/128'),          # IPv6 localhost
+        ipaddress.ip_network('fc00::/7'),         # IPv6 private
+    ]
+
+    @classmethod
+    def validate_job_url(cls, url: str) -> str:
+        """
+        Validate job URL for SSRF protection
+
+        Args:
+            url: The URL to validate
+
+        Returns:
+            str: The validated URL
+
+        Raises:
+            HTTPException: If URL is invalid or blocked
+        """
+        if not url or not isinstance(url, str):
+            raise HTTPException(status_code=400, detail="Invalid URL: URL is required")
+
+        url = url.strip()
+
+        # Parse URL
+        try:
+            parsed = urlparse(url)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid URL: Unable to parse URL")
+
+        # Check scheme (only http/https allowed)
+        if parsed.scheme not in ['http', 'https']:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid URL scheme: '{parsed.scheme}'. Only http and https are allowed"
+            )
+
+        # Check if hostname exists
+        if not parsed.netloc:
+            raise HTTPException(status_code=400, detail="Invalid URL: No hostname found")
+
+        hostname = parsed.netloc.lower()
+
+        # Remove port if present
+        if ':' in hostname:
+            hostname = hostname.split(':')[0]
+
+        # Check for localhost aliases
+        localhost_patterns = [
+            'localhost',
+            '0.0.0.0',
+            '127.0.0.1',
+            '[::1]',
+            '::1'
+        ]
+        if any(pattern in hostname for pattern in localhost_patterns):
+            raise HTTPException(
+                status_code=400,
+                detail="Blocked URL: Localhost URLs are not allowed for security reasons"
+            )
+
+        # Check if hostname is an IP address (block all IPs for safety)
+        if cls._is_ip_address(hostname):
+            try:
+                ip = ipaddress.ip_address(hostname)
+
+                # Check against blocked ranges
+                for blocked_range in cls.BLOCKED_IP_RANGES:
+                    if ip in blocked_range:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Blocked URL: IP address {hostname} is in a restricted range"
+                        )
+
+                # Block all direct IP access for additional security
+                raise HTTPException(
+                    status_code=400,
+                    detail="Blocked URL: Direct IP addresses are not allowed. Please use a domain name."
+                )
+            except ValueError:
+                pass
+
+        # Whitelist check: Only allow known job board domains
+        domain_allowed = False
+        for allowed in cls.ALLOWED_DOMAINS:
+            if hostname == allowed or hostname.endswith('.' + allowed):
+                domain_allowed = True
+                break
+
+        if not domain_allowed:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Blocked URL: Domain '{hostname}' is not a recognized job board. "
+                       f"Allowed domains include: linkedin.com, indeed.com, glassdoor.com, "
+                       f"and major company career sites."
+            )
+
+        return url
+
+    @staticmethod
+    def _is_ip_address(hostname: str) -> bool:
+        """Check if hostname is an IP address"""
+        # IPv4 pattern
+        ipv4_pattern = r'^(\d{1,3}\.){3}\d{1,3}$'
+        # IPv6 pattern (simplified)
+        ipv6_pattern = r'^[0-9a-fA-F:]+$'
+
+        return bool(re.match(ipv4_pattern, hostname) or re.match(ipv6_pattern, hostname))
