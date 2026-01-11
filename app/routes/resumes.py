@@ -10,6 +10,17 @@ from app.utils.file_handler import FileHandler
 from app.utils.logger import logger
 import json
 
+
+def safe_json_loads(json_str: str, default=None):
+    """Safely parse JSON string with error handling"""
+    if not json_str:
+        return default if default is not None else []
+    try:
+        return json.loads(json_str)
+    except (json.JSONDecodeError, TypeError, ValueError) as e:
+        logger.warning(f"JSON deserialization failed: {e}. Returning default value.")
+        return default if default is not None else []
+
 router = APIRouter()
 file_handler = FileHandler()
 resume_parser = ResumeParser()
@@ -137,7 +148,7 @@ async def list_resumes(
                 "id": r.id,
                 "filename": r.filename,
                 "summary": r.summary[:200] + "..." if len(r.summary) > 200 else r.summary,
-                "skills_count": len(json.loads(r.skills)) if r.skills else 0,
+                "skills_count": len(safe_json_loads(r.skills, [])),
                 "uploaded_at": r.uploaded_at.isoformat()
             }
             for r in resumes
@@ -174,8 +185,8 @@ async def get_resume(
         "candidate_location": resume.candidate_location,
         "candidate_linkedin": resume.candidate_linkedin,
         "summary": resume.summary,
-        "skills": json.loads(resume.skills) if resume.skills else [],
-        "experience": json.loads(resume.experience) if resume.experience else [],
+        "skills": safe_json_loads(resume.skills, []),
+        "experience": safe_json_loads(resume.experience, []),
         "education": resume.education,
         "certifications": resume.certifications,
         "uploaded_at": resume.uploaded_at.isoformat()

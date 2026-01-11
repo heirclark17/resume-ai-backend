@@ -24,6 +24,17 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 limiter = Limiter(key_func=get_remote_address)
 
+
+def safe_json_loads(json_str: str, default=None):
+    """Safely parse JSON string with error handling"""
+    if not json_str:
+        return default if default is not None else []
+    try:
+        return json.loads(json_str)
+    except (json.JSONDecodeError, TypeError, ValueError) as e:
+        print(f"JSON deserialization failed: {e}. Returning default value.")
+        return default if default is not None else []
+
 from typing import List
 
 class TailorRequest(BaseModel):
@@ -84,8 +95,8 @@ async def tailor_resume(
         # Parse base resume data
         base_resume_data = {
             "summary": base_resume.summary or "",
-            "skills": json.loads(base_resume.skills) if base_resume.skills else [],
-            "experience": json.loads(base_resume.experience) if base_resume.experience else [],
+            "skills": safe_json_loads(base_resume.skills, []),
+            "experience": safe_json_loads(base_resume.experience, []),
             "education": base_resume.education or "",
             "certifications": base_resume.certifications or ""
         }
@@ -195,6 +206,13 @@ async def tailor_resume(
             tailored_content=tailored_content,
             company_research=company_research
         )
+
+        # Validate quality score is in valid range
+        if not isinstance(quality_score, (int, float)):
+            raise ValueError(f"Quality score must be numeric, got {type(quality_score)}")
+        if quality_score < 0 or quality_score > 100:
+            raise ValueError(f"Quality score must be between 0-100, got {quality_score}")
+
         print(f"Quality score: {quality_score:.1f}/100")
 
         # Step 7: Save tailored resume to database
@@ -259,8 +277,8 @@ async def get_tailored_resume(tailored_id: int, db: AsyncSession = Depends(get_d
         "base_resume_id": tailored.base_resume_id,
         "job_id": tailored.job_id,
         "summary": tailored.tailored_summary,
-        "competencies": json.loads(tailored.tailored_skills) if tailored.tailored_skills else [],
-        "experience": json.loads(tailored.tailored_experience) if tailored.tailored_experience else [],
+        "competencies": safe_json_loads(tailored.tailored_skills, []),
+        "experience": safe_json_loads(tailored.tailored_experience, []),
         "alignment_statement": tailored.alignment_statement,
         "docx_path": tailored.docx_path,
         "quality_score": tailored.quality_score,
