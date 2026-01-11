@@ -10,6 +10,7 @@ from app.services.perplexity_client import PerplexityClient
 from app.services.claude_tailor import ClaudeTailor
 from app.services.docx_generator import DOCXGenerator
 from app.utils.url_validator import URLValidator
+from app.utils.quality_scorer import QualityScorer
 from app.config import get_settings
 import json
 from datetime import datetime
@@ -178,8 +179,17 @@ async def tailor_resume(
             print(f"DOCX generation failed: {e}")
             raise HTTPException(status_code=500, detail=f"Document generation failed: {str(e)}")
 
-        # Step 6: Save tailored resume to database
-        print("Step 6: Saving to database...")
+        # Step 6: Calculate quality score
+        print("Step 6: Calculating quality score...")
+        quality_score = QualityScorer.calculate_quality_score(
+            base_resume_data=base_resume_data,
+            tailored_content=tailored_content,
+            company_research=company_research_data
+        )
+        print(f"Quality score: {quality_score:.1f}/100")
+
+        # Step 7: Save tailored resume to database
+        print("Step 7: Saving to database...")
         tailored_resume = TailoredResume(
             base_resume_id=base_resume.id,
             job_id=job.id,
@@ -188,7 +198,7 @@ async def tailor_resume(
             tailored_experience=json.dumps(tailored_content.get('experience', [])),
             alignment_statement=tailored_content.get('alignment_statement', ''),
             docx_path=docx_path,
-            quality_score=85.0,  # TODO: Calculate actual quality score
+            quality_score=quality_score,
             changes_count=len(tailored_content.get('competencies', []))
         )
 
