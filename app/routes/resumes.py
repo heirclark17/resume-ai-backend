@@ -84,12 +84,25 @@ async def upload_resume(
             raise HTTPException(status_code=500, detail=f"Database save failed: {str(e)}")
 
         print(f"=== UPLOAD SUCCESS ===")
-        return {
+
+        # Check for parsing warnings
+        response = {
             "success": True,
             "resume_id": resume.id,
             "filename": resume.filename,
             "parsed_data": parsed_data
         }
+
+        # Include parsing warnings at top level if present
+        parsing_warnings = parsed_data.get('parsing_warnings', [])
+        if parsing_warnings:
+            response['warnings'] = parsing_warnings
+            response['parsing_method'] = parsed_data.get('parsing_method', 'unknown')
+            print(f"⚠️  PARSING WARNINGS: {len(parsing_warnings)} warnings")
+            for warning in parsing_warnings:
+                print(f"  - {warning}")
+
+        return response
 
     except HTTPException:
         # Re-raise HTTP exceptions as-is
