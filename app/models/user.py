@@ -20,6 +20,11 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     last_login = Column(DateTime)
 
+    # Two-Factor Authentication (2FA)
+    totp_secret = Column(String, nullable=True)  # TOTP secret key (encrypted)
+    twofa_enabled = Column(Boolean, default=False)  # Is 2FA enabled
+    twofa_backup_codes = Column(String, nullable=True)  # Encrypted backup codes (JSON)
+
     # Relationships
     resumes = relationship("BaseResume", back_populates="user", cascade="all, delete-orphan")
 

@@ -5,7 +5,9 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from app.config import get_settings
 from app.database import init_db
-from app.routes import resumes, tailoring, auth
+from app.routes import resumes, tailoring, auth, admin
+from app.middleware.security_headers import SecurityHeadersMiddleware
+from app.middleware.waf import WAFMiddleware
 from app.utils.logger import logger
 
 settings = get_settings()
@@ -24,8 +26,14 @@ app.add_middleware(
     allow_origins=allowed_origins,  # Explicit origins from config
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "X-API-Key", "Authorization"],
+    allow_headers=["Content-Type", "X-API-Key", "Authorization", "X-TOTP-Code"],
 )
+
+# Web Application Firewall - Block malicious requests
+app.add_middleware(WAFMiddleware)
+
+# Security Headers - CSP, HSTS, X-Frame-Options, etc.
+app.add_middleware(SecurityHeadersMiddleware)
 
 # Startup: Initialize database
 @app.on_event("startup")
@@ -65,6 +73,7 @@ async def log_requests(request, call_next):
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(resumes.router, prefix="/api/resumes", tags=["Resumes"])
 app.include_router(tailoring.router, prefix="/api/tailor", tags=["Tailoring"])
+app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 
 # Railway deployment - use railway.json startCommand instead
 if __name__ == "__main__":
