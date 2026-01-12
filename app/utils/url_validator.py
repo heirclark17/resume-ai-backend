@@ -7,6 +7,27 @@ from fastapi import HTTPException
 class URLValidator:
     """Validate URLs to prevent SSRF attacks"""
 
+    # Regex patterns for strict validation
+    VALID_DOMAIN_PATTERN = re.compile(
+        r'^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?'  # Subdomain/domain part
+        r'(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$'  # Additional parts
+    )
+
+    # Suspicious patterns that indicate attacks
+    SUSPICIOUS_PATTERNS = [
+        r'%2e%2e',  # URL-encoded directory traversal (..)
+        r'%00',      # Null byte injection
+        r'%0d',      # Carriage return
+        r'%0a',      # Line feed
+        r'@',        # Authentication in URL (user:pass@domain)
+        r'\\',       # Backslashes (Windows path traversal)
+        r'\.\.',     # Directory traversal
+        r'file://',  # File protocol
+        r'ftp://',   # FTP protocol
+        r'data:',    # Data URI scheme
+        r'javascript:', # JavaScript protocol
+    ]
+
     # Allowed job board domains (whitelist)
     ALLOWED_DOMAINS = {
         'linkedin.com',
@@ -72,6 +93,15 @@ class URLValidator:
 
         url = url.strip()
 
+        # Check for suspicious patterns (SSRF attack indicators)
+        url_lower = url.lower()
+        for pattern in cls.SUSPICIOUS_PATTERNS:
+            if re.search(pattern, url_lower):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Blocked URL: Suspicious pattern detected. URLs with special characters or protocols are not allowed."
+                )
+
         # Parse URL
         try:
             parsed = urlparse(url)
@@ -94,6 +124,13 @@ class URLValidator:
         # Remove port if present
         if ':' in hostname:
             hostname = hostname.split(':')[0]
+
+        # Validate domain format with strict regex
+        if not cls.VALID_DOMAIN_PATTERN.match(hostname):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid domain format: '{hostname}'. Domain must contain only alphanumeric characters, hyphens, and dots."
+            )
 
         # Check for localhost aliases
         localhost_patterns = [

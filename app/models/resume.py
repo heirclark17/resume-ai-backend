@@ -27,6 +27,7 @@ class BaseResume(Base):
 
     # Metadata
     uploaded_at = Column(DateTime, default=datetime.utcnow, index=True)  # Index for sorting by date
+    file_signature = Column(String, nullable=True)  # HMAC-SHA256 signature for file integrity
 
     # Soft delete fields (audit trail)
     is_deleted = Column(Boolean, default=False, index=True)  # Index for filtering

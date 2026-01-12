@@ -2,6 +2,7 @@ import logging
 import sys
 from pathlib import Path
 from datetime import datetime
+from logging.handlers import RotatingFileHandler
 
 
 def setup_logger(name: str = "resume_ai", level: str = "INFO") -> logging.Logger:
@@ -42,13 +43,19 @@ def setup_logger(name: str = "resume_ai", level: str = "INFO") -> logging.Logger
     console_handler.setFormatter(simple_formatter)
     logger.addHandler(console_handler)
 
-    # File handler (optional - for Railway logs are captured from stdout)
+    # Rotating file handler (prevents disk space issues)
+    # Rotates when log reaches 10MB, keeps 5 backup files
     try:
         log_dir = Path("logs")
         log_dir.mkdir(exist_ok=True)
 
-        log_file = log_dir / f"resume_ai_{datetime.now().strftime('%Y%m%d')}.log"
-        file_handler = logging.FileHandler(log_file)
+        log_file = log_dir / "resume_ai.log"
+        file_handler = RotatingFileHandler(
+            log_file,
+            maxBytes=10 * 1024 * 1024,  # 10MB per file
+            backupCount=5,  # Keep 5 backup files (total: 50MB max)
+            encoding='utf-8'
+        )
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(detailed_formatter)
         logger.addHandler(file_handler)

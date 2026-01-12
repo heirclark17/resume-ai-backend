@@ -74,6 +74,7 @@ async def upload_resume(
                 user_id=current_user.id if current_user else None,
                 filename=file_info['filename'],
                 file_path=file_info['file_path'],
+                file_signature=file_info.get('signature', ''),  # HMAC signature for integrity
                 candidate_name=parsed_data.get('candidate_name', ''),
                 candidate_email=parsed_data.get('candidate_email', ''),
                 candidate_phone=parsed_data.get('candidate_phone', ''),

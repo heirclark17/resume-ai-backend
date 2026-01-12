@@ -34,23 +34,15 @@ async def startup_event():
     await init_db()
     logger.info(f"Backend ready at http://{settings.backend_host}:{settings.backend_port}")
 
-# Health check endpoint
+# Health check endpoint (minimal response to prevent information disclosure)
 @app.get("/health")
 async def health_check():
-    return {
-        "status": "healthy",
-        "version": settings.app_version,
-        "message": "ResumeAI Backend is running"
-    }
+    return {"status": "ok"}
 
-# Root endpoint
+# Root endpoint (minimal response to prevent information disclosure)
 @app.get("/")
 async def root():
-    return {
-        "app": settings.app_name,
-        "version": settings.app_version,
-        "status": "running"
-    }
+    return {"status": "ok"}
 
 # Request logging middleware
 @app.middleware("http")

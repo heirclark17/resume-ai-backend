@@ -5,6 +5,8 @@ from datetime import datetime
 from typing import Optional
 from fastapi import UploadFile, HTTPException
 from app.utils.file_encryption import FileEncryption
+from app.utils.file_integrity import FileIntegrity
+from app.utils.virus_scanner import VirusScanner
 import filetype
 
 class FileHandler:
@@ -20,6 +22,12 @@ class FileHandler:
 
         # Initialize encryption
         self.encryption = FileEncryption()
+
+        # Initialize file integrity (HMAC signatures)
+        self.integrity = FileIntegrity()
+
+        # Initialize virus scanner
+        self.virus_scanner = VirusScanner()
 
     async def save_upload(self, file: UploadFile, category: str = "resumes") -> dict:
         """
@@ -128,16 +136,31 @@ class FileHandler:
                 detail=f"File extension mismatch. Extension: {file_ext}, Detected type: {kind.mime}"
             )
 
+        # Scan for viruses/malware before encryption
+        is_safe, threat_name = self.virus_scanner.scan_file(str(file_path))
+        if not is_safe:
+            file_path.unlink()  # Delete infected file
+            raise HTTPException(
+                status_code=400,
+                detail=f"File rejected: Potential threat detected ({threat_name}). Please ensure your file is clean and try again."
+            )
+
         # Encrypt file at rest for security
         encryption_success = self.encryption.encrypt_file(file_path)
         if not encryption_success:
             print(f"⚠️  WARNING: Failed to encrypt {file_path}, file saved as plaintext")
 
+        # Generate HMAC signature for file integrity verification (after encryption)
+        file_signature = self.integrity.generate_signature(file_path)
+        if not file_signature:
+            print(f"⚠️  WARNING: Failed to generate signature for {file_path}")
+
         return {
             "file_path": str(file_path),
             "filename": safe_filename,
             "size": file_size,
-            "encrypted": encryption_success
+            "encrypted": encryption_success,
+            "signature": file_signature  # HMAC-SHA256 signature for integrity verification
         }
 
     def delete_file(self, file_path: str) -> bool:
