@@ -70,7 +70,7 @@ class ResumeParser:
         # Use AI parsing if available
         if self.use_ai_parsing:
             try:
-                print(f"[DOCX Parser] Attempting AI parsing with OpenAI GPT-4o...")
+                print(f"[DOCX Parser] Attempting AI parsing with OpenAI GPT-4o-mini...")
                 result = self._parse_with_ai(full_text)
                 result['parsing_method'] = 'ai'
                 result['parsing_warnings'] = []
@@ -122,7 +122,7 @@ class ResumeParser:
         # Use AI parsing if available
         if self.use_ai_parsing:
             try:
-                print(f"[PDF Parser] Attempting AI parsing with OpenAI GPT-4o...")
+                print(f"[PDF Parser] Attempting AI parsing with OpenAI GPT-4o-mini...")
                 result = self._parse_with_ai(full_text)
                 result['parsing_method'] = 'ai'
                 result['parsing_warnings'] = []
@@ -356,7 +356,7 @@ IMPORTANT:
 
         try:
             response = self.client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-4o-mini",  # Using mini version - much cheaper and faster, perfect for structured extraction
                 max_tokens=8000,
                 temperature=0.2,
                 response_format={"type": "json_object"},
