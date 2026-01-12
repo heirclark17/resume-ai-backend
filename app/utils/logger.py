@@ -70,6 +70,21 @@ def setup_logger(name: str = "resume_ai", level: str = "INFO") -> logging.Logger
 logger = setup_logger()
 
 
+def get_logger(name: str = None) -> logging.Logger:
+    """
+    Get logger instance
+
+    Args:
+        name: Optional logger name (defaults to main logger)
+
+    Returns:
+        Logger instance
+    """
+    if name:
+        return setup_logger(name)
+    return logger
+
+
 # Convenience functions
 def debug(msg: str, *args, **kwargs):
     """Log debug message"""
