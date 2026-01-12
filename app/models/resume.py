@@ -35,7 +35,7 @@ class BaseResume(Base):
     deleted_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)  # Who deleted it
 
     # Relationships
-    user = relationship("User", back_populates="resumes")
+    user = relationship("User", back_populates="resumes", foreign_keys=[user_id])
     tailored_resumes = relationship("TailoredResume", back_populates="base_resume", cascade="all, delete-orphan")
 
 class TailoredResume(Base):
