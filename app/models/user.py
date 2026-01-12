@@ -26,7 +26,7 @@ class User(Base):
     twofa_backup_codes = Column(String, nullable=True)  # Encrypted backup codes (JSON)
 
     # Relationships
-    resumes = relationship("BaseResume", back_populates="user", cascade="all, delete-orphan")
+    resumes = relationship("BaseResume", back_populates="user", foreign_keys="[BaseResume.user_id]", cascade="all, delete-orphan")
 
     def generate_api_key(self) -> str:
         """Generate a secure random API key"""
