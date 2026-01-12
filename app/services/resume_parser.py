@@ -70,7 +70,7 @@ class ResumeParser:
         # Use AI parsing if available
         if self.use_ai_parsing:
             try:
-                print(f"[DOCX Parser] Attempting AI parsing with OpenAI GPT-4o-mini...")
+                print(f"[DOCX Parser] Attempting AI parsing with OpenAI GPT-4.1-mini...")
                 result = self._parse_with_ai(full_text)
                 result['parsing_method'] = 'ai'
                 result['parsing_warnings'] = []
@@ -122,7 +122,7 @@ class ResumeParser:
         # Use AI parsing if available
         if self.use_ai_parsing:
             try:
-                print(f"[PDF Parser] Attempting AI parsing with OpenAI GPT-4o-mini...")
+                print(f"[PDF Parser] Attempting AI parsing with OpenAI GPT-4.1-mini...")
                 result = self._parse_with_ai(full_text)
                 result['parsing_method'] = 'ai'
                 result['parsing_warnings'] = []
@@ -356,7 +356,7 @@ IMPORTANT:
 
         try:
             response = self.client.chat.completions.create(
-                model="gpt-4o-mini",  # Using mini version - much cheaper and faster, perfect for structured extraction
+                model="gpt-4.1-mini",  # Latest 2026 model - outperforms gpt-4o-mini, optimized for structured extraction
                 max_tokens=8000,
                 temperature=0.2,
                 response_format={"type": "json_object"},
@@ -368,7 +368,7 @@ IMPORTANT:
 
             response_text = response.choices[0].message.content
 
-            print(f"OpenAI GPT-4 Response (first 500 chars): {response_text[:500]}")
+            print(f"OpenAI GPT-4.1-mini Response (first 500 chars): {response_text[:500]}")
 
             # With response_format="json_object", OpenAI returns clean JSON
             try:
