@@ -21,6 +21,9 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS - Explicit origins for security
 allowed_origins = [origin.strip() for origin in settings.allowed_origins.split(",")]
+logger.info(f"CORS allowed origins: {allowed_origins}")
+logger.info(f"Raw ALLOWED_ORIGINS env var: {settings.allowed_origins}")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,  # Explicit origins from config
