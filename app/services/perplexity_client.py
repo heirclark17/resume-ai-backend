@@ -78,18 +78,50 @@ RECENT NEWS:
                 "raw_response": f"[TEST MODE] Mock research for {company_name}"
             }
 
-        # Build research prompt
-        prompt = f"""Research {company_name} and provide:
+        # Build comprehensive research prompt for interview prep
+        job_context = f" for a {job_title} position" if job_title else ""
+        prompt = f"""Research {company_name} thoroughly and provide detailed information for interview preparation{job_context}. Include:
 
-1. Company mission statement (exact wording)
-2. Core values (3-5 key principles)
-3. Major recent initiatives or programs (last 12 months)
-4. Industry focus and business areas
-5. Company culture and work environment
-6. Recent news or significant announcements
+1. **Company Profile:**
+   - Industry sector and business model
+   - Company size (revenue, employees, market position)
+   - Headquarters and office locations
+   - Brief company overview (2-3 sentences)
 
-Format the response as a detailed analysis focusing on information relevant for tailoring a cybersecurity/technology resume{' for a ' + job_title + ' position' if job_title else ''}.
-"""
+2. **Mission & Values:**
+   - Official mission statement (exact wording with source URL if available)
+   - Core company values (list each with brief explanation and source)
+   - Cultural principles and work environment
+   - What the company prioritizes or emphasizes
+
+3. **Recent News & Strategy (Last 12 Months):**
+   - Major announcements, product launches, or acquisitions (with dates)
+   - Strategic initiatives and business priorities
+   - Leadership changes or organizational shifts
+   - Financial performance, funding, or growth news
+   - Industry recognition or awards
+
+4. **Industry Position:**
+   - Market position and competitive landscape
+   - Key differentiators or unique strengths
+   - Strategic partnerships or major clients/customers
+   - Technology stack or platforms they use
+
+5. **Work Culture & Employee Experience:**
+   - Work-life balance and employee benefits
+   - Career development and growth opportunities
+   - Diversity, equity, and inclusion initiatives
+   - Employee reviews or glassdoor ratings if available
+   - Recognition as a top employer
+
+6. **For Job Candidates:**
+   - What this company values most in candidates
+   - Key skills or experiences they prioritize
+   - Interview process insights if available
+   - Growth opportunities in this field/role
+
+Format your response with clear section headers and bullet points. Include specific facts, numbers, dates, and URLs where available. Provide enough detail for someone preparing for an interview."""
+
 
         try:
             response = self.client.chat.completions.create(

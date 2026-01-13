@@ -156,27 +156,89 @@ class FirecrawlClient:
                 }
             )
 
-            if not extract_result or not extract_result.get('data'):
-                raise ValueError("Failed to extract structured data from job page")
+            # Check if extraction succeeded
+            extracted_data = None
+            if extract_result and extract_result.get('data'):
+                extracted_data = extract_result['data']
+                print(f"Firecrawl extraction succeeded")
+            else:
+                print("Firecrawl extraction returned no data, will use OpenAI fallback")
 
-            extracted_data = extract_result['data']
-            print(f"Job details extracted successfully")
+            # If Firecrawl extraction failed or returned Unknown values, use OpenAI as fallback
+            company = extracted_data.get('company', '') if extracted_data else ''
+            title = extracted_data.get('title', '') if extracted_data else ''
+
+            # Check if we got actual data or just defaults
+            if not company or company == 'Unknown Company' or not title or title == 'Unknown Position':
+                print("Company or title missing, using OpenAI to extract from markdown content...")
+
+                # Use OpenAI to extract company and title from the scraped markdown
+                from openai import OpenAI
+                openai_client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+
+                extraction_prompt = f"""Extract the company name and job title from this job posting.
+
+Job Posting Content:
+{markdown_content[:3000]}
+
+Return ONLY a JSON object with this structure:
+{{
+  "company": "exact company name",
+  "title": "exact job title"
+}}
+
+Do not include any other text, only the JSON."""
+
+                try:
+                    ai_response = await asyncio.to_thread(
+                        openai_client.chat.completions.create,
+                        model="gpt-4o-mini",
+                        messages=[
+                            {"role": "system", "content": "You are a job posting analyzer. Extract company name and job title accurately."},
+                            {"role": "user", "content": extraction_prompt}
+                        ],
+                        response_format={"type": "json_object"},
+                        temperature=0.1
+                    )
+
+                    import json
+                    ai_extracted = json.loads(ai_response.choices[0].message.content)
+                    company = ai_extracted.get('company', company)
+                    title = ai_extracted.get('title', title)
+                    print(f"✓ OpenAI extracted: {company} - {title}")
+
+                except Exception as ai_error:
+                    print(f"⚠️ OpenAI extraction also failed: {ai_error}")
+                    # If both fail, we'll use what we have or raise error below
+
+            # Final validation - don't allow Unknown values
+            if not company or company == 'Unknown Company':
+                raise ValueError(
+                    "Could not extract company name from job URL. "
+                    "Please provide the company name manually using the 'company' field."
+                )
+
+            if not title or title == 'Unknown Position':
+                raise ValueError(
+                    "Could not extract job title from job URL. "
+                    "Please provide the job title manually using the 'jobTitle' field."
+                )
 
             # Combine extracted data with raw markdown
             result = {
-                "company": extracted_data.get('company', 'Unknown Company'),
-                "title": extracted_data.get('title', 'Unknown Position'),
-                "description": extracted_data.get('description', ''),
-                "location": extracted_data.get('location', ''),
-                "salary": extracted_data.get('salary', ''),
-                "posted_date": extracted_data.get('posted_date', ''),
-                "employment_type": extracted_data.get('employment_type', ''),
-                "experience_level": extracted_data.get('experience_level', ''),
-                "skills_required": extracted_data.get('skills_required', []),
+                "company": company,
+                "title": title,
+                "description": extracted_data.get('description', '') if extracted_data else markdown_content[:2000],
+                "location": extracted_data.get('location', '') if extracted_data else '',
+                "salary": extracted_data.get('salary', '') if extracted_data else '',
+                "posted_date": extracted_data.get('posted_date', '') if extracted_data else '',
+                "employment_type": extracted_data.get('employment_type', '') if extracted_data else '',
+                "experience_level": extracted_data.get('experience_level', '') if extracted_data else '',
+                "skills_required": extracted_data.get('skills_required', []) if extracted_data else [],
                 "raw_text": markdown_content
             }
 
-            print(f"Extracted: {result['company']} - {result['title']}")
+            print(f"✓ Final extracted data: {result['company']} - {result['title']}")
             return result
 
         except ImportError:

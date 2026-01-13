@@ -142,7 +142,13 @@ async def tailor_resume(
 
             except Exception as e:
                 print(f"⚠️ Job extraction failed: {e}")
-                print("Continuing with manual input or defaults...")
+                # If extraction failed and no manual input provided, raise error
+                if not tailor_request.company or not tailor_request.job_title:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Could not extract job details from URL: {str(e)}. Please provide company name and job title manually."
+                    )
+                print("Using manual input instead...")
 
         # Step 3: Create or fetch job record
         print("Step 3: Creating job record...")
