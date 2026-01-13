@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     # API Keys
     openai_api_key: str = ""
     perplexity_api_key: str = ""
+    firecrawl_api_key: str = ""
 
     # Test Mode
     test_mode: bool = False

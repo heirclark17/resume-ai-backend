@@ -9,6 +9,7 @@ from app.models.company import CompanyResearch
 from app.services.perplexity_client import PerplexityClient
 from app.services.openai_tailor import OpenAITailor
 from app.services.docx_generator import DOCXGenerator
+from app.services.firecrawl_client import FirecrawlClient
 from app.utils.url_validator import URLValidator
 from app.utils.quality_scorer import QualityScorer
 from app.config import get_settings
@@ -116,8 +117,34 @@ async def tailor_resume(
 
         print(f"Base resume loaded: {base_resume.filename}")
 
-        # Step 2: Create or fetch job record
+        # Step 2: Extract job details from URL (if provided)
         print("Step 2: Processing job details...")
+
+        extracted_job_data = None
+        if request.job_url:
+            print(f"Job URL provided: {request.job_url}")
+            print("Extracting job details with Firecrawl...")
+
+            try:
+                firecrawl = FirecrawlClient()
+                extracted_job_data = await firecrawl.extract_job_details(request.job_url)
+
+                print(f"✓ Job extracted: {extracted_job_data['company']} - {extracted_job_data['title']}")
+
+                # Use extracted data if manual fields not provided
+                if not request.company:
+                    request.company = extracted_job_data['company']
+                if not request.job_title:
+                    request.job_title = extracted_job_data['title']
+                if not request.job_description:
+                    request.job_description = extracted_job_data['description']
+
+            except Exception as e:
+                print(f"⚠️ Job extraction failed: {e}")
+                print("Continuing with manual input or defaults...")
+
+        # Step 3: Create or fetch job record
+        print("Step 3: Creating job record...")
         job = None
 
         if request.job_url:
@@ -128,11 +155,14 @@ async def tailor_resume(
             job = result.scalar_one_or_none()
 
         if not job:
-            # Create new job record
+            # Create new job record with extracted or manual data
             job = Job(
                 url=request.job_url or f"manual_{datetime.utcnow().timestamp()}",
                 company=request.company or "Unknown Company",
                 title=request.job_title or "Unknown Position",
+                description=request.job_description or "",
+                location=extracted_job_data.get('location', '') if extracted_job_data else '',
+                salary=extracted_job_data.get('salary', '') if extracted_job_data else '',
                 is_active=True
             )
             db.add(job)
@@ -141,8 +171,8 @@ async def tailor_resume(
 
         print(f"Job record: {job.company} - {job.title}")
 
-        # Step 3: Research company with Perplexity
-        print("Step 3: Researching company with Perplexity...")
+        # Step 4: Research company with Perplexity
+        print("Step 4: Researching company with Perplexity...")
         perplexity = PerplexityClient()
 
         try:
@@ -158,8 +188,8 @@ async def tailor_resume(
                 "research": "Unable to perform company research at this time."
             }
 
-        # Step 4: Tailor resume with OpenAI
-        print("Step 4: Tailoring resume with OpenAI GPT-4o...")
+        # Step 5: Tailor resume with OpenAI
+        print("Step 5: Tailoring resume with OpenAI...")
         openai_tailor = OpenAITailor()
 
         job_details = {
@@ -180,8 +210,8 @@ async def tailor_resume(
             print(f"OpenAI tailoring failed: {e}")
             raise HTTPException(status_code=500, detail=f"Resume tailoring failed: {str(e)}")
 
-        # Step 5: Generate DOCX
-        print("Step 5: Generating DOCX file...")
+        # Step 6: Generate DOCX
+        print("Step 6: Generating DOCX file...")
         docx_gen = DOCXGenerator()
 
         # Extract candidate info from base resume
@@ -212,8 +242,8 @@ async def tailor_resume(
             print(f"DOCX generation failed: {e}")
             raise HTTPException(status_code=500, detail=f"Document generation failed: {str(e)}")
 
-        # Step 6: Calculate quality score
-        print("Step 6: Calculating quality score...")
+        # Step 7: Calculate quality score
+        print("Step 7: Calculating quality score...")
         quality_score = QualityScorer.calculate_quality_score(
             base_resume_data=base_resume_data,
             tailored_content=tailored_content,
@@ -228,8 +258,8 @@ async def tailor_resume(
 
         print(f"Quality score: {quality_score:.1f}/100")
 
-        # Step 7: Save tailored resume to database
-        print("Step 7: Saving to database...")
+        # Step 8: Save tailored resume to database
+        print("Step 8: Saving to database...")
         tailored_resume = TailoredResume(
             base_resume_id=base_resume.id,
             job_id=job.id,
