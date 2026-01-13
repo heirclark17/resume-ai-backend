@@ -42,6 +42,30 @@ class FirecrawlClient:
         """
         print(f"Extracting job details from URL: {job_url}")
 
+        # Check if URL is from a known problematic site - use Playwright directly
+        problematic_domains = [
+            'oraclecloud.com',  # Oracle Taleo - JavaScript-heavy
+            'microsoft.com/careers',  # Microsoft careers site
+            'greenhouse.io',  # Common ATS with anti-bot
+            'workday.com',  # Workday ATS
+            'myworkdayjobs.com',  # Workday ATS
+        ]
+
+        should_use_playwright = any(domain in job_url for domain in problematic_domains)
+
+        if should_use_playwright:
+            print(f"Detected problematic domain, using Playwright directly...")
+            try:
+                from app.services.playwright_extractor import PlaywrightJobExtractor
+                extractor = PlaywrightJobExtractor()
+                playwright_result = await extractor.extract_job_details(job_url)
+                print(f"✓ Playwright extraction succeeded: {playwright_result['company']} - {playwright_result['title']}")
+                return playwright_result
+            except Exception as playwright_error:
+                print(f"Playwright extraction failed: {playwright_error}")
+                # Fall through to try Firecrawl anyway
+                print("Falling back to Firecrawl despite domain detection...")
+
         # TEST MODE: Return mock data
         if settings.test_mode:
             print("[TEST MODE] Returning mock job extraction data")
@@ -260,4 +284,22 @@ Do not include any other text, only the JSON."""
             )
         except Exception as e:
             print(f"Firecrawl extraction error: {str(e)}")
-            raise ValueError(f"Failed to extract job details: {str(e)}")
+
+            # Try Playwright as fallback for sites that block Firecrawl
+            try:
+                print("Attempting Playwright fallback extraction...")
+                from app.services.playwright_extractor import PlaywrightJobExtractor
+
+                extractor = PlaywrightJobExtractor()
+                playwright_result = await extractor.extract_job_details(job_url)
+
+                print(f"✓ Playwright extraction succeeded: {playwright_result['company']} - {playwright_result['title']}")
+                return playwright_result
+
+            except Exception as playwright_error:
+                print(f"Playwright extraction also failed: {playwright_error}")
+                # Both Firecrawl and Playwright failed
+                raise ValueError(
+                    f"Failed to extract job details: {str(e)}. "
+                    f"Playwright fallback also failed: {str(playwright_error)}"
+                )
