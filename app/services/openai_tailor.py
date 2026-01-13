@@ -130,75 +130,61 @@ Return ONLY a valid JSON object with this structure:
 }}
 """
 
-        # Try gpt-4.1-mini first, fallback to gpt-4o-mini if not available
-        models_to_try = ["gpt-4.1-mini", "gpt-4o-mini", "gpt-4o"]
-
-        for model_name in models_to_try:
-            try:
-                print(f"Attempting to use model: {model_name}")
-                response = self.client.chat.completions.create(
-                    model=model_name,
-                    max_tokens=4000,
-                    temperature=0.7,
-                    response_format={"type": "json_object"},  # Force JSON response
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": "You are a professional resume writer specializing in cybersecurity and technology roles. Return only valid JSON."
-                        },
-                        {
-                            "role": "user",
-                            "content": prompt
-                        }
-                    ]
-                )
-                print(f"✓ Successfully used model: {model_name}")
-                break  # Success - exit loop
-            except Exception as model_error:
-                print(f"✗ Model {model_name} failed: {str(model_error)}")
-                if model_name == models_to_try[-1]:  # Last model failed
-                    raise  # Re-raise the last error
-                continue  # Try next model
-
-        # Extract the response content
-        content = response.choices[0].message.content
-
-        # Try to parse as JSON
         try:
-            # With response_format="json_object", OpenAI returns clean JSON
-            tailored = json.loads(content)
+            response = self.client.chat.completions.create(
+                model="gpt-4.1-mini",  # Use GPT-4.1-mini - 83% cheaper, 50% faster than gpt-4o
+                max_tokens=4000,
+                temperature=0.7,
+                response_format={"type": "json_object"},  # Force JSON response
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a professional resume writer specializing in cybersecurity and technology roles. Return only valid JSON."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ]
+            )
 
-            # Ensure required fields exist
-            tailored.setdefault('summary', base_resume.get('summary', ''))
-            tailored.setdefault('experience', base_resume.get('experience', []))
-            tailored.setdefault('competencies', [])
-            tailored.setdefault('alignment_statement', '')
+            # Extract the response content
+            content = response.choices[0].message.content
 
-            return tailored
+            # Try to parse as JSON
+            try:
+                # With response_format="json_object", OpenAI returns clean JSON
+                tailored = json.loads(content)
 
-        except (json.JSONDecodeError, ValueError) as e:
-            print(f"Failed to parse OpenAI response as JSON: {e}")
-            print(f"Response: {content}")
+                # Ensure required fields exist
+                tailored.setdefault('summary', base_resume.get('summary', ''))
+                tailored.setdefault('experience', base_resume.get('experience', []))
+                tailored.setdefault('competencies', [])
+                tailored.setdefault('alignment_statement', '')
 
+                return tailored
+
+            except (json.JSONDecodeError, ValueError) as e:
+                print(f"Failed to parse OpenAI response as JSON: {e}")
+                print(f"Response: {content}")
+
+                # Return base resume as fallback
+                return {
+                    "summary": base_resume.get('summary', ''),
+                    "experience": base_resume.get('experience', []),
+                    "competencies": [],
+                    "alignment_statement": f"Tailored for {job_details.get('company', 'this company')}",
+                    "error": "Failed to parse tailored resume",
+                    "raw_response": content
+                }
+
+        except Exception as e:
+            print(f"OpenAI API error: {str(e)}")
             # Return base resume as fallback
             return {
                 "summary": base_resume.get('summary', ''),
                 "experience": base_resume.get('experience', []),
                 "competencies": [],
-                "alignment_statement": f"Tailored for {job_details.get('company', 'this company')}",
-                "error": "Failed to parse tailored resume",
-                "raw_response": content
+                "alignment_statement": "",
+                "error": str(e)
             }
-
-    except Exception as e:
-        print(f"OpenAI API error: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        # Return base resume as fallback
-        return {
-            "summary": base_resume.get('summary', ''),
-            "experience": base_resume.get('experience', []),
-            "competencies": [],
-            "alignment_statement": "",
-            "error": str(e)
-        }
