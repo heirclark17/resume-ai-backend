@@ -161,7 +161,16 @@ class FirecrawlClient:
             # Check if extraction succeeded (v2 SDK returns Document object with json attribute)
             extracted_data = None
             if extract_result and hasattr(extract_result, 'json') and extract_result.json:
-                extracted_data = extract_result.json
+                # The json attribute might be a Pydantic model or dict - convert to dict if needed
+                json_data = extract_result.json
+                if hasattr(json_data, 'model_dump'):
+                    extracted_data = json_data.model_dump()
+                elif hasattr(json_data, 'dict'):
+                    extracted_data = json_data.dict()
+                elif isinstance(json_data, dict):
+                    extracted_data = json_data
+                else:
+                    extracted_data = dict(json_data) if json_data else None
                 print(f"Firecrawl extraction succeeded")
             else:
                 print("Firecrawl extraction returned no data, will use OpenAI fallback")
