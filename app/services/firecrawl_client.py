@@ -298,8 +298,25 @@ Do not include any other text, only the JSON."""
 
             except Exception as playwright_error:
                 print(f"Playwright extraction also failed: {playwright_error}")
-                # Both Firecrawl and Playwright failed
-                raise ValueError(
-                    f"Failed to extract job details: {str(e)}. "
-                    f"Playwright fallback also failed: {str(playwright_error)}"
-                )
+
+                # Try GPT-4 Vision + Screenshot API as final fallback
+                try:
+                    print("Attempting GPT-4 Vision + Screenshot API fallback...")
+                    from app.services.vision_extractor import VisionJobExtractor
+
+                    vision_extractor = VisionJobExtractor()
+                    vision_result = await vision_extractor.extract_from_url(job_url)
+
+                    print(f"✓ Vision extraction succeeded: {vision_result['company']} - {vision_result['title']}")
+                    return vision_result
+
+                except Exception as vision_error:
+                    print(f"Vision extraction also failed: {vision_error}")
+                    # All methods failed
+                    raise ValueError(
+                        f"Failed to extract job details from URL. "
+                        f"Firecrawl failed: {str(e)}. "
+                        f"Playwright failed: {str(playwright_error)}. "
+                        f"Vision extraction failed: {str(vision_error)}. "
+                        f"Please provide company name and job title manually."
+                    )
