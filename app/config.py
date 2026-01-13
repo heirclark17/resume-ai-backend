@@ -4,7 +4,6 @@ import os
 
 class Settings(BaseSettings):
     # API Keys
-    claude_api_key: str = ""
     openai_api_key: str = ""
     perplexity_api_key: str = ""
 

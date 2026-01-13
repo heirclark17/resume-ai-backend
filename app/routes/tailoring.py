@@ -7,7 +7,7 @@ from app.models.resume import BaseResume, TailoredResume
 from app.models.job import Job
 from app.models.company import CompanyResearch
 from app.services.perplexity_client import PerplexityClient
-from app.services.claude_tailor import ClaudeTailor
+from app.services.openai_tailor import OpenAITailor
 from app.services.docx_generator import DOCXGenerator
 from app.utils.url_validator import URLValidator
 from app.utils.quality_scorer import QualityScorer
@@ -75,6 +75,19 @@ async def tailor_resume(
         print(f"Company: {request.company}")
         print(f"Job Title: {request.job_title}")
         print(f"Job URL: {request.job_url}")
+
+        # Check API keys early (before any expensive operations)
+        if not settings.test_mode:
+            if not settings.openai_api_key:
+                raise HTTPException(
+                    status_code=503,
+                    detail="AI service unavailable: OPENAI_API_KEY not configured. Please contact administrator or set TEST_MODE=true."
+                )
+            if not settings.perplexity_api_key:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Research service unavailable: PERPLEXITY_API_KEY not configured. Please contact administrator or set TEST_MODE=true."
+                )
 
         # Validate job URL for SSRF protection
         if request.job_url:
@@ -145,9 +158,9 @@ async def tailor_resume(
                 "research": "Unable to perform company research at this time."
             }
 
-        # Step 4: Tailor resume with Claude
-        print("Step 4: Tailoring resume with Claude...")
-        claude = ClaudeTailor()
+        # Step 4: Tailor resume with OpenAI
+        print("Step 4: Tailoring resume with OpenAI GPT-4o...")
+        openai_tailor = OpenAITailor()
 
         job_details = {
             "company": job.company,
@@ -157,14 +170,14 @@ async def tailor_resume(
         }
 
         try:
-            tailored_content = await claude.tailor_resume(
+            tailored_content = await openai_tailor.tailor_resume(
                 base_resume=base_resume_data,
                 company_research=company_research,
                 job_details=job_details
             )
             print(f"Resume tailored: {len(tailored_content.get('competencies', []))} competencies")
         except Exception as e:
-            print(f"Claude tailoring failed: {e}")
+            print(f"OpenAI tailoring failed: {e}")
             raise HTTPException(status_code=500, detail=f"Resume tailoring failed: {str(e)}")
 
         # Step 5: Generate DOCX

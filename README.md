@@ -1,12 +1,12 @@
 # Resume AI Backend
 
-FastAPI backend for Resume AI application - handles resume tailoring with Claude AI and Perplexity research.
+FastAPI backend for Resume AI application - handles resume tailoring with OpenAI GPT-4o and Perplexity research.
 
 ## Features
 
 - **Resume Tailoring**: Customizes resumes for specific companies and job postings
 - **AI-Powered Research**: Uses Perplexity AI to research companies
-- **Resume Generation**: Tailors resume content with Claude AI
+- **Resume Generation**: Tailors resume content with OpenAI GPT-4o
 - **DOCX Generation**: Creates formatted Word documents
 - **Database**: Stores base resumes, tailored resumes, jobs, and company research
 
@@ -15,7 +15,7 @@ FastAPI backend for Resume AI application - handles resume tailoring with Claude
 - **Framework**: FastAPI
 - **Database**: PostgreSQL (production) / SQLite (local development)
 - **ORM**: SQLAlchemy with async support
-- **AI Services**: Anthropic Claude, Perplexity AI
+- **AI Services**: OpenAI GPT-4o, Perplexity AI
 - **Document Generation**: python-docx
 
 ## Local Development
@@ -47,7 +47,7 @@ pip install -r requirements.txt
 4. Create `.env` file:
 ```env
 # AI API Keys
-CLAUDE_API_KEY=your_claude_api_key
+OPENAI_API_KEY=your_openai_api_key
 PERPLEXITY_API_KEY=your_perplexity_api_key
 
 # Test Mode (set to true to use mock data)
@@ -115,7 +115,7 @@ git push -u origin main
    - Go to your service → "Variables" tab
    - Add these variables:
      ```
-     CLAUDE_API_KEY=your_actual_claude_key
+     OPENAI_API_KEY=your_actual_openai_key
      PERPLEXITY_API_KEY=your_actual_perplexity_key
      TEST_MODE=false
      ```
@@ -185,7 +185,7 @@ backend/
 │   │   └── tailoring.py
 │   └── services/            # Business logic
 │       ├── perplexity_client.py
-│       ├── claude_tailor.py
+│       ├── openai_tailor.py
 │       └── docx_generator.py
 ├── .env                     # Local environment variables (not in git)
 ├── .env.example             # Example environment variables
@@ -199,7 +199,7 @@ backend/
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `CLAUDE_API_KEY` | Yes | - | Anthropic Claude API key |
+| `OPENAI_API_KEY` | Yes | - | OpenAI API key (for GPT-4o) |
 | `PERPLEXITY_API_KEY` | Yes | - | Perplexity AI API key |
 | `TEST_MODE` | No | `false` | Use mock data instead of real APIs |
 | `DATABASE_URL` | No | Auto-detect | PostgreSQL URL (Railway provides this) |
@@ -241,7 +241,7 @@ backend/
 Set `TEST_MODE=true` to use mock AI responses without calling real APIs:
 
 - Mock company research from Perplexity
-- Mock resume tailoring from Claude
+- Mock resume tailoring from OpenAI
 - Useful for testing without API costs
 
 ## License

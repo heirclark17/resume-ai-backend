@@ -7,10 +7,23 @@ class PerplexityClient:
     """Client for Perplexity AI company research"""
 
     def __init__(self):
-        self.client = OpenAI(
-            api_key=settings.perplexity_api_key,
-            base_url="https://api.perplexity.ai"
-        )
+        if not settings.perplexity_api_key:
+            raise ValueError(
+                "PERPLEXITY_API_KEY not found. Please set it in Railway environment variables, "
+                "or set TEST_MODE=true to use mock data. "
+                "Railway dashboard -> Variables -> Add Variable -> PERPLEXITY_API_KEY"
+            )
+
+        try:
+            self.client = OpenAI(
+                api_key=settings.perplexity_api_key,
+                base_url="https://api.perplexity.ai"
+            )
+        except Exception as e:
+            raise ValueError(
+                f"Failed to initialize Perplexity client: {str(e)}. "
+                "Check that your PERPLEXITY_API_KEY is valid."
+            )
 
     async def research_company(self, company_name: str, job_title: str = "") -> dict:
         """

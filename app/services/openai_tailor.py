@@ -5,15 +5,26 @@ import os
 
 settings = get_settings()
 
-class ClaudeTailor:
-    """AI service for resume tailoring (using OpenAI)"""
+class OpenAITailor:
+    """AI service for resume tailoring using OpenAI GPT-4o"""
 
     def __init__(self):
-        # Use OpenAI instead of Claude
-        openai_api_key = os.getenv('OPENAI_API_KEY')
+        openai_api_key = os.getenv('OPENAI_API_KEY') or settings.openai_api_key
+
         if not openai_api_key:
-            raise ValueError("OPENAI_API_KEY environment variable not set")
-        self.client = OpenAI(api_key=openai_api_key)
+            raise ValueError(
+                "OPENAI_API_KEY not found. Please set it in Railway environment variables, "
+                "or set TEST_MODE=true to use mock data. "
+                "Railway dashboard -> Variables -> Add Variable -> OPENAI_API_KEY"
+            )
+
+        try:
+            self.client = OpenAI(api_key=openai_api_key)
+        except Exception as e:
+            raise ValueError(
+                f"Failed to initialize OpenAI client: {str(e)}. "
+                "Check that your OPENAI_API_KEY is valid and has access to GPT-4o."
+            )
 
     async def tailor_resume(
         self,
@@ -22,7 +33,7 @@ class ClaudeTailor:
         job_details: dict
     ) -> dict:
         """
-        Tailor resume using Claude AI
+        Tailor resume using OpenAI GPT-4o
 
         Args:
             base_resume: {summary, skills, experience, education, certifications}
@@ -121,7 +132,7 @@ Return ONLY a valid JSON object with this structure:
 
         try:
             response = self.client.chat.completions.create(
-                model="gpt-4o",  # Use GPT-4o for best tailoring quality
+                model="gpt-4.1-mini",  # Use GPT-4.1-mini - 83% cheaper, 50% faster than gpt-4o
                 max_tokens=4000,
                 temperature=0.7,
                 response_format={"type": "json_object"},  # Force JSON response
