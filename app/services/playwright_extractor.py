@@ -3,10 +3,11 @@ Playwright-based job extraction for sites that block Firecrawl
 Handles JavaScript-heavy sites and anti-bot protection
 """
 
-from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeout
+from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeout, Error as PlaywrightError
 from typing import Dict, Optional
 import asyncio
 import re
+import os
 
 
 class PlaywrightJobExtractor:
@@ -23,45 +24,57 @@ class PlaywrightJobExtractor:
             Dict with company, title, description, location, salary
         """
 
-        async with async_playwright() as p:
-            # Launch browser (headless for production)
-            browser = await p.chromium.launch(headless=True)
-            page = await browser.new_page()
+        try:
+            async with async_playwright() as p:
+                # Launch browser (headless for production)
+                # Add extra arguments for Railway/containerized environments
+                browser = await p.chromium.launch(
+                    headless=True,
+                    args=[
+                        '--disable-blink-features=AutomationControlled',
+                        '--no-sandbox',
+                        '--disable-setuid-sandbox',
+                        '--disable-dev-shm-usage',
+                        '--disable-accelerated-2d-canvas',
+                        '--disable-gpu'
+                    ]
+                )
+                page = await browser.new_page()
 
-            try:
-                print(f"[Playwright] Navigating to: {url}")
+                try:
+                    print(f"[Playwright] Navigating to: {url}")
 
-                # Navigate with generous timeout for slow sites
-                await page.goto(url, wait_until="networkidle", timeout=30000)
+                    # Navigate with generous timeout for slow sites
+                    await page.goto(url, wait_until="networkidle", timeout=30000)
 
-                # Wait for content to load
-                await page.wait_for_timeout(2000)
+                    # Wait for content to load
+                    await page.wait_for_timeout(2000)
 
-                # Get page title for fallback
-                page_title = await page.title()
+                    # Get page title for fallback
+                    page_title = await page.title()
 
-                # Extract job details using multiple strategies
-                job_data = {
-                    "company": await self._extract_company(page, url),
-                    "title": await self._extract_title(page, page_title),
-                    "description": await self._extract_description(page),
-                    "location": await self._extract_location(page),
-                    "salary": await self._extract_salary(page),
-                }
+                    # Extract job details using multiple strategies
+                    job_data = {
+                        "company": await self._extract_company(page, url),
+                        "title": await self._extract_title(page, page_title),
+                        "description": await self._extract_description(page),
+                        "location": await self._extract_location(page),
+                        "salary": await self._extract_salary(page),
+                    }
 
-                print(f"[Playwright] Extracted: {job_data['company']} - {job_data['title']}")
+                    print(f"[Playwright] Extracted: {job_data['company']} - {job_data['title']}")
 
-                await browser.close()
-                return job_data
+                    await browser.close()
+                    return job_data
 
-            except PlaywrightTimeout as e:
-                print(f"[Playwright] Timeout error: {e}")
-                await browser.close()
-                raise Exception(f"Page load timeout: {url}")
-            except Exception as e:
-                print(f"[Playwright] Extraction error: {e}")
-                await browser.close()
-                raise Exception(f"Failed to extract job details: {str(e)}")
+                except PlaywrightTimeout as e:
+                    print(f"[Playwright] Timeout error: {e}")
+                    await browser.close()
+                    raise Exception(f"Page load timeout: {url}")
+                except Exception as e:
+                    print(f"[Playwright] Extraction error: {e}")
+                    await browser.close()
+                    raise Exception(f"Failed to extract job details: {str(e)}")
 
     async def _extract_company(self, page, url: str) -> str:
         """Extract company name from page"""
