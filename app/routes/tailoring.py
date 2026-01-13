@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
@@ -354,6 +355,36 @@ async def list_tailored_resumes(db: AsyncSession = Depends(get_db)):
             for tr in tailored_resumes
         ]
     }
+
+
+@router.get("/download/{tailored_id}")
+async def download_tailored_resume(tailored_id: int, db: AsyncSession = Depends(get_db)):
+    """Download a tailored resume DOCX file"""
+    result = await db.execute(
+        select(TailoredResume).where(TailoredResume.id == tailored_id)
+    )
+    tailored = result.scalar_one_or_none()
+
+    if not tailored:
+        raise HTTPException(status_code=404, detail="Tailored resume not found")
+
+    # Check if deleted
+    if tailored.is_deleted:
+        raise HTTPException(status_code=404, detail="Tailored resume has been deleted")
+
+    # Check if file exists
+    import os
+    if not os.path.exists(tailored.docx_path):
+        raise HTTPException(status_code=404, detail="Resume file not found on server")
+
+    # Get filename from path
+    filename = os.path.basename(tailored.docx_path)
+
+    return FileResponse(
+        path=tailored.docx_path,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        filename=filename
+    )
 
 
 @router.post("/tailor/batch")
