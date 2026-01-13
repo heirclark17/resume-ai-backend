@@ -173,8 +173,8 @@ Return ONLY a valid JSON object with this structure:
 """
 
         try:
-            # Try multiple models in order of preference
-            models_to_try = ["gpt-4.1-mini", "gpt-4o-mini", "gpt-4o"]
+            # Use gpt-4.1-mini (user has API key for this model)
+            models_to_try = ["gpt-4.1-mini"]
 
             response = None
             for model_name in models_to_try:

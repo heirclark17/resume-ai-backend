@@ -240,8 +240,8 @@ Return ONLY a single valid JSON object. Do not include any explanations
 or extra text."""
 
         try:
-            # Try multiple models in order of preference
-            models_to_try = ["gpt-4o", "gpt-4o-mini"]
+            # Use gpt-4.1-mini (user has API key for this model)
+            models_to_try = ["gpt-4.1-mini"]
 
             response = None
             for model_name in models_to_try:
