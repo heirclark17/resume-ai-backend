@@ -86,14 +86,12 @@ class FirecrawlClient:
             print("Scraping job page with Firecrawl...")
 
             # Run synchronous Firecrawl operations in thread pool
-            # Scrape the page to get clean content (v2 API uses scrape() not scrape_url())
+            # Scrape the page to get clean content (v2 API uses scrape() with keyword args)
             scrape_result = await asyncio.to_thread(
                 app.scrape,
                 job_url,
-                params={
-                    'formats': ['markdown'],
-                    'onlyMainContent': True  # Focus on main content, skip headers/footers
-                }
+                formats=['markdown'],
+                only_main_content=True  # Focus on main content, skip headers/footers
             )
 
             if not scrape_result or not scrape_result.get('markdown'):
@@ -102,13 +100,14 @@ class FirecrawlClient:
             markdown_content = scrape_result['markdown']
             print(f"Job page scraped: {len(markdown_content)} characters")
 
-            # Now use Firecrawl's extract feature to get structured data
+            # Now use Firecrawl's extract feature to get structured data (v2 API uses scrape with JSON format)
             print("Extracting structured job data...")
 
             extract_result = await asyncio.to_thread(
-                app.extract,
-                urls=[job_url],
-                params={
+                app.scrape,
+                job_url,
+                formats=[{
+                    'type': 'json',
                     'prompt': 'Extract all job posting details including company name, job title, full job description, location, salary range, posted date, employment type (full-time/part-time/contract), experience level, and required skills.',
                     'schema': {
                         'type': 'object',
@@ -153,13 +152,15 @@ class FirecrawlClient:
                         },
                         'required': ['company', 'title', 'description']
                     }
-                }
+                }],
+                only_main_content=False,
+                timeout=120000
             )
 
-            # Check if extraction succeeded
+            # Check if extraction succeeded (v2 API returns data.json for JSON format)
             extracted_data = None
-            if extract_result and extract_result.get('data'):
-                extracted_data = extract_result['data']
+            if extract_result and extract_result.get('json'):
+                extracted_data = extract_result['json']
                 print(f"Firecrawl extraction succeeded")
             else:
                 print("Firecrawl extraction returned no data, will use OpenAI fallback")
