@@ -129,17 +129,17 @@ async def upload_resume(
 
 @router.get("/list")
 async def list_resumes(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
-    """List user's resumes (requires authentication, excludes deleted resumes)"""
-    # Only show authenticated user's non-deleted resumes
-    result = await db.execute(
-        select(BaseResume)
-        .where(BaseResume.user_id == current_user.id)
-        .where(BaseResume.is_deleted == False)  # Filter out soft-deleted resumes
-        .order_by(BaseResume.uploaded_at.desc())
-    )
+    """List resumes (authentication optional, excludes deleted resumes)"""
+    # If authenticated, show only user's resumes; otherwise show all non-deleted resumes
+    query = select(BaseResume).where(BaseResume.is_deleted == False)
+
+    if current_user:
+        query = query.where(BaseResume.user_id == current_user.id)
+
+    result = await db.execute(query.order_by(BaseResume.uploaded_at.desc()))
 
     resumes = result.scalars().all()
 
@@ -159,10 +159,10 @@ async def list_resumes(
 @router.get("/{resume_id}")
 async def get_resume(
     resume_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get resume details (requires authentication, excludes deleted resumes)"""
+    """Get resume details (authentication optional, excludes deleted resumes)"""
     result = await db.execute(select(BaseResume).where(BaseResume.id == resume_id))
     resume = result.scalar_one_or_none()
 
@@ -173,8 +173,8 @@ async def get_resume(
     if resume.is_deleted:
         raise HTTPException(status_code=404, detail="Resume has been deleted")
 
-    # Ownership verification
-    if resume.user_id and resume.user_id != current_user.id:
+    # Ownership verification (only if both have user_id)
+    if current_user and resume.user_id and resume.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied: You don't own this resume")
 
     return {
