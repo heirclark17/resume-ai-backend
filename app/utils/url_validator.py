@@ -167,21 +167,38 @@ class URLValidator:
             except ValueError:
                 pass
 
-        # Whitelist check: Only allow known job board domains
-        domain_allowed = False
-        for allowed in cls.ALLOWED_DOMAINS:
-            if hostname == allowed or hostname.endswith('.' + allowed):
-                domain_allowed = True
-                break
+        # Security check: Block obviously dangerous domains
+        # Block domains with suspicious keywords
+        blocked_keywords = [
+            'internal',
+            'admin',
+            'api',
+            'backend',
+            'database',
+            'db',
+            'staging',
+            'test',
+            'dev',
+            'debug',
+        ]
 
-        if not domain_allowed:
+        hostname_parts = hostname.split('.')
+        for part in hostname_parts:
+            if part.lower() in blocked_keywords:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Blocked URL: Domain contains restricted keyword '{part}'"
+                )
+
+        # Block domains that are too short (likely malicious)
+        if len(hostname) < 4:
             raise HTTPException(
                 status_code=400,
-                detail=f"Blocked URL: Domain '{hostname}' is not a recognized job board. "
-                       f"Allowed domains include: linkedin.com, indeed.com, glassdoor.com, "
-                       f"and major company career sites."
+                detail=f"Blocked URL: Domain name is suspiciously short"
             )
 
+        # All other security checks passed - allow the URL
+        # This is more permissive and allows any legitimate company career site
         return url
 
     @staticmethod
