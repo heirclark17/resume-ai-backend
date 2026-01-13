@@ -19,7 +19,13 @@ app = FastAPI(title=settings.app_name, version=settings.app_version)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# CORS - Explicit origins for security
+# Web Application Firewall - Block malicious requests
+app.add_middleware(WAFMiddleware)
+
+# Security Headers - CSP, HSTS, X-Frame-Options, etc.
+app.add_middleware(SecurityHeadersMiddleware)
+
+# CORS - Explicit origins for security (MUST be added LAST so it runs FIRST)
 allowed_origins = [origin.strip() for origin in settings.allowed_origins.split(",")]
 logger.info(f"CORS allowed origins: {allowed_origins}")
 logger.info(f"Raw ALLOWED_ORIGINS env var: {settings.allowed_origins}")
@@ -30,13 +36,9 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "X-API-Key", "Authorization", "X-TOTP-Code"],
+    expose_headers=["*"],
+    max_age=3600,
 )
-
-# Web Application Firewall - Block malicious requests
-app.add_middleware(WAFMiddleware)
-
-# Security Headers - CSP, HSTS, X-Frame-Options, etc.
-app.add_middleware(SecurityHeadersMiddleware)
 
 # Startup: Initialize database
 @app.on_event("startup")
