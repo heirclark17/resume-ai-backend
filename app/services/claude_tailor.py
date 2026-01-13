@@ -1,14 +1,19 @@
-from anthropic import Anthropic
+from openai import OpenAI
 from app.config import get_settings
 import json
+import os
 
 settings = get_settings()
 
 class ClaudeTailor:
-    """Claude AI service for resume tailoring"""
+    """AI service for resume tailoring (using OpenAI)"""
 
     def __init__(self):
-        self.client = Anthropic(api_key=settings.claude_api_key)
+        # Use OpenAI instead of Claude
+        openai_api_key = os.getenv('OPENAI_API_KEY')
+        if not openai_api_key:
+            raise ValueError("OPENAI_API_KEY environment variable not set")
+        self.client = OpenAI(api_key=openai_api_key)
 
     async def tailor_resume(
         self,
@@ -36,7 +41,7 @@ class ClaudeTailor:
 
         # TEST MODE: Return mock tailored content
         if settings.test_mode:
-            print(f"[TEST MODE] Simulating Claude tailoring for {job_details.get('company')}")
+            print(f"[TEST MODE] Simulating AI tailoring for {job_details.get('company')}")
             return {
                 "summary": f"Senior Cybersecurity Program Manager with 10+ years driving security initiatives for {job_details.get('company')}. Expertise in breaking down complex security objectives into executable strategies while managing cross-functional stakeholders and delivering resilient solutions aligned with {job_details.get('company')}'s mission. Track record of reducing operational risk, accelerating secure delivery, and building governance structures that enable business growth. Experienced in NIST, ISO 27001, and enterprise-scale security program management.",
                 "experience": base_resume.get('experience', []),  # Keep original experience
@@ -115,11 +120,16 @@ Return ONLY a valid JSON object with this structure:
 """
 
         try:
-            response = self.client.messages.create(
-                model="claude-sonnet-4-20250514",
+            response = self.client.chat.completions.create(
+                model="gpt-4o",  # Use GPT-4o for best tailoring quality
                 max_tokens=4000,
                 temperature=0.7,
+                response_format={"type": "json_object"},  # Force JSON response
                 messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a professional resume writer specializing in cybersecurity and technology roles. Return only valid JSON."
+                    },
                     {
                         "role": "user",
                         "content": prompt
@@ -128,18 +138,12 @@ Return ONLY a valid JSON object with this structure:
             )
 
             # Extract the response content
-            content = response.content[0].text
+            content = response.choices[0].message.content
 
             # Try to parse as JSON
             try:
-                # Find JSON in the response (Claude might add explanation text)
-                json_start = content.find('{')
-                json_end = content.rfind('}') + 1
-                if json_start >= 0 and json_end > json_start:
-                    json_str = content[json_start:json_end]
-                    tailored = json.loads(json_str)
-                else:
-                    raise ValueError("No JSON found in response")
+                # With response_format="json_object", OpenAI returns clean JSON
+                tailored = json.loads(content)
 
                 # Ensure required fields exist
                 tailored.setdefault('summary', base_resume.get('summary', ''))
@@ -150,7 +154,7 @@ Return ONLY a valid JSON object with this structure:
                 return tailored
 
             except (json.JSONDecodeError, ValueError) as e:
-                print(f"Failed to parse Claude response as JSON: {e}")
+                print(f"Failed to parse OpenAI response as JSON: {e}")
                 print(f"Response: {content}")
 
                 # Return base resume as fallback
@@ -164,7 +168,7 @@ Return ONLY a valid JSON object with this structure:
                 }
 
         except Exception as e:
-            print(f"Claude API error: {str(e)}")
+            print(f"OpenAI API error: {str(e)}")
             # Return base resume as fallback
             return {
                 "summary": base_resume.get('summary', ''),
