@@ -52,8 +52,8 @@ class BatchTailorRequest(BaseModel):
 @router.post("/tailor")
 @limiter.limit("10/hour")  # Rate limit: 10 tailoring operations per hour per IP
 async def tailor_resume(
-    http_request: Request,
-    request: TailorRequest,
+    request: Request,
+    tailor_request: TailorRequest,
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -72,10 +72,10 @@ async def tailor_resume(
     try:
         print(f"=== TAILORING START ===")
         print(f"TEST MODE: {settings.test_mode} (type: {type(settings.test_mode).__name__})")
-        print(f"Base Resume ID: {request.base_resume_id}")
-        print(f"Company: {request.company}")
-        print(f"Job Title: {request.job_title}")
-        print(f"Job URL: {request.job_url}")
+        print(f"Base Resume ID: {tailor_request.base_resume_id}")
+        print(f"Company: {tailor_request.company}")
+        print(f"Job Title: {tailor_request.job_title}")
+        print(f"Job URL: {tailor_request.job_url}")
 
         # Check API keys early (before any expensive operations)
         if not settings.test_mode:
@@ -91,15 +91,15 @@ async def tailor_resume(
                 )
 
         # Validate job URL for SSRF protection
-        if request.job_url:
+        if tailor_request.job_url:
             print(f"Validating job URL for SSRF protection...")
-            request.job_url = URLValidator.validate_job_url(request.job_url)
+            tailor_request.job_url = URLValidator.validate_job_url(tailor_request.job_url)
             print(f"✓ URL validated successfully")
 
         # Step 1: Fetch base resume
         print("Step 1: Fetching base resume...")
         result = await db.execute(
-            select(BaseResume).where(BaseResume.id == request.base_resume_id)
+            select(BaseResume).where(BaseResume.id == tailor_request.base_resume_id)
         )
         base_resume = result.scalar_one_or_none()
 
@@ -121,23 +121,23 @@ async def tailor_resume(
         print("Step 2: Processing job details...")
 
         extracted_job_data = None
-        if request.job_url:
-            print(f"Job URL provided: {request.job_url}")
+        if tailor_request.job_url:
+            print(f"Job URL provided: {tailor_request.job_url}")
             print("Extracting job details with Firecrawl...")
 
             try:
                 firecrawl = FirecrawlClient()
-                extracted_job_data = await firecrawl.extract_job_details(request.job_url)
+                extracted_job_data = await firecrawl.extract_job_details(tailor_request.job_url)
 
                 print(f"✓ Job extracted: {extracted_job_data['company']} - {extracted_job_data['title']}")
 
                 # Use extracted data if manual fields not provided
-                if not request.company:
-                    request.company = extracted_job_data['company']
-                if not request.job_title:
-                    request.job_title = extracted_job_data['title']
-                if not request.job_description:
-                    request.job_description = extracted_job_data['description']
+                if not tailor_request.company:
+                    tailor_request.company = extracted_job_data['company']
+                if not tailor_request.job_title:
+                    tailor_request.job_title = extracted_job_data['title']
+                if not tailor_request.job_description:
+                    tailor_request.job_description = extracted_job_data['description']
 
             except Exception as e:
                 print(f"⚠️ Job extraction failed: {e}")
@@ -147,20 +147,20 @@ async def tailor_resume(
         print("Step 3: Creating job record...")
         job = None
 
-        if request.job_url:
+        if tailor_request.job_url:
             # Check if job already exists
             result = await db.execute(
-                select(Job).where(Job.url == request.job_url)
+                select(Job).where(Job.url == tailor_request.job_url)
             )
             job = result.scalar_one_or_none()
 
         if not job:
             # Create new job record with extracted or manual data
             job = Job(
-                url=request.job_url or f"manual_{datetime.utcnow().timestamp()}",
-                company=request.company or "Unknown Company",
-                title=request.job_title or "Unknown Position",
-                description=request.job_description or "",
+                url=tailor_request.job_url or f"manual_{datetime.utcnow().timestamp()}",
+                company=tailor_request.company or "Unknown Company",
+                title=tailor_request.job_title or "Unknown Position",
+                description=tailor_request.job_description or "",
                 location=extracted_job_data.get('location', '') if extracted_job_data else '',
                 salary=extracted_job_data.get('salary', '') if extracted_job_data else '',
                 is_active=True
@@ -196,7 +196,7 @@ async def tailor_resume(
             "company": job.company,
             "title": job.title,
             "url": job.url,
-            "description": request.job_description or ""
+            "description": tailor_request.job_description or ""
         }
 
         try:
@@ -358,8 +358,8 @@ async def list_tailored_resumes(db: AsyncSession = Depends(get_db)):
 @router.post("/tailor/batch")
 @limiter.limit("2/hour")  # Rate limit: 2 batch operations per hour per IP (very expensive)
 async def tailor_resume_batch(
-    http_request: Request,
-    request: BatchTailorRequest,
+    request: Request,
+    batch_request: BatchTailorRequest,
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -370,42 +370,42 @@ async def tailor_resume_batch(
     Returns results for each job URL with success/failure status
     """
     # Validate URL limit
-    if len(request.job_urls) > 10:
+    if len(batch_request.job_urls) > 10:
         raise HTTPException(
             status_code=400,
             detail="Maximum 10 job URLs allowed per batch"
         )
 
-    if len(request.job_urls) == 0:
+    if len(batch_request.job_urls) == 0:
         raise HTTPException(
             status_code=400,
             detail="At least 1 job URL required"
         )
 
     print(f"=== BATCH TAILORING START ===")
-    print(f"Base Resume ID: {request.base_resume_id}")
-    print(f"Job URLs: {len(request.job_urls)}")
+    print(f"Base Resume ID: {batch_request.base_resume_id}")
+    print(f"Job URLs: {len(batch_request.job_urls)}")
 
     # Validate all URLs for SSRF protection
     print("Validating all job URLs for SSRF protection...")
     validated_urls = []
-    for idx, job_url in enumerate(request.job_urls, 1):
+    for idx, job_url in enumerate(batch_request.job_urls, 1):
         try:
             validated_url = URLValidator.validate_job_url(job_url)
             validated_urls.append(validated_url)
-            print(f"  ✓ URL {idx}/{len(request.job_urls)} validated")
+            print(f"  ✓ URL {idx}/{len(batch_request.job_urls)} validated")
         except HTTPException as e:
             raise HTTPException(
                 status_code=400,
                 detail=f"Invalid URL #{idx}: {e.detail}"
             )
 
-    request.job_urls = validated_urls
+    batch_request.job_urls = validated_urls
     print(f"✓ All {len(validated_urls)} URLs validated successfully")
 
     # Verify base resume exists
     result = await db.execute(
-        select(BaseResume).where(BaseResume.id == request.base_resume_id)
+        select(BaseResume).where(BaseResume.id == batch_request.base_resume_id)
     )
     base_resume = result.scalar_one_or_none()
 
@@ -414,19 +414,19 @@ async def tailor_resume_batch(
 
     # Process each job URL
     results = []
-    for idx, job_url in enumerate(request.job_urls, 1):
-        print(f"\n--- Processing Job {idx}/{len(request.job_urls)} ---")
+    for idx, job_url in enumerate(batch_request.job_urls, 1):
+        print(f"\n--- Processing Job {idx}/{len(batch_request.job_urls)} ---")
         print(f"URL: {job_url}")
 
         try:
             # Create individual tailor request
             tailor_req = TailorRequest(
-                base_resume_id=request.base_resume_id,
+                base_resume_id=batch_request.base_resume_id,
                 job_url=job_url
             )
 
-            # Call single tailor endpoint (pass http_request for rate limiting)
-            result = await tailor_resume(http_request, tailor_req, db)
+            # Call single tailor endpoint (pass request for rate limiting)
+            result = await tailor_resume(request, tailor_req, db)
 
             results.append({
                 "job_url": job_url,
