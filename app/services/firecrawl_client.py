@@ -73,7 +73,7 @@ class FirecrawlClient:
             # We'll scrape to get clean markdown, then extract structured data from it
             from firecrawl import FirecrawlApp
 
-            firecrawl_api_key = os.getenv('FIRECRAWL_API_KEY') or settings.firecrawl_api_key
+            firecrawl_api_key = os.getenv('FIRECRAWL_API_KEY', '')
 
             if not firecrawl_api_key:
                 raise ValueError(

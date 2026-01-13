@@ -8,8 +8,8 @@ class Settings(BaseSettings):
     perplexity_api_key: str = ""
     firecrawl_api_key: str = ""
 
-    # Test Mode
-    test_mode: bool = False
+    # Test Mode - explicitly read from environment
+    test_mode: bool = os.getenv("TEST_MODE", "false").lower() == "true"
 
     # File Storage
     upload_dir: str = "./uploads"
