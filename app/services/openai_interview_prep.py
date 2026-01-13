@@ -76,26 +76,44 @@ Interview Prep page.
 
 You will be given:
 - A job description (JD) for a specific role.
-- Public company information (about page, careers/values content, recent news, etc.).
+- Company information (may be unstructured research text with multiple sections).
+
+CRITICAL: The company information may contain UNSTRUCTURED TEXT from research.
+You MUST actively extract and structure this information:
+
+1. **Values & Culture:** Search for company values, mission statements, cultural principles.
+   - Look for keywords like "values", "mission", "culture", "principles", "what we believe"
+   - Extract each value as a separate item with name and description
+   - If sources/URLs are mentioned, include them
+   - If no explicit values found, infer from company description
+
+2. **Strategy & News:** Search for recent events, announcements, initiatives, strategic themes.
+   - Look for dates (2024, 2025, 2026, "last year", "recently")
+   - Look for keywords like "launched", "announced", "partnership", "acquisition", "expansion"
+   - Extract specific events with dates and impact
+   - Identify strategic themes and rationale
+   - If no dates found, use "Recent" or "2025-2026"
+
+3. **Handle Redundancy:** The company information may repeat the same text in multiple sections.
+   - Read through ALL sections to find relevant information
+   - Deduplicate and organize findings
+   - Don't skip extraction just because text appears multiple times
 
 You must:
 - Analyze the JD and company information.
+- **ACTIVELY EXTRACT** structured data from unstructured text.
 - Produce a single valid JSON object that matches the JSON schema below.
-- Write all content so it can be rendered directly on the Interview Prep page
-  that the user sees after clicking the button from the resume screen.
+- Write all content so it can be rendered directly on the Interview Prep page.
 
 Important rules:
 - Respond with JSON only, no markdown, no comments, no prose.
 - Do not add or remove top-level keys.
-- For any field you cannot confidently fill, use an empty string "" or empty array [].
-- Be concise and avoid repetition; write in clear, plain language optimized
-  for on-screen scanning.
-- Do not invent specific numbers (revenue, headcount, funding amounts, dates)
-  that are not present or clearly implied. Use qualitative descriptors like
-  "mid-sized", "fast-growing", "recent", etc.
-- Assume the JSON is rendered as sections and cards on the Interview Prep page,
-  which the user reached intentionally by clicking the button, so focus on
-  actionable, interview-oriented information.
+- **DO NOT leave values_and_culture or strategy_and_news empty unless there is truly zero information.**
+- For values: Extract at least 2-5 company values from the research text.
+- For news: Extract at least 1-3 recent events or strategic themes from the research text.
+- Be concise and avoid repetition; write in clear, plain language optimized for on-screen scanning.
+- Use qualitative descriptors like "mid-sized", "fast-growing", "recent" when exact numbers aren't available.
+- Focus on actionable, interview-oriented information.
 
 JSON schema (structure and key names MUST be followed exactly):
 
