@@ -94,10 +94,11 @@ class FirecrawlClient:
                 only_main_content=True  # Focus on main content, skip headers/footers
             )
 
-            if not scrape_result or not scrape_result.get('markdown'):
+            # v2 SDK returns a Document object (Pydantic model), access attributes directly
+            if not scrape_result or not hasattr(scrape_result, 'markdown') or not scrape_result.markdown:
                 raise ValueError("Failed to scrape job page - no content returned")
 
-            markdown_content = scrape_result['markdown']
+            markdown_content = scrape_result.markdown
             print(f"Job page scraped: {len(markdown_content)} characters")
 
             # Now use Firecrawl's extract feature to get structured data (v2 API uses scrape with JSON format)
@@ -157,10 +158,10 @@ class FirecrawlClient:
                 timeout=120000
             )
 
-            # Check if extraction succeeded (v2 API returns data.json for JSON format)
+            # Check if extraction succeeded (v2 SDK returns Document object with json attribute)
             extracted_data = None
-            if extract_result and extract_result.get('json'):
-                extracted_data = extract_result['json']
+            if extract_result and hasattr(extract_result, 'json') and extract_result.json:
+                extracted_data = extract_result.json
                 print(f"Firecrawl extraction succeeded")
             else:
                 print("Firecrawl extraction returned no data, will use OpenAI fallback")
