@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     # CORS Settings
     allowed_origins: str = os.getenv(
         "ALLOWED_ORIGINS",
-        "http://localhost:5173,http://localhost:3000"  # Default for local dev
+        "http://localhost:5173,http://localhost:3000,https://talor-web.vercel.app,https://talorme.com"  # Local dev + production
     )
 
     # API Settings
