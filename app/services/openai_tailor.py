@@ -131,22 +131,39 @@ Return ONLY a valid JSON object with this structure:
 """
 
         try:
-            response = self.client.chat.completions.create(
-                model="gpt-4.1-mini",  # Use GPT-4.1-mini - 83% cheaper, 50% faster than gpt-4o
-                max_tokens=4000,
-                temperature=0.7,
-                response_format={"type": "json_object"},  # Force JSON response
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a professional resume writer specializing in cybersecurity and technology roles. Return only valid JSON."
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ]
-            )
+            # Try multiple models in order of preference
+            models_to_try = ["gpt-4.1-mini", "gpt-4o-mini", "gpt-4o"]
+
+            response = None
+            for model_name in models_to_try:
+                try:
+                    print(f"Attempting to use model: {model_name}")
+                    response = self.client.chat.completions.create(
+                        model=model_name,
+                        max_tokens=4000,
+                        temperature=0.7,
+                        response_format={"type": "json_object"},  # Force JSON response
+                        messages=[
+                            {
+                                "role": "system",
+                                "content": "You are a professional resume writer specializing in cybersecurity and technology roles. Return only valid JSON."
+                            },
+                            {
+                                "role": "user",
+                                "content": prompt
+                            }
+                        ]
+                    )
+                    print(f"✓ Successfully used model: {model_name}")
+                    break  # Success! Exit the loop
+                except Exception as model_error:
+                    print(f"✗ Model {model_name} failed: {str(model_error)}")
+                    if model_name == models_to_try[-1]:
+                        # This was the last model, re-raise the error
+                        print(f"All models failed. Last error: {str(model_error)}")
+                        raise
+                    # Otherwise continue to next model
+                    continue
 
             # Extract the response content
             content = response.choices[0].message.content
@@ -180,6 +197,8 @@ Return ONLY a valid JSON object with this structure:
 
         except Exception as e:
             print(f"OpenAI API error: {str(e)}")
+            import traceback
+            traceback.print_exc()
             # Return base resume as fallback
             return {
                 "summary": base_resume.get('summary', ''),
