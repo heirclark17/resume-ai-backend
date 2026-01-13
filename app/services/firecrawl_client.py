@@ -2,7 +2,9 @@
 Firecrawl client for extracting job posting details from URLs
 """
 import os
+import asyncio
 from typing import Dict, Any, Optional
+from functools import partial
 from app.config import get_settings
 
 settings = get_settings()
@@ -83,8 +85,10 @@ class FirecrawlClient:
 
             print("Scraping job page with Firecrawl...")
 
+            # Run synchronous Firecrawl operations in thread pool
             # Scrape the page to get clean content
-            scrape_result = app.scrape_url(
+            scrape_result = await asyncio.to_thread(
+                app.scrape_url,
                 job_url,
                 params={
                     'formats': ['markdown'],
@@ -101,7 +105,8 @@ class FirecrawlClient:
             # Now use Firecrawl's extract feature to get structured data
             print("Extracting structured job data...")
 
-            extract_result = app.extract(
+            extract_result = await asyncio.to_thread(
+                app.extract,
                 urls=[job_url],
                 params={
                     'prompt': 'Extract all job posting details including company name, job title, full job description, location, salary range, posted date, employment type (full-time/part-time/contract), experience level, and required skills.',
