@@ -86,9 +86,9 @@ class FirecrawlClient:
             print("Scraping job page with Firecrawl...")
 
             # Run synchronous Firecrawl operations in thread pool
-            # Scrape the page to get clean content
+            # Scrape the page to get clean content (v2 API uses scrape() not scrape_url())
             scrape_result = await asyncio.to_thread(
-                app.scrape_url,
+                app.scrape,
                 job_url,
                 params={
                     'formats': ['markdown'],
