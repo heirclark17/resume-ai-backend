@@ -374,14 +374,23 @@ async def download_tailored_resume(tailored_id: int, db: AsyncSession = Depends(
 
     # Check if file exists
     import os
-    if not os.path.exists(tailored.docx_path):
-        raise HTTPException(status_code=404, detail="Resume file not found on server")
+
+    # Convert relative path to absolute
+    docx_path = tailored.docx_path
+    if not os.path.isabs(docx_path):
+        docx_path = os.path.abspath(docx_path)
+
+    if not os.path.exists(docx_path):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Resume file not found. The file may have been cleaned up after deployment. Please regenerate the resume."
+        )
 
     # Get filename from path
-    filename = os.path.basename(tailored.docx_path)
+    filename = os.path.basename(docx_path)
 
     return FileResponse(
-        path=tailored.docx_path,
+        path=docx_path,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         filename=filename
     )
