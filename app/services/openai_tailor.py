@@ -94,6 +94,7 @@ Certifications: {base_resume.get('certifications', '')}
 JOB DETAILS:
 Company: {job_details.get('company', 'Unknown')}
 Title: {job_details.get('title', 'Unknown')}
+Description: {job_details.get('description', 'N/A')}
 URL: {job_details.get('url', 'N/A')}
 
 ---
@@ -103,30 +104,71 @@ COMPANY RESEARCH:
 
 ---
 
-INSTRUCTIONS:
-1. Rewrite the professional summary to align with the company's mission and the specific role
-2. Keep all experience bullets but reframe them to emphasize skills relevant to this job
-3. Add measurable outcomes to every bullet point
-4. Create a list of 12 core competencies tailored to this role
-5. Write an alignment statement connecting the candidate to the company's mission
+CRITICAL INSTRUCTIONS:
 
-Focus on:
-- Using company-specific terminology
-- Highlighting relevant frameworks/certifications
-- Emphasizing achievements that match the job requirements
-- Maintaining authenticity while optimizing for this specific opportunity
+1. **ANALYZE JOB DESCRIPTION FIRST**
+   - Identify the key responsibilities, required skills, and qualifications
+   - Note the specific terminology, frameworks, and technologies mentioned
+   - Understand what type of role this is (technical, managerial, strategic, etc.)
+
+2. **REFRAME JOB TITLES**
+   - Change each original job title to better reflect the TARGET role
+   - If applying for "Cybersecurity Program Manager", reframe past titles like:
+     * "Project Manager" → "Cybersecurity Implementation Project Manager"
+     * "Operations Manager" → "Security Operations Program Manager"
+   - Keep company names and dates exactly as they are
+   - Format: "[Reframed Title] – [Original Company]"
+
+3. **REWRITE ALL EXPERIENCE BULLETS TO MATCH JOB DESCRIPTION**
+   - **ONLY include experience relevant to this specific job**
+   - If job is for cybersecurity, DO NOT mention sales, customer service, or unrelated work
+   - Frame EVERY bullet to emphasize skills from the job description
+   - Example transformations:
+     * Sales experience → "Stakeholder engagement and requirements gathering"
+     * Customer service → "User security awareness and incident response coordination"
+     * General project management → Specific security/technical program management
+   - Add measurable outcomes (%, numbers, scale)
+   - Use terminology from the job description
+
+4. **TAILOR PROFESSIONAL SUMMARY**
+   - Lead with years of experience in the TARGET field
+   - Mention specific skills from job description
+   - Reference company's mission or recent initiatives
+   - Keep to 3-4 sentences maximum
+
+5. **CREATE 12 CORE COMPETENCIES**
+   - Pull directly from job description requirements
+   - Match exact terminology when possible
+   - Include frameworks/tools mentioned in job posting
+   - Mix technical skills and leadership/soft skills
+
+6. **ALIGNMENT STATEMENT**
+   - Connect candidate's experience to company's mission
+   - Reference specific company initiatives or values
+   - Show understanding of company's industry challenges
+
+7. **PRESERVE EDUCATION & CERTIFICATIONS**
+   - Return education text exactly as provided
+   - Return certifications text exactly as provided
+   - Do NOT modify these sections
 
 Return ONLY a valid JSON object with this structure:
 {{
-  "summary": "tailored professional summary",
+  "summary": "tailored professional summary (3-4 sentences)",
   "experience": [
     {{
-      "header": "Company | Location | Dates",
-      "bullets": ["bullet 1", "bullet 2", ...]
+      "header": "[Reframed Title] – [Company] | [Location] | [Dates]",
+      "bullets": [
+        "Bullet rewritten to match job requirements with measurable outcome",
+        "Another bullet emphasizing relevant skills from job description",
+        "..."
+      ]
     }}
   ],
-  "competencies": ["competency 1", "competency 2", ... (12 total)],
-  "alignment_statement": "statement connecting to company mission"
+  "competencies": ["competency 1", "competency 2", ... (12 total matching job description)],
+  "alignment_statement": "statement connecting candidate to company mission",
+  "education": "{base_resume.get('education', '')}",
+  "certifications": "{base_resume.get('certifications', '')}"
 }}
 """
 
@@ -178,6 +220,8 @@ Return ONLY a valid JSON object with this structure:
                 tailored.setdefault('experience', base_resume.get('experience', []))
                 tailored.setdefault('competencies', [])
                 tailored.setdefault('alignment_statement', '')
+                tailored.setdefault('education', base_resume.get('education', ''))
+                tailored.setdefault('certifications', base_resume.get('certifications', ''))
 
                 return tailored
 
@@ -191,6 +235,8 @@ Return ONLY a valid JSON object with this structure:
                     "experience": base_resume.get('experience', []),
                     "competencies": [],
                     "alignment_statement": f"Tailored for {job_details.get('company', 'this company')}",
+                    "education": base_resume.get('education', ''),
+                    "certifications": base_resume.get('certifications', ''),
                     "error": "Failed to parse tailored resume",
                     "raw_response": content
                 }

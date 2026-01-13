@@ -290,6 +290,8 @@ async def tailor_resume(
             "summary": tailored_content.get('summary', ''),
             "competencies": tailored_content.get('competencies', []),
             "experience": tailored_content.get('experience', []),
+            "education": tailored_content.get('education', ''),
+            "certifications": tailored_content.get('certifications', ''),
             "alignment_statement": tailored_content.get('alignment_statement', '')
         }
 
