@@ -189,6 +189,39 @@ async def tailor_resume(
                 "research": "Unable to perform company research at this time."
             }
 
+        # Step 4b: Save company research to database for interview prep
+        print("Step 4b: Saving company research to database...")
+
+        # Check if company research already exists for this job
+        result = await db.execute(
+            select(CompanyResearch).where(CompanyResearch.job_id == job.id)
+        )
+        existing_research = result.scalar_one_or_none()
+
+        if not existing_research:
+            # Create new company research record
+            # Store the unstructured research text from Perplexity in all fields
+            # This is a temporary solution until we parse the research properly
+            research_text = company_research.get('research', '')
+
+            company_research_record = CompanyResearch(
+                company_name=job.company,
+                job_id=job.id,
+                mission_values=research_text,  # Store full research in mission_values for now
+                initiatives=research_text,      # Duplicate for interview prep access
+                team_culture=research_text,     # Duplicate for interview prep access
+                compliance='',                   # Will be parsed in future
+                tech_stack='',                   # Will be parsed in future
+                sources=[],                      # Will be added when we have citations
+                industry=''                      # Will be extracted in future
+            )
+            db.add(company_research_record)
+            await db.commit()
+            await db.refresh(company_research_record)
+            print(f"✓ Company research saved (ID: {company_research_record.id})")
+        else:
+            print(f"✓ Company research already exists (ID: {existing_research.id})")
+
         # Step 5: Tailor resume with OpenAI
         print("Step 5: Tailoring resume with OpenAI...")
         openai_tailor = OpenAITailor()
