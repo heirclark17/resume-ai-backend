@@ -77,7 +77,7 @@ class ResumeParser:
                 print(f"[DOCX Parser] AI parsing SUCCESS - Summary length: {len(result.get('summary', ''))}, Skills: {len(result.get('skills', []))}, Jobs: {len(result.get('experience', []))}")
                 return result
             except Exception as e:
-                print(f"[DOCX Parser] ⚠️  AI parsing FAILED, falling back to regex: {e}")
+                print(f"[DOCX Parser] WARNING:  AI parsing FAILED, falling back to regex: {e}")
                 import traceback
                 traceback.print_exc()
                 result = self._extract_sections(full_text)
@@ -129,7 +129,7 @@ class ResumeParser:
                 print(f"[PDF Parser] AI parsing SUCCESS - Summary length: {len(result.get('summary', ''))}, Skills: {len(result.get('skills', []))}, Jobs: {len(result.get('experience', []))}")
                 return result
             except Exception as e:
-                print(f"[PDF Parser] ⚠️  AI parsing FAILED, falling back to regex: {e}")
+                print(f"[PDF Parser] WARNING:  AI parsing FAILED, falling back to regex: {e}")
                 import traceback
                 traceback.print_exc()
                 result = self._extract_sections(full_text)

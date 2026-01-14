@@ -17,7 +17,7 @@ class FileEncryption:
         else:
             # Generate new key if not found (WARNING: will make old files unreadable)
             self.key = Fernet.generate_key()
-            print(f"⚠️  WARNING: Generated new encryption key. Set FILE_ENCRYPTION_KEY in env:")
+            print(f"WARNING: Generated new encryption key. Set FILE_ENCRYPTION_KEY in env:")
             print(f"FILE_ENCRYPTION_KEY={self.key.decode()}")
 
         self.cipher = Fernet(self.key)

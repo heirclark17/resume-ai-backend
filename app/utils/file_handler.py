@@ -148,12 +148,12 @@ class FileHandler:
         # Encrypt file at rest for security
         encryption_success = self.encryption.encrypt_file(file_path)
         if not encryption_success:
-            print(f"⚠️  WARNING: Failed to encrypt {file_path}, file saved as plaintext")
+            print(f"WARNING:  WARNING: Failed to encrypt {file_path}, file saved as plaintext")
 
         # Generate HMAC signature for file integrity verification (after encryption)
         file_signature = self.integrity.generate_signature(file_path)
         if not file_signature:
-            print(f"⚠️  WARNING: Failed to generate signature for {file_path}")
+            print(f"WARNING:  WARNING: Failed to generate signature for {file_path}")
 
         return {
             "file_path": str(file_path),

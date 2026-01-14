@@ -219,7 +219,7 @@ Do not include any other text, only the JSON."""
                     print(f"✓ OpenAI extracted: {company} - {title}")
 
                 except Exception as ai_error:
-                    print(f"⚠️ OpenAI extraction also failed: {ai_error}")
+                    print(f"WARNING: OpenAI extraction also failed: {ai_error}")
                     # If both fail, we'll use what we have or raise error below
 
             # Final validation - don't allow Unknown values

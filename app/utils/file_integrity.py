@@ -16,7 +16,7 @@ class FileIntegrity:
         if not self.secret:
             # Generate new secret if not found
             self.secret = os.urandom(32).hex()
-            print(f"⚠️  WARNING: Generated new file integrity secret. Set FILE_INTEGRITY_SECRET in env:")
+            print(f"WARNING: Generated new file integrity secret. Set FILE_INTEGRITY_SECRET in env:")
             print(f"FILE_INTEGRITY_SECRET={self.secret}")
 
         # Convert to bytes if string

@@ -85,7 +85,7 @@ class VirusScanner:
                     if len(parts) >= 2:
                         threat_name = parts[1].replace("FOUND", "").strip()
 
-                print(f"[Virus Scanner] ⚠️  THREAT DETECTED: {threat_name} in {file_path.name}")
+                print(f"[Virus Scanner] WARNING:  THREAT DETECTED: {threat_name} in {file_path.name}")
                 return False, threat_name
             else:
                 # Error occurred during scanning
