@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, and_
 from pydantic import BaseModel
 from typing import List, Optional
 from app.database import get_db
@@ -210,6 +210,60 @@ async def delete_interview_prep(
     return {
         "success": True,
         "message": "Interview prep deleted successfully"
+    }
+
+
+@router.get("/list")
+async def list_interview_preps(
+    x_user_id: str = Header(None, alias="X-User-ID"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    List all interview preps for the current user (non-deleted).
+    Returns basic metadata + company/job info for each prep.
+    """
+
+    if not x_user_id:
+        raise HTTPException(status_code=400, detail="X-User-ID header is required")
+
+    # Fetch all interview preps for this user via TailoredResume relationship
+    result = await db.execute(
+        select(InterviewPrep, TailoredResume, Job)
+        .join(TailoredResume, InterviewPrep.tailored_resume_id == TailoredResume.id)
+        .join(Job, TailoredResume.job_id == Job.id)
+        .where(
+            and_(
+                TailoredResume.session_user_id == x_user_id,
+                InterviewPrep.is_deleted == False,
+                TailoredResume.is_deleted == False
+            )
+        )
+        .order_by(InterviewPrep.created_at.desc())
+    )
+
+    rows = result.all()
+
+    prep_list = []
+    for interview_prep, tailored_resume, job in rows:
+        # Extract key info from prep_data
+        prep_data = interview_prep.prep_data
+        company_name = prep_data.get("company_profile", {}).get("name", job.company)
+        job_title = prep_data.get("role_analysis", {}).get("job_title", job.title)
+
+        prep_list.append({
+            "id": interview_prep.id,
+            "tailored_resume_id": tailored_resume.id,
+            "company_name": company_name,
+            "job_title": job_title,
+            "job_location": job.location,
+            "created_at": interview_prep.created_at.isoformat(),
+            "updated_at": interview_prep.updated_at.isoformat() if interview_prep.updated_at else None
+        })
+
+    return {
+        "success": True,
+        "count": len(prep_list),
+        "interview_preps": prep_list
     }
 
 
