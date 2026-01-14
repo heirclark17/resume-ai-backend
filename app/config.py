@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     perplexity_api_key: str = ""
     firecrawl_api_key: str = ""
+    claude_api_key: str = ""  # For backward compatibility with .env
 
     # Test Mode - explicitly read from environment
     test_mode: bool = os.getenv("TEST_MODE", "false").lower() == "true"
@@ -32,6 +33,7 @@ class Settings(BaseSettings):
 
     class Config:
         env_file = ".env"
+        extra = "ignore"  # Ignore extra fields from .env
 
     @property
     def database_url(self) -> str:

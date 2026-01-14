@@ -4,7 +4,7 @@ from sqlalchemy import select
 from app.database import get_db
 from app.models.resume import BaseResume
 from app.models.user import User
-from app.middleware.auth import get_current_user, get_current_user_optional
+from app.middleware.auth import get_current_user, get_current_user_optional, get_user_id
 from app.services.resume_parser import ResumeParser
 from app.utils.file_handler import FileHandler
 from app.utils.logger import logger
@@ -35,12 +35,13 @@ limiter = Limiter(key_func=get_remote_address)
 async def upload_resume(
     request: Request,
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user_optional),
+    user_id: str = Depends(get_user_id),
     db: AsyncSession = Depends(get_db)
 ):
-    """Upload and parse resume (optional authentication)
+    """Upload and parse resume (requires session user ID)
 
     Rate limited to 5 uploads per minute per IP address to prevent abuse.
+    Resumes are isolated by session user ID.
     """
 
     try:
@@ -71,7 +72,7 @@ async def upload_resume(
         logger.info("Step 3: Saving to database...")
         try:
             resume = BaseResume(
-                user_id=current_user.id if current_user else None,
+                session_user_id=user_id,  # Store session user ID for data isolation
                 filename=file_info['filename'],
                 file_path=file_info['file_path'],
                 file_signature=file_info.get('signature', ''),  # HMAC signature for integrity
@@ -129,15 +130,15 @@ async def upload_resume(
 
 @router.get("/list")
 async def list_resumes(
-    current_user: User = Depends(get_current_user_optional),
+    user_id: str = Depends(get_user_id),
     db: AsyncSession = Depends(get_db)
 ):
-    """List resumes (authentication optional, excludes deleted resumes)"""
-    # If authenticated, show only user's resumes; otherwise show all non-deleted resumes
-    query = select(BaseResume).where(BaseResume.is_deleted == False)
-
-    if current_user:
-        query = query.where(BaseResume.user_id == current_user.id)
+    """List resumes (requires session user ID, excludes deleted resumes)"""
+    # Filter by session user ID for data isolation
+    query = select(BaseResume).where(
+        BaseResume.is_deleted == False,
+        BaseResume.session_user_id == user_id
+    )
 
     result = await db.execute(query.order_by(BaseResume.uploaded_at.desc()))
 
@@ -159,10 +160,10 @@ async def list_resumes(
 @router.get("/{resume_id}")
 async def get_resume(
     resume_id: int,
-    current_user: User = Depends(get_current_user_optional),
+    user_id: str = Depends(get_user_id),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get resume details (authentication optional, excludes deleted resumes)"""
+    """Get resume details (requires session user ID, excludes deleted resumes)"""
     result = await db.execute(select(BaseResume).where(BaseResume.id == resume_id))
     resume = result.scalar_one_or_none()
 
@@ -173,8 +174,8 @@ async def get_resume(
     if resume.is_deleted:
         raise HTTPException(status_code=404, detail="Resume has been deleted")
 
-    # Ownership verification (only if both have user_id)
-    if current_user and resume.user_id and resume.user_id != current_user.id:
+    # Ownership verification via session user ID
+    if resume.session_user_id != user_id:
         raise HTTPException(status_code=403, detail="Access denied: You don't own this resume")
 
     return {
@@ -196,7 +197,7 @@ async def get_resume(
 @router.post("/{resume_id}/delete")
 async def delete_resume(
     resume_id: int,
-    current_user: User = Depends(get_current_user_optional),
+    user_id: str = Depends(get_user_id),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete resume and all associated tailored resumes and files (requires ownership)"""
@@ -212,13 +213,9 @@ async def delete_resume(
     if resume.is_deleted:
         raise HTTPException(status_code=400, detail="Resume is already deleted")
 
-    # If authenticated, validate ownership
-    if current_user and resume.user_id != current_user.id:
+    # Validate ownership via session user ID
+    if resume.session_user_id != user_id:
         raise HTTPException(status_code=403, detail="You don't have permission to delete this resume")
-
-    # If resume has a user_id but no current_user, require auth
-    if resume.user_id and not current_user:
-        raise HTTPException(status_code=401, detail="Authentication required to delete this resume")
 
     logger.info(f"=== DELETING RESUME ID {resume_id} ===")
     logger.info(f"Base resume file: {resume.file_path}")
@@ -259,13 +256,13 @@ async def delete_resume(
     from datetime import datetime
     resume.is_deleted = True
     resume.deleted_at = datetime.utcnow()
-    resume.deleted_by = current_user.id if current_user else None
+    resume.deleted_by = None  # Session-based users don't have user_id for audit
 
     # Mark all tailored resumes as deleted too
     for tailored in tailored_resumes:
         tailored.is_deleted = True
         tailored.deleted_at = datetime.utcnow()
-        tailored.deleted_by = current_user.id if current_user else None
+        tailored.deleted_by = None  # Session-based users don't have user_id for audit
 
     db.add(resume)
     for tailored in tailored_resumes:
@@ -274,7 +271,7 @@ async def delete_resume(
 
     # Audit log
     logger.info(f"=== RESUME SOFT-DELETED ===")
-    logger.info(f"Deleted by: User ID {current_user.id if current_user else 'Anonymous'}")
+    logger.info(f"Deleted by: Session User ID {user_id}")
     logger.info(f"Deleted at: {resume.deleted_at.isoformat()}")
     logger.info(f"Base resume ID: {resume.id}, Tailored resumes: {len(tailored_resumes)}")
 
@@ -283,7 +280,7 @@ async def delete_resume(
         "message": f"Resume and {len(tailored_resumes)} tailored versions deleted",
         "deleted_files": len(deleted_files) + 1,
         "audit": {
-            "deleted_by": current_user.id if current_user else None,
+            "deleted_by": None,
             "deleted_at": resume.deleted_at.isoformat(),
             "resume_id": resume.id,
             "tailored_count": len(tailored_resumes)

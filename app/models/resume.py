@@ -8,6 +8,7 @@ class BaseResume(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)  # Nullable for migration
+    session_user_id = Column(String, nullable=True, index=True)  # Session-based user identification (e.g., 'user_uuid')
     filename = Column(String, nullable=False)
     file_path = Column(String, nullable=False)
 
@@ -44,6 +45,7 @@ class TailoredResume(Base):
     id = Column(Integer, primary_key=True, index=True)
     base_resume_id = Column(Integer, ForeignKey("base_resumes.id", ondelete="CASCADE"), nullable=False, index=True)
     job_id = Column(Integer, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True)
+    session_user_id = Column(String, nullable=True, index=True)  # Session-based user identification
 
     # Tailored sections
     tailored_summary = Column(Text)

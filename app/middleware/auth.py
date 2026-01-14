@@ -75,3 +75,33 @@ async def get_current_user_optional(
         return await get_current_user(x_api_key, db)
     except HTTPException:
         return None
+
+
+async def get_user_id(
+    x_user_id: Optional[str] = Header(None),
+) -> str:
+    """
+    Get user ID from header (required for data isolation)
+
+    This provides session-based user isolation without full authentication.
+    The frontend generates a unique user ID stored in localStorage.
+
+    Usage:
+        @router.get("/endpoint")
+        async def endpoint(user_id: str = Depends(get_user_id)):
+            # Filter data by user_id
+    """
+    if not x_user_id:
+        raise HTTPException(
+            status_code=401,
+            detail="User ID required. Please refresh the page."
+        )
+
+    # Validate format (should start with 'user_')
+    if not x_user_id.startswith('user_'):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid user ID format"
+        )
+
+    return x_user_id

@@ -13,6 +13,7 @@ from app.services.docx_generator import DOCXGenerator
 from app.services.firecrawl_client import FirecrawlClient
 from app.utils.url_validator import URLValidator
 from app.utils.quality_scorer import QualityScorer
+from app.middleware.auth import get_user_id
 from app.config import get_settings
 import json
 from datetime import datetime
@@ -55,6 +56,7 @@ class BatchTailorRequest(BaseModel):
 async def tailor_resume(
     request: Request,
     tailor_request: TailorRequest,
+    user_id: str = Depends(get_user_id),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -97,7 +99,7 @@ async def tailor_resume(
             tailor_request.job_url = URLValidator.validate_job_url(tailor_request.job_url)
             print(f"✓ URL validated successfully")
 
-        # Step 1: Fetch base resume
+        # Step 1: Fetch base resume (verify ownership)
         print("Step 1: Fetching base resume...")
         result = await db.execute(
             select(BaseResume).where(BaseResume.id == tailor_request.base_resume_id)
@@ -106,6 +108,10 @@ async def tailor_resume(
 
         if not base_resume:
             raise HTTPException(status_code=404, detail="Base resume not found")
+
+        # Verify ownership via session user ID
+        if base_resume.session_user_id != user_id:
+            raise HTTPException(status_code=403, detail="Access denied: You don't own this resume")
 
         # Parse base resume data
         base_resume_data = {
@@ -303,6 +309,7 @@ async def tailor_resume(
         tailored_resume = TailoredResume(
             base_resume_id=base_resume.id,
             job_id=job.id,
+            session_user_id=user_id,  # Store session user ID for data isolation
             tailored_summary=tailored_content.get('summary', ''),
             tailored_skills=json.dumps(tailored_content.get('competencies', [])),
             tailored_experience=json.dumps(tailored_content.get('experience', [])),
@@ -344,8 +351,12 @@ async def tailor_resume(
 
 
 @router.get("/tailored/{tailored_id}")
-async def get_tailored_resume(tailored_id: int, db: AsyncSession = Depends(get_db)):
-    """Get a tailored resume by ID (excludes deleted resumes)"""
+async def get_tailored_resume(
+    tailored_id: int,
+    user_id: str = Depends(get_user_id),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get a tailored resume by ID (requires ownership, excludes deleted resumes)"""
     result = await db.execute(
         select(TailoredResume).where(TailoredResume.id == tailored_id)
     )
@@ -357,6 +368,10 @@ async def get_tailored_resume(tailored_id: int, db: AsyncSession = Depends(get_d
     # Check if deleted
     if tailored.is_deleted:
         raise HTTPException(status_code=404, detail="Tailored resume has been deleted")
+
+    # Verify ownership via session user ID
+    if tailored.session_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Access denied: You don't own this tailored resume")
 
     return {
         "id": tailored.id,
@@ -373,11 +388,17 @@ async def get_tailored_resume(tailored_id: int, db: AsyncSession = Depends(get_d
 
 
 @router.get("/list")
-async def list_tailored_resumes(db: AsyncSession = Depends(get_db)):
-    """List all tailored resumes (excludes deleted resumes)"""
+async def list_tailored_resumes(
+    user_id: str = Depends(get_user_id),
+    db: AsyncSession = Depends(get_db)
+):
+    """List tailored resumes (requires session user ID, excludes deleted resumes)"""
     result = await db.execute(
         select(TailoredResume)
-        .where(TailoredResume.is_deleted == False)  # Filter out soft-deleted resumes
+        .where(
+            TailoredResume.is_deleted == False,
+            TailoredResume.session_user_id == user_id  # Filter by session user ID
+        )
         .order_by(TailoredResume.created_at.desc())
     )
     tailored_resumes = result.scalars().all()
@@ -399,8 +420,12 @@ async def list_tailored_resumes(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/download/{tailored_id}")
-async def download_tailored_resume(tailored_id: int, db: AsyncSession = Depends(get_db)):
-    """Download a tailored resume DOCX file"""
+async def download_tailored_resume(
+    tailored_id: int,
+    user_id: str = Depends(get_user_id),
+    db: AsyncSession = Depends(get_db)
+):
+    """Download a tailored resume DOCX file (requires ownership)"""
     result = await db.execute(
         select(TailoredResume).where(TailoredResume.id == tailored_id)
     )
@@ -412,6 +437,10 @@ async def download_tailored_resume(tailored_id: int, db: AsyncSession = Depends(
     # Check if deleted
     if tailored.is_deleted:
         raise HTTPException(status_code=404, detail="Tailored resume has been deleted")
+
+    # Verify ownership via session user ID
+    if tailored.session_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Access denied: You don't own this tailored resume")
 
     # Check if file exists
     import os
@@ -442,6 +471,7 @@ async def download_tailored_resume(tailored_id: int, db: AsyncSession = Depends(
 async def tailor_resume_batch(
     request: Request,
     batch_request: BatchTailorRequest,
+    user_id: str = Depends(get_user_id),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -485,7 +515,7 @@ async def tailor_resume_batch(
     batch_request.job_urls = validated_urls
     print(f"✓ All {len(validated_urls)} URLs validated successfully")
 
-    # Verify base resume exists
+    # Verify base resume exists and user owns it
     result = await db.execute(
         select(BaseResume).where(BaseResume.id == batch_request.base_resume_id)
     )
@@ -493,6 +523,10 @@ async def tailor_resume_batch(
 
     if not base_resume:
         raise HTTPException(status_code=404, detail="Base resume not found")
+
+    # Verify ownership via session user ID
+    if base_resume.session_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Access denied: You don't own this resume")
 
     # Process each job URL
     results = []
@@ -507,8 +541,8 @@ async def tailor_resume_batch(
                 job_url=job_url
             )
 
-            # Call single tailor endpoint (pass request for rate limiting)
-            result = await tailor_resume(request, tailor_req, db)
+            # Call single tailor endpoint (pass request and user_id for rate limiting and ownership)
+            result = await tailor_resume(request, tailor_req, user_id, db)
 
             results.append({
                 "job_url": job_url,
