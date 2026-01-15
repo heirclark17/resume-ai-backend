@@ -71,6 +71,22 @@ async def upload_resume(
         # Save to database
         logger.info("Step 3: Saving to database...")
         try:
+            # Handle education field - AI sometimes returns list instead of string
+            education_data = parsed_data.get('education', '')
+            if isinstance(education_data, list):
+                education_str = '\n'.join(education_data)
+                logger.info(f"Converted education list to string: {len(education_data)} entries")
+            else:
+                education_str = education_data
+
+            # Handle certifications field - same issue
+            cert_data = parsed_data.get('certifications', '')
+            if isinstance(cert_data, list):
+                cert_str = '\n'.join(cert_data)
+                logger.info(f"Converted certifications list to string: {len(cert_data)} entries")
+            else:
+                cert_str = cert_data
+
             resume = BaseResume(
                 session_user_id=user_id,  # Store session user ID for data isolation
                 filename=file_info['filename'],
@@ -84,8 +100,8 @@ async def upload_resume(
                 summary=parsed_data.get('summary', ''),
                 skills=json.dumps(parsed_data.get('skills', [])),
                 experience=json.dumps(parsed_data.get('experience', [])),
-                education=parsed_data.get('education', ''),
-                certifications=parsed_data.get('certifications', '')
+                education=education_str,
+                certifications=cert_str
             )
 
             db.add(resume)
