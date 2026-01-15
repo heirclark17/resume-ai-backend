@@ -271,6 +271,7 @@ class STARStoryRequest(BaseModel):
     tailored_resume_id: int
     experience_indices: List[int]  # Indices from resume experience array
     story_theme: str  # e.g., "Handling ambiguity", "Delivering under pressure"
+    tone: Optional[str] = "professional"  # Tone: professional, conversational, confident, technical, strategic
     company_context: Optional[str] = None
 
 
@@ -379,6 +380,17 @@ Core Responsibilities: {', '.join(core_responsibilities[:5]) if core_responsibil
 Must-Have Skills: {', '.join(must_have_skills[:5]) if must_have_skills else 'N/A'}
 """
 
+        # Tone descriptions
+        tone_descriptions = {
+            'professional': 'Use corporate, structured, polished language. Maintain formal business communication style.',
+            'conversational': 'Use natural, approachable, genuine tone. Sound authentic and relatable while remaining professional.',
+            'confident': 'Use strong, decisive, leadership-focused language. Emphasize assertiveness and clear decision-making.',
+            'technical': 'Use precise, methodical language with technical depth. Focus on technical details and systematic approaches.',
+            'strategic': 'Use big-picture, forward-thinking, executive-level language. Emphasize vision, strategy, and long-term impact.'
+        }
+
+        tone_instruction = tone_descriptions.get(request.tone, tone_descriptions['professional'])
+
         prompt = f"""Generate an EXTREMELY DETAILED STAR (Situation, Task, Action, Result) interview story based on these actual experiences:
 
 {experiences_text}
@@ -388,6 +400,9 @@ Company Context: {company_context}
 
 {values_context}
 {role_context}
+
+TONE REQUIREMENT:
+{tone_instruction}
 
 CRITICAL REQUIREMENTS - Each section must be VERY DETAILED AND EXPLICITLY TIE TO COMPANY VALUES/ROLE:
 
@@ -475,7 +490,7 @@ Remember: This story should take 3-5 minutes to tell verbally. Make it detailed,
         response = await client.chat.completions.create(
             model="gpt-4-turbo-preview",
             messages=[
-                {"role": "system", "content": "You are an expert career coach and interview preparation specialist. Your expertise is creating EXTREMELY DETAILED, compelling STAR (Situation, Task, Action, Result) interview stories that are EXPLICITLY TAILORED to the target company's values and role requirements. Generate authentic, comprehensive stories that take 3-5 minutes to tell. Focus on rich detail, specific examples, quantifiable metrics, and demonstrating both technical depth and leadership qualities. The ACTION section should be the longest and most detailed (300-500 words). CRITICAL: You MUST explicitly weave the company's core values and the role's required skills throughout the story. Every section should clearly demonstrate alignment with what this specific company and role needs. Use bold markers like 'This demonstrates [Company Value]' or 'This shows [Role Requirement]' in talking points."},
+                {"role": "system", "content": "You are an expert career coach and interview preparation specialist. Your expertise is creating EXTREMELY DETAILED, compelling STAR (Situation, Task, Action, Result) interview stories that are EXPLICITLY TAILORED to the target company's values and role requirements. Generate authentic, comprehensive stories that take 3-5 minutes to tell. Focus on rich detail, specific examples, quantifiable metrics, and demonstrating both technical depth and leadership qualities. The ACTION section should be the longest and most detailed (300-500 words). CRITICAL: You MUST explicitly weave the company's core values and the role's required skills throughout the story. Every section should clearly demonstrate alignment with what this specific company and role needs. Use bold markers like 'This demonstrates [Company Value]' or 'This shows [Role Requirement]' in talking points. IMPORTANT: Strictly follow the tone requirements specified in the prompt - adjust your language, word choice, and communication style to match the requested tone (professional, conversational, confident, technical, or strategic)."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.8,
