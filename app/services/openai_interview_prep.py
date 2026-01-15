@@ -87,12 +87,17 @@ You MUST actively extract and structure this information:
    - If sources/URLs are mentioned, include them
    - If no explicit values found, infer from company description
 
-2. **Strategy & News:** Search for recent events, announcements, initiatives, strategic themes.
-   - Look for dates (2024, 2025, 2026, "last year", "recently")
-   - Look for keywords like "launched", "announced", "partnership", "acquisition", "expansion"
+2. **Strategy & News:** AGGRESSIVELY search for recent events, announcements, initiatives, strategic themes.
+   - Look for dates (2024, 2025, 2026, "last year", "recently", "Q1", "Q2", "Q3", "Q4")
+   - Look for keywords like "launched", "announced", "partnership", "acquisition", "expansion", "raised", "funding", "growth", "transformation", "initiative"
+   - Look for financial news ($X million, revenue, investment, valuation)
+   - Look for product launches, new markets, executive changes, strategic pivots
    - Extract specific events with dates and impact
    - Identify strategic themes and rationale
-   - If no dates found, use "Recent" or "2025-2026"
+   - **MINIMUM: Extract at least 3-5 recent events or strategic themes**
+   - If specific dates not found, use "2025", "Recent", or "Last 12 months"
+   - Infer strategic direction from job description if company info is limited
+   - Use industry trends if company-specific news is unavailable
 
 3. **Handle Redundancy:** The company information may repeat the same text in multiple sections.
    - Read through ALL sections to find relevant information
@@ -108,9 +113,14 @@ You must:
 Important rules:
 - Respond with JSON only, no markdown, no comments, no prose.
 - Do not add or remove top-level keys.
-- **DO NOT leave values_and_culture or strategy_and_news empty unless there is truly zero information.**
-- For values: Extract at least 2-5 company values from the research text.
-- For news: Extract at least 1-3 recent events or strategic themes from the research text.
+- **CRITICAL: DO NOT leave values_and_culture or strategy_and_news empty. ALWAYS populate these sections.**
+- **For values_and_culture.stated_values: MINIMUM 3-5 values. Extract from text or infer from company description/industry.**
+- **For strategy_and_news.recent_events: MINIMUM 3-5 events. Extract from text or infer from job description/industry trends.**
+- **For strategy_and_news.strategic_themes: MINIMUM 2-4 themes. Identify patterns from available information.**
+- If company-specific data is limited, use:
+  - Industry common values (e.g., "Innovation" for tech, "Safety" for healthcare)
+  - Recent industry trends as "recent events" (e.g., "AI/ML investment", "Cloud transformation")
+  - Strategic themes based on job requirements (e.g., "Security modernization" if hiring security roles)
 - Be concise and avoid repetition; write in clear, plain language optimized for on-screen scanning.
 - Use qualitative descriptors like "mid-sized", "fast-growing", "recent" when exact numbers aren't available.
 - Focus on actionable, interview-oriented information.
@@ -235,6 +245,18 @@ preparation and the STAR method, fill out the JSON schema defined in the
 system prompt. The JSON will populate a dedicated Interview Prep page
 that the user opened by pressing an "Interview Prep" button from their
 tailored resume screen.
+
+**CRITICAL REQUIREMENTS:**
+1. values_and_culture.stated_values: MUST have 3-5 items (extract or infer)
+2. strategy_and_news.recent_events: MUST have 3-5 items (extract or infer)
+3. strategy_and_news.strategic_themes: MUST have 2-4 items (extract or infer)
+
+If company information is limited:
+- Infer values from industry norms and job description
+- Infer recent events from industry trends (e.g., "AI adoption", "Cloud migration", "Security investment")
+- Infer strategic themes from job requirements and market position
+
+**DO NOT return empty arrays for these critical sections.**
 
 Return ONLY a single valid JSON object. Do not include any explanations
 or extra text."""
