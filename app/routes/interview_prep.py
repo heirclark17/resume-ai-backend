@@ -9,6 +9,7 @@ from app.models.resume import TailoredResume, BaseResume
 from app.models.job import Job
 from app.models.company import CompanyResearch
 from app.services.openai_interview_prep import OpenAIInterviewPrep
+from app.services.openai_common_questions import OpenAICommonQuestions
 from app.services.company_research_service import CompanyResearchService
 from app.services.news_aggregator_service import NewsAggregatorService
 from app.services.interview_questions_scraper import InterviewQuestionsScraperService
@@ -660,4 +661,259 @@ async def get_interview_questions(request: InterviewQuestionsRequest):
         raise HTTPException(
             status_code=500,
             detail=f"Failed to fetch interview questions: {str(e)}"
+        )
+
+
+class CommonQuestionsRequest(BaseModel):
+    interview_prep_id: int
+
+
+@router.post("/common-questions/generate")
+async def generate_common_questions(
+    request: CommonQuestionsRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Generate tailored responses for 10 common interview questions.
+
+    This endpoint:
+    1. Fetches the interview prep and associated data
+    2. Fetches the resume and job description
+    3. Uses OpenAI to generate personalized answers for 10 questions
+    4. Returns structured data with tailored answers
+
+    Each question includes:
+    - Why it's hard (explanation)
+    - Common mistakes (bullet list)
+    - Exceptional answer builder (detailed guidance)
+    - What to say (short and long versions)
+    """
+    try:
+        # Fetch interview prep
+        result = await db.execute(
+            select(InterviewPrep).where(
+                InterviewPrep.id == request.interview_prep_id,
+                InterviewPrep.is_deleted == False
+            )
+        )
+        interview_prep = result.scalar_one_or_none()
+
+        if not interview_prep:
+            raise HTTPException(status_code=404, detail="Interview prep not found")
+
+        # Fetch tailored resume
+        result = await db.execute(
+            select(TailoredResume).where(
+                TailoredResume.id == interview_prep.tailored_resume_id,
+                TailoredResume.is_deleted == False
+            )
+        )
+        tailored_resume = result.scalar_one_or_none()
+
+        if not tailored_resume:
+            raise HTTPException(status_code=404, detail="Tailored resume not found")
+
+        # Fetch base resume for full experience
+        result = await db.execute(
+            select(BaseResume).where(BaseResume.id == tailored_resume.base_resume_id)
+        )
+        base_resume = result.scalar_one_or_none()
+
+        if not base_resume:
+            raise HTTPException(status_code=404, detail="Base resume not found")
+
+        # Fetch job
+        result = await db.execute(
+            select(Job).where(Job.id == tailored_resume.job_id)
+        )
+        job = result.scalar_one_or_none()
+
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        # Build resume text
+        resume_text = f"""
+PROFESSIONAL SUMMARY:
+{base_resume.summary or 'N/A'}
+
+SKILLS:
+{', '.join(json.loads(base_resume.skills) if isinstance(base_resume.skills, str) else base_resume.skills or [])}
+
+EXPERIENCE:
+"""
+        experience_data = json.loads(base_resume.experience) if isinstance(base_resume.experience, str) else base_resume.experience or []
+        for exp in experience_data:
+            resume_text += f"\n{exp.get('header', exp.get('title', 'Position'))} | {exp.get('dates', 'Dates')}\n"
+            resume_text += "\n".join([f"- {bullet}" for bullet in exp.get('bullets', [])])
+            resume_text += "\n"
+
+        resume_text += f"""
+EDUCATION:
+{base_resume.education or 'N/A'}
+
+CERTIFICATIONS:
+{base_resume.certifications or 'N/A'}
+"""
+
+        # Build job description
+        job_description = f"""
+{job.title} at {job.company}
+Location: {job.location or 'Not specified'}
+
+{job.description}
+"""
+
+        # Generate common questions using OpenAI
+        ai_service = OpenAICommonQuestions()
+
+        result_data = await ai_service.generate_common_questions(
+            resume_text=resume_text,
+            job_description=job_description,
+            company_name=job.company,
+            job_title=job.title,
+            prep_data=interview_prep.prep_data
+        )
+
+        print(f"✓ Generated common questions for interview prep {request.interview_prep_id}")
+
+        return {
+            "success": True,
+            "data": result_data
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Failed to generate common questions: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate common questions: {str(e)}"
+        )
+
+
+class RegenerateQuestionRequest(BaseModel):
+    interview_prep_id: int
+    question_id: str  # e.g., "q1", "q2"
+
+
+@router.post("/common-questions/regenerate")
+async def regenerate_single_question(
+    request: RegenerateQuestionRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Regenerate a single common interview question.
+
+    This allows the user to get a fresh answer if they're not satisfied
+    with the initially generated response.
+    """
+    try:
+        # Fetch interview prep
+        result = await db.execute(
+            select(InterviewPrep).where(
+                InterviewPrep.id == request.interview_prep_id,
+                InterviewPrep.is_deleted == False
+            )
+        )
+        interview_prep = result.scalar_one_or_none()
+
+        if not interview_prep:
+            raise HTTPException(status_code=404, detail="Interview prep not found")
+
+        # Fetch tailored resume
+        result = await db.execute(
+            select(TailoredResume).where(
+                TailoredResume.id == interview_prep.tailored_resume_id,
+                TailoredResume.is_deleted == False
+            )
+        )
+        tailored_resume = result.scalar_one_or_none()
+        if not tailored_resume:
+            raise HTTPException(status_code=404, detail="Tailored resume not found")
+
+        # Fetch base resume
+        result = await db.execute(
+            select(BaseResume).where(BaseResume.id == tailored_resume.base_resume_id)
+        )
+        base_resume = result.scalar_one_or_none()
+        if not base_resume:
+            raise HTTPException(status_code=404, detail="Base resume not found")
+
+        # Fetch job
+        result = await db.execute(
+            select(Job).where(Job.id == tailored_resume.job_id)
+        )
+        job = result.scalar_one_or_none()
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        # Build resume text
+        resume_text = f"""
+PROFESSIONAL SUMMARY:
+{base_resume.summary or 'N/A'}
+
+SKILLS:
+{', '.join(json.loads(base_resume.skills) if isinstance(base_resume.skills, str) else base_resume.skills or [])}
+
+EXPERIENCE:
+"""
+        experience_data = json.loads(base_resume.experience) if isinstance(base_resume.experience, str) else base_resume.experience or []
+        for exp in experience_data:
+            resume_text += f"\n{exp.get('header', exp.get('title', 'Position'))} | {exp.get('dates', 'Dates')}\n"
+            resume_text += "\n".join([f"- {bullet}" for bullet in exp.get('bullets', [])])
+            resume_text += "\n"
+
+        resume_text += f"""
+EDUCATION:
+{base_resume.education or 'N/A'}
+
+CERTIFICATIONS:
+{base_resume.certifications or 'N/A'}
+"""
+
+        job_description = f"""
+{job.title} at {job.company}
+Location: {job.location or 'Not specified'}
+
+{job.description}
+"""
+
+        # Regenerate all questions
+        ai_service = OpenAICommonQuestions()
+        result_data = await ai_service.generate_common_questions(
+            resume_text=resume_text,
+            job_description=job_description,
+            company_name=job.company,
+            job_title=job.title,
+            prep_data=interview_prep.prep_data
+        )
+
+        # Extract only the requested question
+        regenerated_question = None
+        for q in result_data.get('questions', []):
+            if q.get('id') == request.question_id:
+                regenerated_question = q
+                break
+
+        if not regenerated_question:
+            raise HTTPException(status_code=404, detail=f"Question {request.question_id} not found")
+
+        print(f"✓ Regenerated question {request.question_id} for interview prep {request.interview_prep_id}")
+
+        return {
+            "success": True,
+            "data": regenerated_question
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Failed to regenerate question: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to regenerate question: {str(e)}"
         )
