@@ -53,10 +53,13 @@ async def analyze_resume_changes(
     if not x_user_id:
         raise HTTPException(status_code=401, detail="User ID required")
 
-    # Get tailored resume with user validation
+    # Get tailored resume with user validation AND base resume
+    from app.models import BaseResume
+
     result = await db.execute(
-        select(TailoredResume, Job)
+        select(TailoredResume, Job, BaseResume)
         .join(Job, TailoredResume.job_id == Job.id)
+        .join(BaseResume, TailoredResume.base_resume_id == BaseResume.id)
         .filter(
             TailoredResume.id == request.tailored_resume_id,
             TailoredResume.session_user_id == x_user_id
@@ -67,19 +70,32 @@ async def analyze_resume_changes(
     if not row:
         raise HTTPException(status_code=404, detail="Tailored resume not found or access denied")
 
-    tailored_resume, job = row
+    tailored_resume, job, base_resume = row
 
-    # Get original resume
+    # Reconstruct original resume from base_resume
     try:
-        original_resume_data = json.loads(tailored_resume.original_resume) if tailored_resume.original_resume else {}
+        original_resume_data = {
+            "summary": base_resume.summary or "",
+            "skills": json.loads(base_resume.skills) if base_resume.skills else [],
+            "experience": json.loads(base_resume.experience) if base_resume.experience else [],
+            "education": base_resume.education or "",
+            "certifications": base_resume.certifications or ""
+        }
     except json.JSONDecodeError as e:
-        print(f"Error parsing original_resume JSON: {e}")
-        raise HTTPException(status_code=500, detail="Invalid original resume data format")
+        print(f"Error parsing base_resume JSON: {e}")
+        raise HTTPException(status_code=500, detail="Invalid base resume data format")
 
+    # Reconstruct tailored resume from tailored fields
     try:
-        tailored_resume_data = json.loads(tailored_resume.tailored_content) if tailored_resume.tailored_content else {}
+        tailored_resume_data = {
+            "summary": tailored_resume.tailored_summary or "",
+            "skills": json.loads(tailored_resume.tailored_skills) if tailored_resume.tailored_skills else [],
+            "experience": json.loads(tailored_resume.tailored_experience) if tailored_resume.tailored_experience else [],
+            "education": base_resume.education or "",  # Education doesn't change
+            "certifications": base_resume.certifications or ""  # Certifications don't change
+        }
     except json.JSONDecodeError as e:
-        print(f"Error parsing tailored_content JSON: {e}")
+        print(f"Error parsing tailored_resume JSON: {e}")
         raise HTTPException(status_code=500, detail="Invalid tailored resume data format")
 
     # Analyze changes
@@ -115,10 +131,11 @@ async def analyze_keywords(
     if not x_user_id:
         raise HTTPException(status_code=401, detail="User ID required")
 
-    # Get tailored resume with user validation
+    # Get tailored resume with user validation AND base resume
     result = await db.execute(
-        select(TailoredResume, Job)
+        select(TailoredResume, Job, BaseResume)
         .join(Job, TailoredResume.job_id == Job.id)
+        .join(BaseResume, TailoredResume.base_resume_id == BaseResume.id)
         .filter(
             TailoredResume.id == request.tailored_resume_id,
             TailoredResume.session_user_id == x_user_id
@@ -129,19 +146,32 @@ async def analyze_keywords(
     if not row:
         raise HTTPException(status_code=404, detail="Tailored resume not found or access denied")
 
-    tailored_resume, job = row
+    tailored_resume, job, base_resume = row
 
-    # Get resumes with proper error handling
+    # Reconstruct original resume from base_resume
     try:
-        original_resume_data = json.loads(tailored_resume.original_resume) if tailored_resume.original_resume else {}
+        original_resume_data = {
+            "summary": base_resume.summary or "",
+            "skills": json.loads(base_resume.skills) if base_resume.skills else [],
+            "experience": json.loads(base_resume.experience) if base_resume.experience else [],
+            "education": base_resume.education or "",
+            "certifications": base_resume.certifications or ""
+        }
     except json.JSONDecodeError as e:
-        print(f"Error parsing original_resume JSON: {e}")
-        raise HTTPException(status_code=500, detail="Invalid original resume data format")
+        print(f"Error parsing base_resume JSON: {e}")
+        raise HTTPException(status_code=500, detail="Invalid base resume data format")
 
+    # Reconstruct tailored resume from tailored fields
     try:
-        tailored_resume_data = json.loads(tailored_resume.tailored_content) if tailored_resume.tailored_content else {}
+        tailored_resume_data = {
+            "summary": tailored_resume.tailored_summary or "",
+            "skills": json.loads(tailored_resume.tailored_skills) if tailored_resume.tailored_skills else [],
+            "experience": json.loads(tailored_resume.tailored_experience) if tailored_resume.tailored_experience else [],
+            "education": base_resume.education or "",
+            "certifications": base_resume.certifications or ""
+        }
     except json.JSONDecodeError as e:
-        print(f"Error parsing tailored_content JSON: {e}")
+        print(f"Error parsing tailored_resume JSON: {e}")
         raise HTTPException(status_code=500, detail="Invalid tailored resume data format")
 
     # Analyze keywords
@@ -176,10 +206,11 @@ async def calculate_match_score(
     if not x_user_id:
         raise HTTPException(status_code=401, detail="User ID required")
 
-    # Get tailored resume with user validation
+    # Get tailored resume with user validation AND base resume
     result = await db.execute(
-        select(TailoredResume, Job)
+        select(TailoredResume, Job, BaseResume)
         .join(Job, TailoredResume.job_id == Job.id)
+        .join(BaseResume, TailoredResume.base_resume_id == BaseResume.id)
         .filter(
             TailoredResume.id == request.tailored_resume_id,
             TailoredResume.session_user_id == x_user_id
@@ -190,13 +221,19 @@ async def calculate_match_score(
     if not row:
         raise HTTPException(status_code=404, detail="Tailored resume not found or access denied")
 
-    tailored_resume, job = row
+    tailored_resume, job, base_resume = row
 
-    # Get tailored resume data with proper error handling
+    # Reconstruct tailored resume from tailored fields
     try:
-        tailored_resume_data = json.loads(tailored_resume.tailored_content) if tailored_resume.tailored_content else {}
+        tailored_resume_data = {
+            "summary": tailored_resume.tailored_summary or "",
+            "skills": json.loads(tailored_resume.tailored_skills) if tailored_resume.tailored_skills else [],
+            "experience": json.loads(tailored_resume.tailored_experience) if tailored_resume.tailored_experience else [],
+            "education": base_resume.education or "",
+            "certifications": base_resume.certifications or ""
+        }
     except json.JSONDecodeError as e:
-        print(f"Error parsing tailored_content JSON: {e}")
+        print(f"Error parsing tailored_resume JSON: {e}")
         raise HTTPException(status_code=500, detail="Invalid tailored resume data format")
 
     # Calculate match score
