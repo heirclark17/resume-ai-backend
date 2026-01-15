@@ -16,7 +16,7 @@ from typing import Dict, Any
 class OpenAICommonQuestions:
     def __init__(self):
         self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        self.model = "gpt-4o-2024-11-20"
+        self.model = "gpt-4.1-mini"
 
     async def generate_common_questions(
         self,
