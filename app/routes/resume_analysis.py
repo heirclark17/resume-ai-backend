@@ -17,7 +17,7 @@ from typing import Optional, List, Dict, Any
 import json
 
 from app.database import get_db
-from app.models import TailoredResume, Job, User
+from app.models import TailoredResume, Job
 from app.services.resume_analysis_service import ResumeAnalysisService
 from app.services.resume_export_service import ResumeExportService
 
@@ -59,13 +59,13 @@ async def analyze_resume_changes(
         .join(Job, TailoredResume.job_id == Job.id)
         .filter(
             TailoredResume.id == request.tailored_resume_id,
-            Job.user_id == x_user_id
+            TailoredResume.session_user_id == x_user_id
         )
     )
     row = result.first()
 
     if not row:
-        raise HTTPException(status_code=404, detail="Tailored resume not found")
+        raise HTTPException(status_code=404, detail="Tailored resume not found or access denied")
 
     tailored_resume, job = row
 
@@ -110,13 +110,13 @@ async def analyze_keywords(
         .join(Job, TailoredResume.job_id == Job.id)
         .filter(
             TailoredResume.id == request.tailored_resume_id,
-            Job.user_id == x_user_id
+            TailoredResume.session_user_id == x_user_id
         )
     )
     row = result.first()
 
     if not row:
-        raise HTTPException(status_code=404, detail="Tailored resume not found")
+        raise HTTPException(status_code=404, detail="Tailored resume not found or access denied")
 
     tailored_resume, job = row
 
@@ -160,13 +160,13 @@ async def calculate_match_score(
         .join(Job, TailoredResume.job_id == Job.id)
         .filter(
             TailoredResume.id == request.tailored_resume_id,
-            Job.user_id == x_user_id
+            TailoredResume.session_user_id == x_user_id
         )
     )
     row = result.first()
 
     if not row:
-        raise HTTPException(status_code=404, detail="Tailored resume not found")
+        raise HTTPException(status_code=404, detail="Tailored resume not found or access denied")
 
     tailored_resume, job = row
 
@@ -210,26 +210,25 @@ async def export_resume(
 
     # Get tailored resume with user validation
     result = await db.execute(
-        select(TailoredResume, Job, User)
+        select(TailoredResume, Job)
         .join(Job, TailoredResume.job_id == Job.id)
-        .join(User, Job.user_id == User.id)
         .filter(
             TailoredResume.id == request.tailored_resume_id,
-            Job.user_id == x_user_id
+            TailoredResume.session_user_id == x_user_id
         )
     )
     row = result.first()
 
     if not row:
-        raise HTTPException(status_code=404, detail="Tailored resume not found")
+        raise HTTPException(status_code=404, detail="Tailored resume not found or access denied")
 
-    tailored_resume, job, user = row
+    tailored_resume, job = row
 
     # Get resume data
     resume_data = json.loads(tailored_resume.tailored_content)
 
-    # Get user name
-    user_name = user.name if hasattr(user, 'name') and user.name else f"User{user.id}"
+    # Get user name from session_user_id (just use last 8 chars for filename)
+    user_name = f"User{x_user_id[-8:]}"
 
     # Generate file
     try:
