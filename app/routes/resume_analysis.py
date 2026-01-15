@@ -70,16 +70,25 @@ async def analyze_resume_changes(
     tailored_resume, job = row
 
     # Get original resume
-    original_resume_data = json.loads(tailored_resume.original_resume)
-    tailored_resume_data = json.loads(tailored_resume.tailored_content)
+    try:
+        original_resume_data = json.loads(tailored_resume.original_resume) if tailored_resume.original_resume else {}
+    except json.JSONDecodeError as e:
+        print(f"Error parsing original_resume JSON: {e}")
+        raise HTTPException(status_code=500, detail="Invalid original resume data format")
+
+    try:
+        tailored_resume_data = json.loads(tailored_resume.tailored_content) if tailored_resume.tailored_content else {}
+    except json.JSONDecodeError as e:
+        print(f"Error parsing tailored_content JSON: {e}")
+        raise HTTPException(status_code=500, detail="Invalid tailored resume data format")
 
     # Analyze changes
     try:
         analysis = await analysis_service.analyze_resume_changes(
             original_resume=original_resume_data,
             tailored_resume=tailored_resume_data,
-            job_description=job.description,
-            job_title=job.title
+            job_description=job.description or "",
+            job_title=job.title or "Unknown Position"
         )
 
         return {
@@ -89,7 +98,9 @@ async def analyze_resume_changes(
 
     except Exception as e:
         print(f"Error in analyze_resume_changes: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        import traceback
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"AI analysis error: {str(e)}")
 
 
 @router.post("/analyze-keywords")
@@ -120,16 +131,25 @@ async def analyze_keywords(
 
     tailored_resume, job = row
 
-    # Get resumes
-    original_resume_data = json.loads(tailored_resume.original_resume)
-    tailored_resume_data = json.loads(tailored_resume.tailored_content)
+    # Get resumes with proper error handling
+    try:
+        original_resume_data = json.loads(tailored_resume.original_resume) if tailored_resume.original_resume else {}
+    except json.JSONDecodeError as e:
+        print(f"Error parsing original_resume JSON: {e}")
+        raise HTTPException(status_code=500, detail="Invalid original resume data format")
+
+    try:
+        tailored_resume_data = json.loads(tailored_resume.tailored_content) if tailored_resume.tailored_content else {}
+    except json.JSONDecodeError as e:
+        print(f"Error parsing tailored_content JSON: {e}")
+        raise HTTPException(status_code=500, detail="Invalid tailored resume data format")
 
     # Analyze keywords
     try:
         keyword_analysis = await analysis_service.analyze_keywords(
             original_resume=original_resume_data,
             tailored_resume=tailored_resume_data,
-            job_description=job.description
+            job_description=job.description or ""
         )
 
         return {
@@ -139,7 +159,9 @@ async def analyze_keywords(
 
     except Exception as e:
         print(f"Error in analyze_keywords: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        import traceback
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"AI analysis error: {str(e)}")
 
 
 @router.post("/match-score")
@@ -170,15 +192,19 @@ async def calculate_match_score(
 
     tailored_resume, job = row
 
-    # Get tailored resume data
-    tailored_resume_data = json.loads(tailored_resume.tailored_content)
+    # Get tailored resume data with proper error handling
+    try:
+        tailored_resume_data = json.loads(tailored_resume.tailored_content) if tailored_resume.tailored_content else {}
+    except json.JSONDecodeError as e:
+        print(f"Error parsing tailored_content JSON: {e}")
+        raise HTTPException(status_code=500, detail="Invalid tailored resume data format")
 
     # Calculate match score
     try:
         match_score = await analysis_service.calculate_match_score(
             tailored_resume=tailored_resume_data,
-            job_description=job.description,
-            job_title=job.title
+            job_description=job.description or "",
+            job_title=job.title or "Unknown Position"
         )
 
         return {
@@ -188,7 +214,9 @@ async def calculate_match_score(
 
     except Exception as e:
         print(f"Error in calculate_match_score: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        import traceback
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"AI analysis error: {str(e)}")
 
 
 @router.post("/export")
