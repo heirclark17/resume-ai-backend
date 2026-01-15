@@ -17,7 +17,7 @@ from typing import Optional, List, Dict, Any
 import json
 
 from app.database import get_db
-from app.models import TailoredResume, Job
+from app.models import TailoredResume, Job, BaseResume
 from app.services.resume_analysis_service import ResumeAnalysisService
 from app.services.resume_export_service import ResumeExportService
 
@@ -54,8 +54,6 @@ async def analyze_resume_changes(
         raise HTTPException(status_code=401, detail="User ID required")
 
     # Get tailored resume with user validation AND base resume
-    from app.models import BaseResume
-
     result = await db.execute(
         select(TailoredResume, Job, BaseResume)
         .join(Job, TailoredResume.job_id == Job.id)
