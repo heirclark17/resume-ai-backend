@@ -328,6 +328,22 @@ async def generate_star_story(
         )
         job = result.scalar_one_or_none()
 
+        # Fetch interview prep data to get values & culture and role analysis
+        result = await db.execute(
+            select(InterviewPrep).where(
+                InterviewPrep.tailored_resume_id == request.tailored_resume_id,
+                InterviewPrep.is_deleted == False
+            )
+        )
+        interview_prep = result.scalar_one_or_none()
+
+        # Extract values & culture and role analysis from prep data
+        values_and_culture = None
+        role_analysis = None
+        if interview_prep and interview_prep.prep_data:
+            values_and_culture = interview_prep.prep_data.get('values_and_culture', {})
+            role_analysis = interview_prep.prep_data.get('role_analysis', {})
+
         company_context = request.company_context or (f"{job.company} - {job.title}" if job else "")
 
         # Generate STAR story using OpenAI
@@ -340,6 +356,29 @@ async def generate_star_story(
             for i, exp in enumerate(selected_experiences)
         ])
 
+        # Build company values and role analysis context
+        values_context = ""
+        if values_and_culture:
+            core_values = values_and_culture.get('core_values', [])
+            cultural_priorities = values_and_culture.get('cultural_priorities', [])
+            values_context = f"""
+COMPANY VALUES & CULTURE:
+Core Values: {', '.join([v.get('value', '') for v in core_values]) if core_values else 'N/A'}
+Cultural Priorities: {', '.join(cultural_priorities) if cultural_priorities else 'N/A'}
+"""
+
+        role_context = ""
+        if role_analysis:
+            core_responsibilities = role_analysis.get('core_responsibilities', [])
+            must_have_skills = role_analysis.get('must_have_skills', [])
+            seniority_level = role_analysis.get('seniority_level', '')
+            role_context = f"""
+ROLE REQUIREMENTS:
+Position Level: {seniority_level}
+Core Responsibilities: {', '.join(core_responsibilities[:5]) if core_responsibilities else 'N/A'}
+Must-Have Skills: {', '.join(must_have_skills[:5]) if must_have_skills else 'N/A'}
+"""
+
         prompt = f"""Generate an EXTREMELY DETAILED STAR (Situation, Task, Action, Result) interview story based on these actual experiences:
 
 {experiences_text}
@@ -347,7 +386,11 @@ async def generate_star_story(
 Story Theme: {request.story_theme}
 Company Context: {company_context}
 
-CRITICAL REQUIREMENTS - Each section must be VERY DETAILED:
+{values_context}
+{role_context}
+
+CRITICAL REQUIREMENTS - Each section must be VERY DETAILED AND EXPLICITLY TIE TO COMPANY VALUES/ROLE:
+
 
 SITUATION (150-250 words):
 - Set the scene with rich context and background
@@ -355,6 +398,7 @@ SITUATION (150-250 words):
 - Explain what was happening that led to this challenge
 - Include relevant stakeholders, team composition, and organizational dynamics
 - Describe any external pressures, market conditions, or competitive factors
+- **EXPLICITLY mention how the situation relates to the company's values/culture (if provided)**
 - Paint a vivid picture that helps the interviewer understand the full context
 
 TASK (100-150 words):
@@ -363,6 +407,8 @@ TASK (100-150 words):
 - Describe the scope and scale of the challenge
 - Detail any constraints (time, budget, resources, technical)
 - Explain your specific role and responsibilities
+- **EXPLICITLY align the task with the role's core responsibilities (if provided)**
+- **Reference the must-have skills required for this role**
 - Clarify what was at stake and why it mattered to the organization
 
 ACTION (300-500 words) - THIS IS THE MOST IMPORTANT SECTION:
@@ -373,9 +419,12 @@ ACTION (300-500 words) - THIS IS THE MOST IMPORTANT SECTION:
 - Detail any obstacles encountered and how you overcame them
 - Include specific examples of technical work, analysis, or problem-solving
 - Describe your communication and stakeholder management approach
+- **EXPLICITLY demonstrate the company's core values through your actions (e.g., if they value "innovation", show innovative thinking)**
+- **EXPLICITLY demonstrate the must-have skills from the role requirements**
 - Show your thought process and strategic thinking
 - Mention specific technologies, platforms, or systems you worked with
-- Demonstrate both technical depth and leadership/soft skills
+- **Connect your actions to the company's cultural priorities**
+- Demonstrate both technical depth and leadership/soft skills matching the seniority level
 
 RESULT (150-250 words):
 - Provide specific, quantifiable outcomes with percentages, dollar amounts, or other metrics
@@ -383,16 +432,25 @@ RESULT (150-250 words):
 - Include business metrics (revenue, cost savings, efficiency gains)
 - Include technical metrics (performance improvements, uptime, scalability)
 - Include team/organizational impact (processes improved, knowledge shared, culture enhanced)
+- **EXPLICITLY show how results align with company values (e.g., if they value "customer obsession", show customer impact)**
+- **Demonstrate capabilities at the required seniority level**
 - Mention any recognition, awards, or follow-on opportunities that resulted
-- Explain how this relates to the role at {company_context}
+- **Explain how this experience prepares you for the specific role responsibilities listed**
+- Connect outcomes to what matters most to this company and role
 
 KEY THEMES (5-7 items):
-- List the main competencies demonstrated (e.g., "Technical Leadership", "Strategic Thinking", "Stakeholder Management")
+- List the main competencies demonstrated
+- **MUST include at least 2-3 themes that directly match the role's must-have skills**
+- **MUST include at least 1-2 themes that reflect the company's core values**
+- Example format: "Innovation (company value: Innovation)", "Risk Management (role requirement)"
 
 TALKING POINTS (6-10 items):
 - Provide specific memorable details, numbers, or phrases to emphasize when telling this story
+- **Include explicit callouts to company values** (e.g., "Emphasize how this demonstrates [Company Value]")
+- **Include explicit callouts to role requirements** (e.g., "This shows proficiency in [Must-Have Skill]")
 - Include potential follow-up question handlers
-- Suggest how to adapt this story for different interview scenarios
+- Suggest how to pivot this story to address other competency questions
+- Provide tips for connecting this story to the specific role and company
 
 Format as JSON with this structure:
 {{
@@ -417,7 +475,7 @@ Remember: This story should take 3-5 minutes to tell verbally. Make it detailed,
         response = await client.chat.completions.create(
             model="gpt-4-turbo-preview",
             messages=[
-                {"role": "system", "content": "You are an expert career coach and interview preparation specialist. Your expertise is creating EXTREMELY DETAILED, compelling STAR (Situation, Task, Action, Result) interview stories. Generate authentic, comprehensive stories that take 3-5 minutes to tell. Focus on rich detail, specific examples, quantifiable metrics, and demonstrating both technical depth and leadership qualities. The ACTION section should be the longest and most detailed (300-500 words)."},
+                {"role": "system", "content": "You are an expert career coach and interview preparation specialist. Your expertise is creating EXTREMELY DETAILED, compelling STAR (Situation, Task, Action, Result) interview stories that are EXPLICITLY TAILORED to the target company's values and role requirements. Generate authentic, comprehensive stories that take 3-5 minutes to tell. Focus on rich detail, specific examples, quantifiable metrics, and demonstrating both technical depth and leadership qualities. The ACTION section should be the longest and most detailed (300-500 words). CRITICAL: You MUST explicitly weave the company's core values and the role's required skills throughout the story. Every section should clearly demonstrate alignment with what this specific company and role needs. Use bold markers like 'This demonstrates [Company Value]' or 'This shows [Role Requirement]' in talking points."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.8,
