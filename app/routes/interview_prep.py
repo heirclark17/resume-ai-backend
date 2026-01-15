@@ -671,6 +671,7 @@ class CommonQuestionsRequest(BaseModel):
 @router.post("/common-questions/generate")
 async def generate_common_questions(
     request: CommonQuestionsRequest,
+    x_user_id: str = Header(None, alias="X-User-ID"),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -689,29 +690,28 @@ async def generate_common_questions(
     - What to say (short and long versions)
     """
     try:
-        # Fetch interview prep
+        if not x_user_id:
+            raise HTTPException(status_code=400, detail="X-User-ID header is required")
+
+        # Fetch interview prep with user validation
         result = await db.execute(
-            select(InterviewPrep).where(
-                InterviewPrep.id == request.interview_prep_id,
-                InterviewPrep.is_deleted == False
+            select(InterviewPrep, TailoredResume)
+            .join(TailoredResume, InterviewPrep.tailored_resume_id == TailoredResume.id)
+            .where(
+                and_(
+                    InterviewPrep.id == request.interview_prep_id,
+                    InterviewPrep.is_deleted == False,
+                    TailoredResume.session_user_id == x_user_id,
+                    TailoredResume.is_deleted == False
+                )
             )
         )
-        interview_prep = result.scalar_one_or_none()
+        result_row = result.first()
 
-        if not interview_prep:
+        if not result_row:
             raise HTTPException(status_code=404, detail="Interview prep not found")
 
-        # Fetch tailored resume
-        result = await db.execute(
-            select(TailoredResume).where(
-                TailoredResume.id == interview_prep.tailored_resume_id,
-                TailoredResume.is_deleted == False
-            )
-        )
-        tailored_resume = result.scalar_one_or_none()
-
-        if not tailored_resume:
-            raise HTTPException(status_code=404, detail="Tailored resume not found")
+        interview_prep, tailored_resume = result_row
 
         # Fetch base resume for full experience
         result = await db.execute(
@@ -801,6 +801,7 @@ class RegenerateQuestionRequest(BaseModel):
 @router.post("/common-questions/regenerate")
 async def regenerate_single_question(
     request: RegenerateQuestionRequest,
+    x_user_id: str = Header(None, alias="X-User-ID"),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -810,28 +811,28 @@ async def regenerate_single_question(
     with the initially generated response.
     """
     try:
-        # Fetch interview prep
+        if not x_user_id:
+            raise HTTPException(status_code=400, detail="X-User-ID header is required")
+
+        # Fetch interview prep with user validation
         result = await db.execute(
-            select(InterviewPrep).where(
-                InterviewPrep.id == request.interview_prep_id,
-                InterviewPrep.is_deleted == False
+            select(InterviewPrep, TailoredResume)
+            .join(TailoredResume, InterviewPrep.tailored_resume_id == TailoredResume.id)
+            .where(
+                and_(
+                    InterviewPrep.id == request.interview_prep_id,
+                    InterviewPrep.is_deleted == False,
+                    TailoredResume.session_user_id == x_user_id,
+                    TailoredResume.is_deleted == False
+                )
             )
         )
-        interview_prep = result.scalar_one_or_none()
+        result_row = result.first()
 
-        if not interview_prep:
+        if not result_row:
             raise HTTPException(status_code=404, detail="Interview prep not found")
 
-        # Fetch tailored resume
-        result = await db.execute(
-            select(TailoredResume).where(
-                TailoredResume.id == interview_prep.tailored_resume_id,
-                TailoredResume.is_deleted == False
-            )
-        )
-        tailored_resume = result.scalar_one_or_none()
-        if not tailored_resume:
-            raise HTTPException(status_code=404, detail="Tailored resume not found")
+        interview_prep, tailored_resume = result_row
 
         # Fetch base resume
         result = await db.execute(
