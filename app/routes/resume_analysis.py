@@ -271,10 +271,11 @@ async def export_resume(
     if request.format not in ["pdf", "docx"]:
         raise HTTPException(status_code=400, detail="Format must be 'pdf' or 'docx'")
 
-    # Get tailored resume with user validation
+    # Get tailored resume with user validation AND base resume for education/certs
     result = await db.execute(
-        select(TailoredResume, Job)
+        select(TailoredResume, Job, BaseResume)
         .join(Job, TailoredResume.job_id == Job.id)
+        .join(BaseResume, TailoredResume.base_resume_id == BaseResume.id)
         .filter(
             TailoredResume.id == request.tailored_resume_id,
             TailoredResume.session_user_id == x_user_id
@@ -285,10 +286,21 @@ async def export_resume(
     if not row:
         raise HTTPException(status_code=404, detail="Tailored resume not found or access denied")
 
-    tailored_resume, job = row
+    tailored_resume, job, base_resume = row
 
-    # Get resume data
-    resume_data = json.loads(tailored_resume.tailored_content)
+    # Reconstruct resume data from tailored fields + base resume
+    try:
+        resume_data = {
+            "summary": tailored_resume.tailored_summary or "",
+            "skills": json.loads(tailored_resume.tailored_skills) if tailored_resume.tailored_skills else [],
+            "experience": json.loads(tailored_resume.tailored_experience) if tailored_resume.tailored_experience else [],
+            "education": base_resume.education or "",
+            "certifications": base_resume.certifications or "",
+            "alignment_statement": tailored_resume.alignment_statement or ""
+        }
+    except json.JSONDecodeError as e:
+        print(f"Error parsing tailored resume data: {e}")
+        raise HTTPException(status_code=500, detail="Invalid tailored resume data format")
 
     # Get user name from session_user_id (just use last 8 chars for filename)
     user_name = f"User{x_user_id[-8:]}"
