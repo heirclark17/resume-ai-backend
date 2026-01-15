@@ -152,60 +152,6 @@ Requirements:
         )
 
 
-@router.get("/list")
-async def list_interview_preps(
-    x_user_id: str = Header(None, alias="X-User-ID"),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    List all interview preps for the current user (non-deleted).
-    Returns basic metadata + company/job info for each prep.
-    """
-
-    if not x_user_id:
-        raise HTTPException(status_code=400, detail="X-User-ID header is required")
-
-    # Fetch all interview preps for this user via TailoredResume relationship
-    result = await db.execute(
-        select(InterviewPrep, TailoredResume, Job)
-        .join(TailoredResume, InterviewPrep.tailored_resume_id == TailoredResume.id)
-        .join(Job, TailoredResume.job_id == Job.id)
-        .where(
-            and_(
-                TailoredResume.session_user_id == x_user_id,
-                InterviewPrep.is_deleted == False,
-                TailoredResume.is_deleted == False
-            )
-        )
-        .order_by(InterviewPrep.created_at.desc())
-    )
-
-    rows = result.all()
-
-    prep_list = []
-    for interview_prep, tailored_resume, job in rows:
-        # Extract key info from prep_data
-        prep_data = interview_prep.prep_data
-        company_name = prep_data.get("company_profile", {}).get("name", job.company)
-        job_title = prep_data.get("role_analysis", {}).get("job_title", job.title)
-
-        prep_list.append({
-            "id": interview_prep.id,
-            "tailored_resume_id": tailored_resume.id,
-            "company_name": company_name,
-            "job_title": job_title,
-            "job_location": job.location,
-            "created_at": interview_prep.created_at.isoformat(),
-            "updated_at": interview_prep.updated_at.isoformat() if interview_prep.updated_at else None
-        })
-
-    return {
-        "success": True,
-        "count": len(prep_list),
-        "interview_preps": prep_list
-    }
-
-
 @router.get("/{tailored_resume_id}")
 async def get_interview_prep(
     tailored_resume_id: int,
@@ -264,6 +210,60 @@ async def delete_interview_prep(
     return {
         "success": True,
         "message": "Interview prep deleted successfully"
+    }
+
+
+@router.get("/list")
+async def list_interview_preps(
+    x_user_id: str = Header(None, alias="X-User-ID"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    List all interview preps for the current user (non-deleted).
+    Returns basic metadata + company/job info for each prep.
+    """
+
+    if not x_user_id:
+        raise HTTPException(status_code=400, detail="X-User-ID header is required")
+
+    # Fetch all interview preps for this user via TailoredResume relationship
+    result = await db.execute(
+        select(InterviewPrep, TailoredResume, Job)
+        .join(TailoredResume, InterviewPrep.tailored_resume_id == TailoredResume.id)
+        .join(Job, TailoredResume.job_id == Job.id)
+        .where(
+            and_(
+                TailoredResume.session_user_id == x_user_id,
+                InterviewPrep.is_deleted == False,
+                TailoredResume.is_deleted == False
+            )
+        )
+        .order_by(InterviewPrep.created_at.desc())
+    )
+
+    rows = result.all()
+
+    prep_list = []
+    for interview_prep, tailored_resume, job in rows:
+        # Extract key info from prep_data
+        prep_data = interview_prep.prep_data
+        company_name = prep_data.get("company_profile", {}).get("name", job.company)
+        job_title = prep_data.get("role_analysis", {}).get("job_title", job.title)
+
+        prep_list.append({
+            "id": interview_prep.id,
+            "tailored_resume_id": tailored_resume.id,
+            "company_name": company_name,
+            "job_title": job_title,
+            "job_location": job.location,
+            "created_at": interview_prep.created_at.isoformat(),
+            "updated_at": interview_prep.updated_at.isoformat() if interview_prep.updated_at else None
+        })
+
+    return {
+        "success": True,
+        "count": len(prep_list),
+        "interview_preps": prep_list
     }
 
 
@@ -340,72 +340,30 @@ async def generate_star_story(
             for i, exp in enumerate(selected_experiences)
         ])
 
-        prompt = f"""Generate an EXTREMELY DETAILED STAR (Situation, Task, Action, Result) interview story based on these actual experiences:
+        prompt = f"""Generate a detailed STAR (Situation, Task, Action, Result) interview story based on these actual experiences:
 
 {experiences_text}
 
 Story Theme: {request.story_theme}
 Company Context: {company_context}
 
-CRITICAL REQUIREMENTS - Each section must be VERY DETAILED:
-
-SITUATION (150-250 words):
-- Set the scene with rich context and background
-- Describe the company/team environment and constraints
-- Explain what was happening that led to this challenge
-- Include relevant stakeholders, team composition, and organizational dynamics
-- Describe any external pressures, market conditions, or competitive factors
-- Paint a vivid picture that helps the interviewer understand the full context
-
-TASK (100-150 words):
-- Clearly articulate what needed to be accomplished and why
-- Explain the specific goals, objectives, and success criteria
-- Describe the scope and scale of the challenge
-- Detail any constraints (time, budget, resources, technical)
-- Explain your specific role and responsibilities
-- Clarify what was at stake and why it mattered to the organization
-
-ACTION (300-500 words) - THIS IS THE MOST IMPORTANT SECTION:
-- Provide a step-by-step breakdown of what YOU specifically did
-- Include specific methodologies, frameworks, or tools used
-- Describe how you collaborated with others and led the effort
-- Explain key decisions you made and why
-- Detail any obstacles encountered and how you overcame them
-- Include specific examples of technical work, analysis, or problem-solving
-- Describe your communication and stakeholder management approach
-- Show your thought process and strategic thinking
-- Mention specific technologies, platforms, or systems you worked with
-- Demonstrate both technical depth and leadership/soft skills
-
-RESULT (150-250 words):
-- Provide specific, quantifiable outcomes with percentages, dollar amounts, or other metrics
-- Describe both immediate and long-term impact
-- Include business metrics (revenue, cost savings, efficiency gains)
-- Include technical metrics (performance improvements, uptime, scalability)
-- Include team/organizational impact (processes improved, knowledge shared, culture enhanced)
-- Mention any recognition, awards, or follow-on opportunities that resulted
-- Explain how this relates to the role at {company_context}
-
-KEY THEMES (5-7 items):
-- List the main competencies demonstrated (e.g., "Technical Leadership", "Strategic Thinking", "Stakeholder Management")
-
-TALKING POINTS (6-10 items):
-- Provide specific memorable details, numbers, or phrases to emphasize when telling this story
-- Include potential follow-up question handlers
-- Suggest how to adapt this story for different interview scenarios
+Create a compelling, authentic story that:
+1. Combines elements from the provided experiences naturally
+2. Addresses the theme "{request.story_theme}"
+3. Shows relevance to {company_context}
+4. Includes specific metrics and outcomes
+5. Demonstrates leadership and impact
 
 Format as JSON with this structure:
 {{
-  "title": "Compelling story title (6-10 words)",
-  "situation": "VERY DETAILED 150-250 word paragraph",
-  "task": "VERY DETAILED 100-150 word paragraph",
-  "action": "EXTREMELY DETAILED 300-500 word paragraph with step-by-step breakdown",
-  "result": "VERY DETAILED 150-250 word paragraph with specific metrics",
-  "key_themes": ["theme1", "theme2", "theme3", "theme4", "theme5"],
-  "talking_points": ["specific point 1", "specific point 2", "specific point 3", "specific point 4", "specific point 5", "specific point 6"]
-}}
-
-Remember: This story should take 3-5 minutes to tell verbally. Make it detailed, authentic, and compelling."""
+  "title": "Brief story title (5-8 words)",
+  "situation": "2-3 sentences setting the context",
+  "task": "1-2 sentences describing what needed to be done",
+  "action": "3-4 sentences detailing specific actions taken",
+  "result": "2-3 sentences with quantifiable outcomes",
+  "key_themes": ["theme1", "theme2", "theme3"],
+  "talking_points": ["point1", "point2", "point3"]
+}}"""
 
         # Use OpenAI to generate the story
         import openai
@@ -417,10 +375,10 @@ Remember: This story should take 3-5 minutes to tell verbally. Make it detailed,
         response = await client.chat.completions.create(
             model="gpt-4-turbo-preview",
             messages=[
-                {"role": "system", "content": "You are an expert career coach and interview preparation specialist. Your expertise is creating EXTREMELY DETAILED, compelling STAR (Situation, Task, Action, Result) interview stories. Generate authentic, comprehensive stories that take 3-5 minutes to tell. Focus on rich detail, specific examples, quantifiable metrics, and demonstrating both technical depth and leadership qualities. The ACTION section should be the longest and most detailed (300-500 words)."},
+                {"role": "system", "content": "You are an expert career coach helping candidates prepare compelling interview stories. Generate authentic, detailed STAR stories based on real experiences."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.8,
+            temperature=0.7,
             response_format={"type": "json_object"}
         )
 
