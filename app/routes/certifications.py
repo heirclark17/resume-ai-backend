@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from typing import List
 
 from app.database import get_db
-from app.models import InterviewPrep, Job
+from app.models import InterviewPrep, Job, TailoredResume
 from app.services.certification_service import CertificationService
 
 router = APIRouter()
@@ -35,21 +35,22 @@ async def recommend_certifications(
     if not x_user_id:
         raise HTTPException(status_code=401, detail="User ID required")
 
-    # Get interview prep with user validation
+    # Get interview prep with user validation through TailoredResume
     result = await db.execute(
-        select(InterviewPrep, Job)
-        .join(Job, InterviewPrep.job_id == Job.id)
+        select(InterviewPrep, Job, TailoredResume)
+        .join(TailoredResume, InterviewPrep.tailored_resume_id == TailoredResume.id)
+        .join(Job, TailoredResume.job_id == Job.id)
         .filter(
             InterviewPrep.id == request.interview_prep_id,
-            Job.user_id == x_user_id
+            TailoredResume.session_user_id == x_user_id
         )
     )
     row = result.first()
 
     if not row:
-        raise HTTPException(status_code=404, detail="Interview prep not found")
+        raise HTTPException(status_code=404, detail="Interview prep not found or access denied")
 
-    interview_prep, job = row
+    interview_prep, job, tailored_resume = row
 
     # Extract current skills from prep data
     prep_data = interview_prep.prep_data or {}
