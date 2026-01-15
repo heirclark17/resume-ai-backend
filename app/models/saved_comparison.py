@@ -19,6 +19,11 @@ class SavedComparison(Base):
     notes = Column(Text, nullable=True)  # User notes about this comparison
     tags = Column(Text, nullable=True)  # JSON array of tags (e.g., ["FAANG", "Senior", "Applied"])
 
+    # AI Analysis Data (persisted from analysis endpoints)
+    analysis_data = Column(Text, nullable=True)  # JSON: AI change analysis with section explanations
+    keywords_data = Column(Text, nullable=True)  # JSON: Keyword extraction and matching results
+    match_score_data = Column(Text, nullable=True)  # JSON: Overall match score and detailed breakdown
+
     # Status tracking
     is_pinned = Column(Boolean, default=False, index=True)  # Pin to top of list
 

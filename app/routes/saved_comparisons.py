@@ -27,6 +27,9 @@ class SaveComparisonRequest(BaseModel):
     title: Optional[str] = None
     notes: Optional[str] = None
     tags: Optional[List[str]] = None
+    analysis_data: Optional[dict] = None  # AI change analysis
+    keywords_data: Optional[dict] = None  # Keyword extraction results
+    match_score_data: Optional[dict] = None  # Match score breakdown
 
 class SaveComparisonResponse(BaseModel):
     id: int
@@ -106,6 +109,12 @@ async def save_comparison(
             existing_comparison.notes = request.notes
         if request.tags is not None:
             existing_comparison.tags = json.dumps(request.tags)
+        if request.analysis_data is not None:
+            existing_comparison.analysis_data = json.dumps(request.analysis_data)
+        if request.keywords_data is not None:
+            existing_comparison.keywords_data = json.dumps(request.keywords_data)
+        if request.match_score_data is not None:
+            existing_comparison.match_score_data = json.dumps(request.match_score_data)
 
         await db.commit()
         await db.refresh(existing_comparison)
@@ -123,7 +132,10 @@ async def save_comparison(
         session_user_id=x_user_id,
         title=request.title or f"{job.company} - {job.title}",
         notes=request.notes,
-        tags=json.dumps(request.tags) if request.tags else None
+        tags=json.dumps(request.tags) if request.tags else None,
+        analysis_data=json.dumps(request.analysis_data) if request.analysis_data else None,
+        keywords_data=json.dumps(request.keywords_data) if request.keywords_data else None,
+        match_score_data=json.dumps(request.match_score_data) if request.match_score_data else None
     )
 
     db.add(saved_comparison)
@@ -224,7 +236,7 @@ async def get_saved_comparison(
     )
     edits = edits_result.scalars().all()
 
-    # Build response with edited content
+    # Build response with edited content and AI analysis
     response = {
         "comparison_id": saved_comp.id,
         "title": saved_comp.title,
@@ -263,7 +275,11 @@ async def get_saved_comparison(
                 "edit_type": edit.edit_type
             }
             for edit in edits
-        ]
+        ],
+        # AI Analysis Data (persisted from when comparison was saved)
+        "analysis": json.loads(saved_comp.analysis_data) if saved_comp.analysis_data else None,
+        "keywords": json.loads(saved_comp.keywords_data) if saved_comp.keywords_data else None,
+        "match_score": json.loads(saved_comp.match_score_data) if saved_comp.match_score_data else None
     }
 
     return response
