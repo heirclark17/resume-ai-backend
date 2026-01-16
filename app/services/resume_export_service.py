@@ -102,16 +102,32 @@ class ResumeExportService:
             experiences = resume_data['experience']
             if isinstance(experiences, list):
                 for exp in experiences:
-                    job_title_para = doc.add_paragraph()
-                    job_title_run = job_title_para.add_run(exp.get('title', ''))
-                    job_title_run.font.size = Pt(11)
-                    job_title_run.font.bold = True
+                    # Handle both formats: {header} or {title, company}
+                    if 'header' in exp:
+                        # Format from parser: "Job Title – Company Name"
+                        job_title_para = doc.add_paragraph()
+                        job_title_run = job_title_para.add_run(exp.get('header', ''))
+                        job_title_run.font.size = Pt(11)
+                        job_title_run.font.bold = True
+                    else:
+                        # Format from tailor service: separate title and company
+                        job_title_para = doc.add_paragraph()
+                        job_title_run = job_title_para.add_run(exp.get('title', ''))
+                        job_title_run.font.size = Pt(11)
+                        job_title_run.font.bold = True
 
+                    # Add company/location/dates line
                     company_para = doc.add_paragraph()
-                    company_text = f"{exp.get('company', '')} | {exp.get('location', '')} | {exp.get('dates', '')}"
+                    if 'header' in exp:
+                        # Just location and dates for header format
+                        company_text = f"{exp.get('location', '')} | {exp.get('dates', '')}"
+                    else:
+                        # Full company, location, dates for split format
+                        company_text = f"{exp.get('company', '')} | {exp.get('location', '')} | {exp.get('dates', '')}"
                     company_run = company_para.add_run(company_text)
                     company_run.font.italic = True
 
+                    # Add bullet points
                     if exp.get('bullets'):
                         for bullet in exp['bullets']:
                             doc.add_paragraph(bullet, style='List Bullet')
@@ -230,13 +246,23 @@ class ResumeExportService:
             experiences = resume_data['experience']
             if isinstance(experiences, list):
                 for exp in experiences:
-                    # Job title
-                    job_title = f"<b>{exp.get('title', '')}</b>"
-                    elements.append(Paragraph(job_title, body_style))
+                    # Handle both formats: {header} or {title, company}
+                    if 'header' in exp:
+                        # Format from parser: "Job Title – Company Name"
+                        job_title = f"<b>{exp.get('header', '')}</b>"
+                        elements.append(Paragraph(job_title, body_style))
 
-                    # Company info
-                    company_text = f"{exp.get('company', '')} | {exp.get('location', '')} | {exp.get('dates', '')}"
-                    elements.append(Paragraph(f"<i>{company_text}</i>", body_style))
+                        # Just location and dates for header format
+                        company_text = f"{exp.get('location', '')} | {exp.get('dates', '')}"
+                        elements.append(Paragraph(f"<i>{company_text}</i>", body_style))
+                    else:
+                        # Format from tailor service: separate title and company
+                        job_title = f"<b>{exp.get('title', '')}</b>"
+                        elements.append(Paragraph(job_title, body_style))
+
+                        # Full company, location, dates for split format
+                        company_text = f"{exp.get('company', '')} | {exp.get('location', '')} | {exp.get('dates', '')}"
+                        elements.append(Paragraph(f"<i>{company_text}</i>", body_style))
 
                     # Bullets
                     if exp.get('bullets'):

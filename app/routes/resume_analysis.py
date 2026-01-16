@@ -296,26 +296,36 @@ async def export_resume(
             "experience": json.loads(tailored_resume.tailored_experience) if tailored_resume.tailored_experience else [],
             "education": base_resume.education or "",
             "certifications": base_resume.certifications or "",
-            "alignment_statement": tailored_resume.alignment_statement or ""
+            "alignment_statement": tailored_resume.alignment_statement or "",
+            # Add contact info in format expected by export service
+            "contact": {
+                "email": base_resume.candidate_email or "",
+                "phone": base_resume.candidate_phone or "",
+                "location": base_resume.candidate_location or "",
+                "linkedin": base_resume.candidate_linkedin or ""
+            }
         }
     except json.JSONDecodeError as e:
         print(f"Error parsing tailored resume data: {e}")
         raise HTTPException(status_code=500, detail="Invalid tailored resume data format")
 
-    # Get user name from session_user_id (just use last 8 chars for filename)
-    user_name = f"User{x_user_id[-8:]}"
+    # Get candidate name from base resume (fallback to session user ID if not available)
+    candidate_name = base_resume.candidate_name or f"User{x_user_id[-8:]}"
+
+    print(f"Exporting resume for: {candidate_name} - {job.title}")
+    print(f"Contact info: Email={resume_data['contact']['email']}, Phone={resume_data['contact']['phone']}")
 
     # Generate file
     try:
         if request.format == "pdf":
-            file_buffer = export_service.generate_pdf(resume_data, user_name, job.title)
+            file_buffer = export_service.generate_pdf(resume_data, candidate_name, job.title)
             media_type = "application/pdf"
         else:  # docx
-            file_buffer = export_service.generate_docx(resume_data, user_name, job.title)
+            file_buffer = export_service.generate_docx(resume_data, candidate_name, job.title)
             media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
         # Generate filename
-        filename = export_service.generate_filename(user_name, job.title, request.format)
+        filename = export_service.generate_filename(candidate_name, job.title, request.format)
 
         # Return file
         return StreamingResponse(
