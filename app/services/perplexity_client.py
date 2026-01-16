@@ -125,7 +125,7 @@ Format your response with clear section headers and bullet points. Include speci
 
         try:
             response = self.client.chat.completions.create(
-                model="llama-3.1-sonar-large-128k-online",
+                model="sonar",
                 messages=[
                     {
                         "role": "system",
@@ -202,8 +202,9 @@ Format your response with clear section headers and bullet points. Include speci
         try:
             # Use Perplexity's sonar model for web search with citations
             # Note: Perplexity automatically returns citations in the response
+            # Model updated to latest: https://docs.perplexity.ai/guides/model-cards
             response = self.client.chat.completions.create(
-                model="llama-3.1-sonar-large-128k-online",
+                model="sonar",  # Latest Perplexity model with web search
                 messages=[
                     {
                         "role": "system",
@@ -274,7 +275,7 @@ Format your response with clear section headers and bullet points. Include speci
 
         try:
             response = self.client.chat.completions.create(
-                model="llama-3.1-sonar-large-128k-online",
+                model="sonar",
                 messages=[
                     {
                         "role": "system",
