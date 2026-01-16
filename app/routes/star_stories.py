@@ -90,26 +90,33 @@ async def create_star_story(
 
 @router.get("/list")
 async def list_star_stories(
+    tailored_resume_id: Optional[int] = None,
     x_user_id: str = Header(None, alias="X-User-ID"),
     db: AsyncSession = Depends(get_db)
 ):
     """
     List all STAR stories for the current user (non-deleted).
+    Optionally filter by tailored_resume_id.
     Returns stories sorted by most recent first.
     """
     if not x_user_id:
         raise HTTPException(status_code=400, detail="X-User-ID header is required")
 
     try:
-        # Fetch all STAR stories for this user
+        # Build query conditions
+        conditions = [
+            StarStory.session_user_id == x_user_id,
+            StarStory.is_deleted == False
+        ]
+
+        # Add optional tailored_resume_id filter
+        if tailored_resume_id is not None:
+            conditions.append(StarStory.tailored_resume_id == tailored_resume_id)
+
+        # Fetch STAR stories for this user
         result = await db.execute(
             select(StarStory)
-            .where(
-                and_(
-                    StarStory.session_user_id == x_user_id,
-                    StarStory.is_deleted == False
-                )
-            )
+            .where(and_(*conditions))
             .order_by(StarStory.created_at.desc())
         )
 
