@@ -3,7 +3,7 @@ Firecrawl client for extracting job posting details from URLs
 """
 import os
 import asyncio
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from functools import partial
 from app.config import get_settings
 
