@@ -223,6 +223,15 @@ Return ONLY a valid JSON object with this structure:
                 tailored.setdefault('education', base_resume.get('education', ''))
                 tailored.setdefault('certifications', base_resume.get('certifications', ''))
 
+                # Clean up experience bullets - remove separator characters
+                for exp in tailored.get('experience', []):
+                    if 'bullets' in exp and isinstance(exp['bullets'], list):
+                        # Filter out empty bullets and separator characters
+                        exp['bullets'] = [
+                            bullet for bullet in exp['bullets']
+                            if bullet and bullet.strip() and bullet.strip() not in ['|', '/', '•', '-', '–', '—']
+                        ]
+
                 return tailored
 
             except (json.JSONDecodeError, ValueError) as e:
@@ -230,9 +239,21 @@ Return ONLY a valid JSON object with this structure:
                 print(f"Response: {content}")
 
                 # Return base resume as fallback
+                cleaned_experience = []
+                for exp in base_resume.get('experience', []):
+                    if isinstance(exp, dict) and 'bullets' in exp:
+                        cleaned_exp = exp.copy()
+                        cleaned_exp['bullets'] = [
+                            bullet for bullet in exp.get('bullets', [])
+                            if bullet and bullet.strip() and bullet.strip() not in ['|', '/', '•', '-', '–', '—']
+                        ]
+                        cleaned_experience.append(cleaned_exp)
+                    else:
+                        cleaned_experience.append(exp)
+
                 return {
                     "summary": base_resume.get('summary', ''),
-                    "experience": base_resume.get('experience', []),
+                    "experience": cleaned_experience,
                     "competencies": [],
                     "alignment_statement": f"Tailored for {job_details.get('company', 'this company')}",
                     "education": base_resume.get('education', ''),
