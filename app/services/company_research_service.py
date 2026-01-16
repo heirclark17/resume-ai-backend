@@ -649,49 +649,105 @@ class CompanyResearchService:
 
         values = []
 
-        # FIRST: Look for values in citations (these have real URLs)
-        for citation in citations:
-            url = citation.get("url", "")
-            title = citation.get("title", "")
-            text = citation.get("text", "")
+        # Common company values to look for
+        common_values = [
+            "Customer Obsession", "Customer First", "Customer Centricity",
+            "Innovation", "Innovate", "Think Big",
+            "Integrity", "Honesty", "Trust",
+            "Excellence", "Quality", "High Standards",
+            "Collaboration", "Teamwork", "Together",
+            "Diversity", "Inclusion", "Belonging",
+            "Accountability", "Ownership", "Results-Driven",
+            "Respect", "Dignity",
+            "Transparency", "Openness",
+            "Sustainability", "Environmental Responsibility",
+            "Empowerment", "Enable", "Empower",
+            "Agility", "Adaptability", "Flexibility",
+            "Learning", "Growth Mindset", "Continuous Improvement",
+            "Safety", "Security First",
+            "Impact", "Make a Difference",
+            "Passion", "Enthusiasm",
+            "Bias for Action", "Move Fast", "Speed"
+        ]
 
-            # Look for value keywords in citation text
-            value_keywords = ["value", "mission", "principle", "culture", "believe", "commitment"]
-            if any(kw in text.lower() for kw in value_keywords):
-                # Try to extract the value name
-                value_name = self._extract_value_name_from_text(text, title)
-                if value_name:
-                    values.append({
-                        "name": value_name,
-                        "description": text[:200] if text else "",
-                        "source_snippet": text[:150],
-                        "url": url,
-                        "source": title or "Company source"
-                    })
+        content_lower = content.lower()
 
-        # SECOND: Parse content for additional values
+        # FIRST: Find common values mentioned in content
+        for value in common_values:
+            if value.lower() in content_lower:
+                # Find the context around this value (2 sentences)
+                value_index = content_lower.find(value.lower())
+                start = max(0, value_index - 150)
+                end = min(len(content), value_index + 150)
+                snippet = content[start:end].strip()
+
+                # Try to match to a citation
+                matched_citation = None
+                citation_url = ""
+                for citation in citations:
+                    # Check if citation URL relates to values/culture/mission
+                    url_lower = citation.get("url", "").lower()
+                    if any(keyword in url_lower for keyword in ["value", "culture", "mission", "principle", "about"]):
+                        matched_citation = citation
+                        citation_url = citation.get("url", "")
+                        break
+
+                # If no specific match, use first citation
+                if not matched_citation and citations:
+                    matched_citation = citations[0]
+                    citation_url = citations[0].get("url", "")
+
+                values.append({
+                    "name": value,
+                    "description": f"Mentioned in company research",
+                    "source_snippet": snippet[:150],
+                    "url": citation_url,
+                    "source": "Company Research"
+                })
+
+        # SECOND: Look for explicit value statements in content
         lines = content.split("\n")
-        for line in lines:
-            if any(kw in line.lower() for kw in ["value:", "principle:", "we believe", "mission:"]):
-                value_name = line.strip("- *#:").strip()
-                if len(value_name) > 3 and len(value_name) < 100:
-                    # Try to match to a citation
-                    matched_citation = None
-                    for citation in citations:
-                        if value_name.lower() in citation.get("text", "").lower():
-                            matched_citation = citation
-                            break
+        for i, line in enumerate(lines):
+            # Look for value patterns
+            value_patterns = [
+                "value:", "principle:", "we believe", "mission:", "vision:",
+                "core value", "fundamental", "commitment to"
+            ]
 
-                    values.append({
-                        "name": value_name,
-                        "description": "",
-                        "source_snippet": "",
-                        "url": matched_citation.get("url", "") if matched_citation else "",
-                        "source": matched_citation.get("title", "Research findings") if matched_citation else "Research findings"
-                    })
+            if any(pattern in line.lower() for pattern in value_patterns):
+                # Extract the value name (next 3-5 words after the pattern)
+                for pattern in value_patterns:
+                    if pattern in line.lower():
+                        parts = line.split(pattern, 1)
+                        if len(parts) > 1:
+                            value_text = parts[1].strip().strip(":-*# ")
+                            # Take first sentence or up to 50 chars
+                            value_name = value_text.split(".")[0][:50].strip()
 
-        print(f"✓ Extracted {len(values)} company values")
-        return values
+                            if 3 < len(value_name) < 50:
+                                # Match to citation
+                                citation_url = citations[0].get("url", "") if citations else ""
+
+                                values.append({
+                                    "name": value_name,
+                                    "description": "",
+                                    "source_snippet": line[:150],
+                                    "url": citation_url,
+                                    "source": "Company Research"
+                                })
+                        break
+
+        # Deduplicate by value name
+        seen_values = set()
+        unique_values = []
+        for value in values:
+            value_key = value["name"].lower()[:30]
+            if value_key not in seen_values:
+                seen_values.add(value_key)
+                unique_values.append(value)
+
+        print(f"✓ Extracted {len(unique_values)} company values")
+        return unique_values
 
     def _extract_value_name_from_text(self, text: str, title: str) -> str:
         """Extract value name from citation text or title"""
