@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict
 from app.database import get_db
 from app.models.interview_prep import InterviewPrep
 from app.models.resume import TailoredResume, BaseResume
