@@ -60,13 +60,17 @@ For each item, provide:
    - 5-6: Medium - Useful background information
    - 0-4: Low - Interesting but not directly relevant
 
-2. **priority**: "Critical", "High", "Medium", or "Context"
+2. **priority**: "Critical", "High", or "Medium" (DO NOT use "Context")
 
 3. **why_it_matters**: 1-sentence explanation of why this is relevant to THIS specific role
 
 4. **job_alignment**: Which specific job requirements or responsibilities does this connect to?
 
 5. **talking_point**: How could a candidate reference this in the interview? (30-50 words)
+
+6. **example_statements**: 2 specific example statements showing how to mention THIS PARTICULAR initiative in the interview (each 20-30 words)
+
+7. **questions_to_ask**: 2 smart, specific questions about THIS PARTICULAR initiative to ask the interviewer (each 15-25 words)
 
 Return ONLY a JSON object with this structure:
 {{
@@ -77,7 +81,15 @@ Return ONLY a JSON object with this structure:
       "priority": "Critical",
       "why_it_matters": "This initiative directly relates to the core responsibility of...",
       "job_alignment": ["Requirement 1", "Responsibility 2"],
-      "talking_point": "I'm excited about [initiative] because it aligns with my experience in..."
+      "talking_point": "I'm excited about [initiative] because it aligns with my experience in...",
+      "example_statements": [
+        "I was impressed to learn about [specific initiative] and how it connects to [specific aspect of role]...",
+        "Given my experience with [relevant skill], I'm eager to contribute to [specific initiative aspect]..."
+      ],
+      "questions_to_ask": [
+        "How does [specific initiative] impact the team's roadmap for the next 6-12 months?",
+        "What role would this position play in supporting [specific initiative aspect]?"
+      ]
     }}
   ]
 }}"""
@@ -94,7 +106,7 @@ Return ONLY a JSON object with this structure:
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.3,
-                max_tokens=3000
+                max_tokens=4000
             )
 
             result = json.loads(response.choices[0].message.content)
@@ -112,7 +124,9 @@ Return ONLY a JSON object with this structure:
                 "priority": "Medium",
                 "why_it_matters": "Relevant company information",
                 "job_alignment": [],
-                "talking_point": ""
+                "talking_point": "",
+                "example_statements": [],
+                "questions_to_ask": []
             } for item in content_items]
 
     async def generate_talking_points(
