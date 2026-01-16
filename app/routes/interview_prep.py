@@ -664,6 +664,53 @@ async def get_interview_questions(request: InterviewQuestionsRequest):
         )
 
 
+class CompanyValuesRequest(BaseModel):
+    company_name: str
+    industry: Optional[str] = None
+    job_title: Optional[str] = None
+
+
+@router.post("/company-values")
+async def get_company_values(request: CompanyValuesRequest):
+    """
+    Fetch real company values and culture from multiple sources.
+
+    Sources:
+    - Company careers and about pages
+    - Employee review sites (Glassdoor, Built In)
+    - Perplexity research with citations
+    - Company culture articles and blog posts
+
+    Returns company values with:
+    - Value names and descriptions
+    - Source URLs for verification
+    - Cultural priorities
+    - Work environment details
+    """
+    try:
+        service = CompanyResearchService()
+
+        values_data = await service.research_company_values_culture(
+            company_name=request.company_name,
+            industry=request.industry,
+            job_title=request.job_title
+        )
+
+        return {
+            "success": True,
+            "data": values_data
+        }
+
+    except Exception as e:
+        print(f"Failed to fetch company values: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch company values: {str(e)}"
+        )
+
+
 class CommonQuestionsRequest(BaseModel):
     interview_prep_id: int
 

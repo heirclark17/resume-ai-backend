@@ -473,6 +473,338 @@ class CompanyResearchService:
 
         return sources
 
+    async def research_company_values_culture(
+        self,
+        company_name: str,
+        industry: Optional[str] = None,
+        job_title: Optional[str] = None
+    ) -> Dict:
+        """
+        Research company values and culture from real sources
+
+        Returns:
+        {
+            "stated_values": [
+                {
+                    "name": "Value name",
+                    "description": "What this value means",
+                    "source_snippet": "Quote from source",
+                    "url": "https://...",
+                    "source": "Source name"
+                }
+            ],
+            "cultural_priorities": ["priority1", "priority2"],
+            "work_environment": "Description of work environment",
+            "sources_consulted": [...],
+            "last_updated": "ISO timestamp"
+        }
+        """
+
+        print(f"Researching company values & culture for: {company_name}")
+
+        # Build values/culture research query
+        values_query = self._build_values_query(company_name, industry, job_title)
+
+        # Use Perplexity for cited research
+        try:
+            perplexity_result = await self._research_with_perplexity(values_query, company_name)
+
+            # Also try company careers/about pages
+            values_urls = self._get_company_values_urls(company_name)
+            direct_content = await self._fetch_direct_sources(values_urls)
+
+            # Structure the values data
+            structured_data = self._structure_values_data(
+                perplexity_result,
+                direct_content,
+                company_name
+            )
+
+            return structured_data
+
+        except Exception as e:
+            print(f"Error researching company values & culture: {e}")
+            return self._get_fallback_values(company_name)
+
+    def _build_values_query(
+        self,
+        company_name: str,
+        industry: Optional[str],
+        job_title: Optional[str]
+    ) -> str:
+        """Build Perplexity query for values and culture research"""
+
+        query = f"""Research {company_name} company values, culture, and work environment:
+
+1. **Core Company Values (with sources and URLs):**
+   - Official mission statement
+   - Stated company values and principles
+   - Cultural priorities or pillars
+   - What the company emphasizes in their culture
+
+2. **Work Environment & Culture:**
+   - Work-life balance policies
+   - Remote/hybrid work approach
+   - Diversity, equity, and inclusion initiatives
+   - Employee development and growth opportunities
+   - Benefits and perks that reflect their values
+
+3. **Cultural Manifestations:**
+   - How values show up in day-to-day work
+   - Leadership style and decision-making
+   - Team collaboration approaches
+   - Recognition and rewards philosophy
+
+4. **Employee Perspectives:**
+   - What current/former employees say about the culture
+   - Glassdoor or Built In ratings if available
+   - Common themes in employee reviews
+
+**Requirements:**
+- Cite specific sources (careers page, about page, employee reviews, news articles)
+- Include URLs for all information
+- Focus on official sources first (company website, careers page)
+- Include employee perspectives from review sites
+- Provide exact quotes for stated values"""
+
+        if industry:
+            query += f"\n- Industry context: {industry}"
+
+        if job_title:
+            query += f"\n- Relate findings to: {job_title} role expectations"
+
+        return query
+
+    def _get_company_values_urls(self, company_name: str) -> List[str]:
+        """Get likely URLs for company values and culture pages"""
+
+        company_slug = company_name.lower().replace(" ", "").replace("&", "and")
+
+        urls = [
+            f"https://www.{company_slug}.com/about",
+            f"https://www.{company_slug}.com/about-us",
+            f"https://www.{company_slug}.com/careers",
+            f"https://www.{company_slug}.com/careers/culture",
+            f"https://www.{company_slug}.com/company/values",
+            f"https://careers.{company_slug}.com",
+            f"https://www.{company_slug}.com/company",
+        ]
+
+        # Special cases
+        special_cases = {
+            "jpmorgan": ["https://www.jpmorganchase.com/about/our-culture", "https://careers.jpmorgan.com/us/en/culture"],
+            "oracle": ["https://www.oracle.com/corporate/careers/culture", "https://www.oracle.com/corporate/careers"],
+            "microsoft": ["https://careers.microsoft.com/us/en/culture", "https://www.microsoft.com/en-us/about"],
+            "amazon": ["https://www.amazon.jobs/en/principles", "https://www.aboutamazon.com/about-us"],
+            "google": ["https://careers.google.com/how-we-hire", "https://about.google/intl/ALL_us"],
+        }
+
+        company_key = company_name.lower().split()[0]
+        if company_key in special_cases:
+            urls = special_cases[company_key] + urls
+
+        return urls[:5]
+
+    def _structure_values_data(
+        self,
+        perplexity_result: Dict,
+        direct_content: List[Dict],
+        company_name: str
+    ) -> Dict:
+        """Structure values and culture data from research"""
+
+        # Extract values from Perplexity citations and content
+        stated_values = self._extract_values(
+            perplexity_result.get("content", ""),
+            perplexity_result.get("citations", [])
+        )
+
+        # Add values from direct sources
+        for source in direct_content:
+            if source["source_type"] in ["company_website", "careers"]:
+                stated_values.extend(
+                    self._parse_values_from_content(source)
+                )
+
+        # Deduplicate values
+        stated_values = self._deduplicate_values(stated_values)
+
+        # Extract cultural priorities
+        cultural_priorities = self._extract_cultural_priorities(perplexity_result)
+
+        # Extract work environment description
+        work_environment = self._extract_work_environment(perplexity_result)
+
+        return {
+            "stated_values": stated_values[:8],  # Top 8 values
+            "cultural_priorities": cultural_priorities[:6],  # Top 6 priorities
+            "work_environment": work_environment,
+            "sources_consulted": self._list_sources(perplexity_result, direct_content),
+            "last_updated": datetime.utcnow().isoformat(),
+            "company_name": company_name
+        }
+
+    def _extract_values(self, content: str, citations: List[Dict]) -> List[Dict]:
+        """Extract company values from Perplexity content with citations"""
+
+        values = []
+
+        # FIRST: Look for values in citations (these have real URLs)
+        for citation in citations:
+            url = citation.get("url", "")
+            title = citation.get("title", "")
+            text = citation.get("text", "")
+
+            # Look for value keywords in citation text
+            value_keywords = ["value", "mission", "principle", "culture", "believe", "commitment"]
+            if any(kw in text.lower() for kw in value_keywords):
+                # Try to extract the value name
+                value_name = self._extract_value_name_from_text(text, title)
+                if value_name:
+                    values.append({
+                        "name": value_name,
+                        "description": text[:200] if text else "",
+                        "source_snippet": text[:150],
+                        "url": url,
+                        "source": title or "Company source"
+                    })
+
+        # SECOND: Parse content for additional values
+        lines = content.split("\n")
+        for line in lines:
+            if any(kw in line.lower() for kw in ["value:", "principle:", "we believe", "mission:"]):
+                value_name = line.strip("- *#:").strip()
+                if len(value_name) > 3 and len(value_name) < 100:
+                    # Try to match to a citation
+                    matched_citation = None
+                    for citation in citations:
+                        if value_name.lower() in citation.get("text", "").lower():
+                            matched_citation = citation
+                            break
+
+                    values.append({
+                        "name": value_name,
+                        "description": "",
+                        "source_snippet": "",
+                        "url": matched_citation.get("url", "") if matched_citation else "",
+                        "source": matched_citation.get("title", "Research findings") if matched_citation else "Research findings"
+                    })
+
+        print(f"✓ Extracted {len(values)} company values")
+        return values
+
+    def _extract_value_name_from_text(self, text: str, title: str) -> str:
+        """Extract value name from citation text or title"""
+
+        # Common value names
+        common_values = [
+            "Innovation", "Integrity", "Excellence", "Customer First", "Collaboration",
+            "Diversity", "Inclusion", "Accountability", "Respect", "Transparency",
+            "Teamwork", "Quality", "Safety", "Sustainability", "Empowerment"
+        ]
+
+        # Check if any common value is mentioned
+        text_lower = text.lower()
+        for value in common_values:
+            if value.lower() in text_lower:
+                return value
+
+        # Try to extract from title
+        if "value" in title.lower() or "culture" in title.lower():
+            # Return first 2-4 words of title
+            words = title.split()[:3]
+            return " ".join(words)
+
+        return ""
+
+    def _parse_values_from_content(self, source: Dict) -> List[Dict]:
+        """Parse values from direct source content"""
+
+        values = []
+        content = source.get("content", "")
+        lines = content.split("\n")
+
+        for line in lines:
+            # Look for value patterns
+            if any(pattern in line.lower() for pattern in ["our values", "we value", "core value", "principle"]):
+                value_name = line.strip("#-* ").strip()
+                if 3 < len(value_name) < 50:
+                    values.append({
+                        "name": value_name,
+                        "description": "",
+                        "source_snippet": line[:150],
+                        "url": source.get("url", ""),
+                        "source": "Company website"
+                    })
+
+        return values[:3]
+
+    def _extract_cultural_priorities(self, perplexity_result: Dict) -> List[str]:
+        """Extract cultural priorities from research"""
+
+        content = perplexity_result.get("content", "")
+        priorities = []
+
+        # Look for cultural keywords
+        cultural_keywords = {
+            "work-life balance": ["work-life", "work life", "flexibility", "flexible work"],
+            "diversity and inclusion": ["diversity", "inclusion", "dei", "belonging"],
+            "innovation": ["innovation", "creative", "entrepreneurial"],
+            "collaboration": ["collaboration", "teamwork", "team", "together"],
+            "growth": ["growth", "development", "learning", "career"],
+            "transparency": ["transparency", "open", "honest", "communication"]
+        }
+
+        content_lower = content.lower()
+        for priority, keywords in cultural_keywords.items():
+            if any(kw in content_lower for kw in keywords):
+                priorities.append(priority.title())
+
+        return priorities
+
+    def _extract_work_environment(self, perplexity_result: Dict) -> str:
+        """Extract work environment description"""
+
+        content = perplexity_result.get("content", "")
+
+        # Look for work environment description
+        if "work environment" in content.lower() or "workplace" in content.lower():
+            # Find the section and extract 1-2 sentences
+            lines = content.split(". ")
+            for i, line in enumerate(lines):
+                if "work environment" in line.lower() or "workplace" in line.lower():
+                    return ". ".join(lines[i:i+2])[:300]
+
+        # Fallback: generate from cultural keywords found
+        return "Information about work environment will be researched during interview preparation."
+
+    def _deduplicate_values(self, values: List[Dict]) -> List[Dict]:
+        """Remove duplicate values"""
+
+        seen_names = set()
+        unique = []
+
+        for value in values:
+            name_key = value["name"].lower()[:30]
+            if name_key not in seen_names:
+                seen_names.add(name_key)
+                unique.append(value)
+
+        return unique
+
+    def _get_fallback_values(self, company_name: str) -> Dict:
+        """Fallback data if values research fails"""
+
+        return {
+            "stated_values": [],
+            "cultural_priorities": [],
+            "work_environment": f"Unable to fetch company culture information for {company_name}",
+            "sources_consulted": [],
+            "last_updated": datetime.utcnow().isoformat(),
+            "company_name": company_name,
+            "error": "Values research failed"
+        }
+
     def _get_fallback_strategies(self, company_name: str) -> Dict:
         """Fallback data if research fails"""
 
