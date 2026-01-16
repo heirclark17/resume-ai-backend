@@ -645,109 +645,338 @@ class CompanyResearchService:
         }
 
     def _extract_values(self, content: str, citations: List[Dict]) -> List[Dict]:
-        """Extract company values from Perplexity content with citations"""
+        """
+        Extract company values from Perplexity content with citations
+
+        Uses multiple extraction strategies:
+        1. Structured lists (numbered, bulleted)
+        2. Pattern matching for value statements
+        3. Common value keywords
+        4. GPT-4 extraction fallback
+        """
+        import re
 
         values = []
 
-        # Common company values to look for
-        common_values = [
-            "Customer Obsession", "Customer First", "Customer Centricity",
-            "Innovation", "Innovate", "Think Big",
-            "Integrity", "Honesty", "Trust",
-            "Excellence", "Quality", "High Standards",
-            "Collaboration", "Teamwork", "Together",
-            "Diversity", "Inclusion", "Belonging",
-            "Accountability", "Ownership", "Results-Driven",
-            "Respect", "Dignity",
-            "Transparency", "Openness",
-            "Sustainability", "Environmental Responsibility",
-            "Empowerment", "Enable", "Empower",
-            "Agility", "Adaptability", "Flexibility",
-            "Learning", "Growth Mindset", "Continuous Improvement",
-            "Safety", "Security First",
-            "Impact", "Make a Difference",
-            "Passion", "Enthusiasm",
-            "Bias for Action", "Move Fast", "Speed"
-        ]
+        print(f"Extracting values from {len(content)} chars of content with {len(citations)} citations")
 
-        content_lower = content.lower()
+        # Get primary citation URL for values
+        primary_values_url = ""
+        for citation in citations:
+            url_lower = citation.get("url", "").lower()
+            if any(keyword in url_lower for keyword in ["value", "culture", "mission", "principle", "about", "careers"]):
+                primary_values_url = citation.get("url", "")
+                break
 
-        # FIRST: Find common values mentioned in content
-        for value in common_values:
-            if value.lower() in content_lower:
-                # Find the context around this value (2 sentences)
-                value_index = content_lower.find(value.lower())
-                start = max(0, value_index - 150)
-                end = min(len(content), value_index + 150)
-                snippet = content[start:end].strip()
+        if not primary_values_url and citations:
+            primary_values_url = citations[0].get("url", "")
 
-                # Try to match to a citation
-                matched_citation = None
-                citation_url = ""
-                for citation in citations:
-                    # Check if citation URL relates to values/culture/mission
-                    url_lower = citation.get("url", "").lower()
-                    if any(keyword in url_lower for keyword in ["value", "culture", "mission", "principle", "about"]):
-                        matched_citation = citation
-                        citation_url = citation.get("url", "")
-                        break
+        # STRATEGY 1: Extract from structured lists (most reliable)
+        # Look for numbered or bulleted value lists
+        structured_values = self._extract_structured_values(content, primary_values_url)
+        values.extend(structured_values)
+        print(f"✓ Found {len(structured_values)} values from structured lists")
 
-                # If no specific match, use first citation
-                if not matched_citation and citations:
-                    matched_citation = citations[0]
-                    citation_url = citations[0].get("url", "")
+        # STRATEGY 2: Extract from explicit value statements
+        # Patterns like "Our values are:", "Core principles:", etc.
+        explicit_values = self._extract_explicit_value_statements(content, primary_values_url)
+        values.extend(explicit_values)
+        print(f"✓ Found {len(explicit_values)} values from explicit statements")
 
-                values.append({
-                    "name": value,
-                    "description": f"Mentioned in company research",
-                    "source_snippet": snippet[:150],
-                    "url": citation_url,
-                    "source": "Company Research"
-                })
+        # STRATEGY 3: Search for common company values (existing logic)
+        common_values_found = self._search_common_values(content, primary_values_url)
+        values.extend(common_values_found)
+        print(f"✓ Found {len(common_values_found)} values from common keywords")
 
-        # SECOND: Look for explicit value statements in content
-        lines = content.split("\n")
-        for i, line in enumerate(lines):
-            # Look for value patterns
-            value_patterns = [
-                "value:", "principle:", "we believe", "mission:", "vision:",
-                "core value", "fundamental", "commitment to"
-            ]
-
-            if any(pattern in line.lower() for pattern in value_patterns):
-                # Extract the value name (next 3-5 words after the pattern)
-                for pattern in value_patterns:
-                    if pattern in line.lower():
-                        parts = line.split(pattern, 1)
-                        if len(parts) > 1:
-                            value_text = parts[1].strip().strip(":-*# ")
-                            # Take first sentence or up to 50 chars
-                            value_name = value_text.split(".")[0][:50].strip()
-
-                            if 3 < len(value_name) < 50:
-                                # Match to citation
-                                citation_url = citations[0].get("url", "") if citations else ""
-
-                                values.append({
-                                    "name": value_name,
-                                    "description": "",
-                                    "source_snippet": line[:150],
-                                    "url": citation_url,
-                                    "source": "Company Research"
-                                })
-                        break
+        # STRATEGY 4: Use GPT-4 extraction if we haven't found enough values
+        if len(values) < 3 and content:
+            print("⚠️ Low value count, using GPT-4 extraction fallback...")
+            gpt_values = self._extract_values_with_gpt(content, primary_values_url)
+            values.extend(gpt_values)
+            print(f"✓ GPT-4 extracted {len(gpt_values)} additional values")
 
         # Deduplicate by value name
         seen_values = set()
         unique_values = []
         for value in values:
-            value_key = value["name"].lower()[:30]
-            if value_key not in seen_values:
+            value_key = value["name"].lower().strip()[:40]
+            if value_key not in seen_values and len(value["name"]) > 2:
                 seen_values.add(value_key)
                 unique_values.append(value)
 
-        print(f"✓ Extracted {len(unique_values)} company values")
+        print(f"✅ Final extracted {len(unique_values)} unique company values")
         return unique_values
+
+    def _extract_structured_values(self, content: str, primary_url: str) -> List[Dict]:
+        """Extract values from numbered or bulleted lists"""
+        import re
+
+        values = []
+        lines = content.split("\n")
+
+        # Look for sections that contain value lists
+        in_values_section = False
+
+        for i, line in enumerate(lines):
+            line_lower = line.lower().strip()
+
+            # Detect start of values section
+            if any(keyword in line_lower for keyword in [
+                "our values", "core values", "company values", "guiding principles",
+                "our principles", "what we value", "cultural values", "values are"
+            ]):
+                in_values_section = True
+                print(f"Found values section: {line[:100]}")
+                continue
+
+            # Stop if we hit a new section
+            if in_values_section and line.strip().startswith("#") and i > 0:
+                section_keywords = ["value", "principle", "culture", "mission"]
+                if not any(kw in line_lower for kw in section_keywords):
+                    in_values_section = False
+
+            # Extract from numbered lists: "1. Innovation" or "1) Innovation"
+            numbered_match = re.match(r'^\s*\d+[\.\)]\s+([A-Z][^:\n]{2,50})', line)
+            if numbered_match and in_values_section:
+                value_name = numbered_match.group(1).strip()
+                # Get description (next 1-2 lines if available)
+                description = ""
+                if i + 1 < len(lines) and not re.match(r'^\s*\d+[\.\)]', lines[i + 1]):
+                    description = lines[i + 1].strip()[:200]
+
+                values.append({
+                    "name": value_name,
+                    "description": description,
+                    "source_snippet": f"{value_name}: {description}"[:150],
+                    "url": primary_url,
+                    "source": "Company Values List"
+                })
+
+            # Extract from bulleted lists: "- Innovation" or "* Innovation"
+            bullet_match = re.match(r'^\s*[-\*•]\s+([A-Z][^:\n]{2,50})', line)
+            if bullet_match and in_values_section:
+                value_name = bullet_match.group(1).strip()
+                description = ""
+                if i + 1 < len(lines) and not re.match(r'^\s*[-\*•]', lines[i + 1]):
+                    description = lines[i + 1].strip()[:200]
+
+                values.append({
+                    "name": value_name,
+                    "description": description,
+                    "source_snippet": f"{value_name}: {description}"[:150],
+                    "url": primary_url,
+                    "source": "Company Values List"
+                })
+
+            # Extract from colon format: "Innovation: We embrace..."
+            colon_match = re.match(r'^\s*\**([A-Z][^:\n]{2,40}):\s*(.{10,200})', line)
+            if colon_match and in_values_section:
+                value_name = colon_match.group(1).strip()
+                description = colon_match.group(2).strip()
+
+                values.append({
+                    "name": value_name,
+                    "description": description[:200],
+                    "source_snippet": line[:150],
+                    "url": primary_url,
+                    "source": "Company Values"
+                })
+
+        return values
+
+    def _extract_explicit_value_statements(self, content: str, primary_url: str) -> List[Dict]:
+        """Extract values from explicit statements like 'Our values are X, Y, Z'"""
+        import re
+
+        values = []
+
+        # Patterns for explicit value statements
+        patterns = [
+            r'(?:our|core|company)\s+(?:values|principles)\s+(?:are|include):\s*([^\.]{10,300})',
+            r'(?:we|company)\s+(?:value|believe in|stand for):\s*([^\.]{10,300})',
+            r'(?:guided by|committed to|built on)\s+(?:values|principles)\s+(?:of|like|such as):\s*([^\.]{10,300})',
+        ]
+
+        for pattern in patterns:
+            matches = re.finditer(pattern, content, re.IGNORECASE)
+            for match in matches:
+                value_text = match.group(1).strip()
+
+                # Split by commas or "and" to get individual values
+                # Example: "integrity, innovation, and collaboration"
+                value_parts = re.split(r',\s*(?:and\s+)?|\s+and\s+', value_text)
+
+                for part in value_parts:
+                    part = part.strip().strip('.,;:')
+                    # Capitalize first letter of each word
+                    if 3 < len(part) < 50 and part[0].isupper():
+                        values.append({
+                            "name": part.title(),
+                            "description": f"Stated company value",
+                            "source_snippet": value_text[:150],
+                            "url": primary_url,
+                            "source": "Company Statement"
+                        })
+
+        return values
+
+    def _search_common_values(self, content: str, primary_url: str) -> List[Dict]:
+        """Search for common company values in content (original strategy)"""
+
+        values = []
+
+        # Expanded list of common company values
+        common_values = [
+            # Customer-focused
+            "Customer Obsession", "Customer First", "Customer Centricity", "Customer Focus",
+            # Innovation
+            "Innovation", "Think Big", "Creativity", "Pioneering",
+            # Integrity & Ethics
+            "Integrity", "Honesty", "Trust", "Ethics", "Do the Right Thing",
+            # Excellence
+            "Excellence", "Quality", "High Standards", "Best in Class",
+            # Collaboration
+            "Collaboration", "Teamwork", "Together", "Partnership", "One Team",
+            # Diversity
+            "Diversity", "Inclusion", "Belonging", "Equity",
+            # Accountability
+            "Accountability", "Ownership", "Results-Driven", "Deliver Results",
+            # Respect
+            "Respect", "Dignity", "Empathy",
+            # Transparency
+            "Transparency", "Openness", "Authenticity",
+            # Sustainability
+            "Sustainability", "Environmental Responsibility", "Social Responsibility",
+            # Empowerment
+            "Empowerment", "Enable", "Empower", "Employee First",
+            # Agility
+            "Agility", "Adaptability", "Flexibility", "Resilience",
+            # Learning
+            "Learning", "Growth Mindset", "Continuous Improvement", "Curiosity",
+            # Safety
+            "Safety", "Security", "Safety First",
+            # Impact
+            "Impact", "Make a Difference", "Purpose-Driven",
+            # Speed
+            "Bias for Action", "Move Fast", "Speed", "Urgency",
+            # Other
+            "Passion", "Enthusiasm", "Fun", "Enjoy the Journey"
+        ]
+
+        content_lower = content.lower()
+
+        for value in common_values:
+            if value.lower() in content_lower:
+                # Find context around this value
+                value_index = content_lower.find(value.lower())
+                start = max(0, value_index - 100)
+                end = min(len(content), value_index + 200)
+                snippet = content[start:end].strip()
+
+                # Extract a more meaningful description from the snippet
+                sentences = snippet.split(". ")
+                description = ""
+                for sentence in sentences:
+                    if value.lower() in sentence.lower():
+                        description = sentence.strip()[:200]
+                        break
+
+                values.append({
+                    "name": value,
+                    "description": description if description else "Mentioned in company research",
+                    "source_snippet": snippet[:150],
+                    "url": primary_url,
+                    "source": "Company Research"
+                })
+
+        return values
+
+    def _extract_values_with_gpt(self, content: str, primary_url: str) -> List[Dict]:
+        """Use GPT-4 to extract company values from content as fallback"""
+
+        try:
+            import os
+            from openai import OpenAI
+            import json
+
+            openai_client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+
+            # Truncate content to avoid token limits
+            content_snippet = content[:4000]
+
+            extraction_prompt = f"""Extract the company's core values from this research content.
+
+Research Content:
+{content_snippet}
+
+Extract and return a JSON array of company values. Each value should have:
+- name: The value name (2-5 words, capitalized)
+- description: A brief 1-sentence description of what this value means
+
+Return ONLY a JSON array, no other text. Example format:
+[
+  {{"name": "Customer Obsession", "description": "Putting customers at the center of everything we do"}},
+  {{"name": "Innovation", "description": "Continuously pushing boundaries and embracing new ideas"}}
+]
+
+If no clear values are found, return an empty array: []"""
+
+            response = openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You are an expert at extracting company values from text. Return only valid JSON."},
+                    {"role": "user", "content": extraction_prompt}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.1,
+                max_tokens=1000
+            )
+
+            result_text = response.choices[0].message.content
+
+            # Parse JSON - handle both array and object with "values" key
+            try:
+                parsed = json.loads(result_text)
+
+                # If it's an object with a "values" key, extract that
+                if isinstance(parsed, dict):
+                    if "values" in parsed:
+                        extracted_values = parsed["values"]
+                    else:
+                        # Might be wrapped in another key, try to find an array
+                        for key, value in parsed.items():
+                            if isinstance(value, list):
+                                extracted_values = value
+                                break
+                        else:
+                            extracted_values = []
+                elif isinstance(parsed, list):
+                    extracted_values = parsed
+                else:
+                    extracted_values = []
+
+                # Convert to our format
+                gpt_values = []
+                for value in extracted_values:
+                    if isinstance(value, dict) and "name" in value:
+                        gpt_values.append({
+                            "name": value.get("name", ""),
+                            "description": value.get("description", ""),
+                            "source_snippet": value.get("description", "")[:150],
+                            "url": primary_url,
+                            "source": "AI-Extracted Value"
+                        })
+
+                print(f"✓ GPT-4 extracted {len(gpt_values)} values")
+                return gpt_values
+
+            except json.JSONDecodeError as e:
+                print(f"⚠️ Failed to parse GPT response as JSON: {e}")
+                return []
+
+        except Exception as e:
+            print(f"⚠️ GPT value extraction failed: {e}")
+            return []
 
     def _extract_value_name_from_text(self, text: str, title: str) -> str:
         """Extract value name from citation text or title"""

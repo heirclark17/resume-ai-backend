@@ -13,6 +13,7 @@ from app.services.openai_common_questions import OpenAICommonQuestions
 from app.services.company_research_service import CompanyResearchService
 from app.services.news_aggregator_service import NewsAggregatorService
 from app.services.interview_questions_scraper import InterviewQuestionsScraperService
+from app.services.interview_intelligence_service import InterviewIntelligenceService
 from datetime import datetime
 import json
 
@@ -964,4 +965,233 @@ Location: {job.location or 'Not specified'}
         raise HTTPException(
             status_code=500,
             detail=f"Failed to regenerate question: {str(e)}"
+        )
+
+
+# ============================================================================
+# INTERVIEW INTELLIGENCE ENDPOINTS (Phase 1 - Sales Navigator Features)
+# ============================================================================
+
+
+class ScoreRelevanceRequest(BaseModel):
+    content_items: List[Dict]  # Strategic initiatives or news items
+    job_description: str
+    job_title: str
+    content_type: str = "strategy"  # "strategy" or "news"
+
+
+@router.post("/score-relevance")
+async def score_content_relevance(request: ScoreRelevanceRequest):
+    """
+    Score how relevant company research is to the specific job.
+    Similar to LinkedIn Sales Navigator's Buyer Intent Score.
+
+    Returns content items with:
+    - relevance_score (0-10)
+    - priority (Critical/High/Medium/Context)
+    - why_it_matters
+    - job_alignment
+    - talking_point
+    """
+    try:
+        service = InterviewIntelligenceService()
+
+        scored_items = await service.score_relevance(
+            content_items=request.content_items,
+            job_description=request.job_description,
+            job_title=request.job_title,
+            content_type=request.content_type
+        )
+
+        return {
+            "success": True,
+            "data": {
+                "scored_items": scored_items,
+                "total_items": len(scored_items)
+            }
+        }
+
+    except Exception as e:
+        print(f"Failed to score relevance: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to score relevance: {str(e)}"
+        )
+
+
+class TalkingPointsRequest(BaseModel):
+    content: Dict  # Company research content
+    job_description: str
+    job_title: str
+    company_name: str
+
+
+@router.post("/generate-talking-points")
+async def generate_talking_points(request: TalkingPointsRequest):
+    """
+    Generate actionable talking points for how to use company research in interviews.
+
+    Returns:
+    - how_to_use_in_interview
+    - example_statements
+    - questions_to_ask
+    - dos_and_donts
+    - prep_time_minutes
+    """
+    try:
+        service = InterviewIntelligenceService()
+
+        talking_points = await service.generate_talking_points(
+            content=request.content,
+            job_description=request.job_description,
+            job_title=request.job_title,
+            company_name=request.company_name
+        )
+
+        return {
+            "success": True,
+            "data": talking_points
+        }
+
+    except Exception as e:
+        print(f"Failed to generate talking points: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate talking points: {str(e)}"
+        )
+
+
+class JobAlignmentRequest(BaseModel):
+    company_research: Dict
+    job_description: str
+    job_title: str
+    company_name: str
+
+
+@router.post("/analyze-job-alignment")
+async def analyze_job_alignment(request: JobAlignmentRequest):
+    """
+    Analyze how company research aligns with specific job requirements.
+
+    Returns:
+    - requirement_mapping (list of job requirements matched to company evidence)
+    - overall_alignment_score (0-10)
+    - top_alignment_areas
+    - gaps_to_address
+    - interview_strategy
+    """
+    try:
+        service = InterviewIntelligenceService()
+
+        alignment = await service.analyze_job_alignment(
+            company_research=request.company_research,
+            job_description=request.job_description,
+            job_title=request.job_title,
+            company_name=request.company_name
+        )
+
+        return {
+            "success": True,
+            "data": alignment
+        }
+
+    except Exception as e:
+        print(f"Failed to analyze job alignment: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to analyze job alignment: {str(e)}"
+        )
+
+
+class ReadinessRequest(BaseModel):
+    prep_data: Dict  # Full interview prep data
+    sections_completed: List[str]  # List of section IDs user has reviewed
+
+
+@router.post("/calculate-readiness")
+async def calculate_interview_readiness(request: ReadinessRequest):
+    """
+    Calculate overall interview readiness score.
+    Similar to an aggregate account score showing preparation progress.
+
+    Returns:
+    - readiness_score (0-10)
+    - progress_percentage
+    - time_invested_minutes
+    - critical_gaps
+    - next_actions (prioritized list)
+    - status (Interview Ready, Nearly Ready, etc.)
+    - recommendation
+    """
+    try:
+        service = InterviewIntelligenceService()
+
+        readiness = await service.calculate_interview_readiness(
+            prep_data=request.prep_data,
+            sections_completed=request.sections_completed
+        )
+
+        return {
+            "success": True,
+            "data": readiness
+        }
+
+    except Exception as e:
+        print(f"Failed to calculate readiness: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to calculate readiness: {str(e)}"
+        )
+
+
+class ValuesAlignmentRequest(BaseModel):
+    stated_values: List[Dict]
+    candidate_background: str
+    job_description: str
+    company_name: str
+
+
+@router.post("/values-alignment")
+async def generate_values_alignment(request: ValuesAlignmentRequest):
+    """
+    Generate values alignment scorecard showing culture fit.
+
+    Returns:
+    - overall_culture_fit (0-10)
+    - value_matches (list with match_percentage, evidence, how_to_discuss)
+    - dos_and_donts
+    - top_strengths
+    - areas_to_emphasize
+    - star_story_prompts
+    """
+    try:
+        service = InterviewIntelligenceService()
+
+        alignment = await service.generate_values_alignment_scorecard(
+            stated_values=request.stated_values,
+            candidate_background=request.candidate_background,
+            job_description=request.job_description,
+            company_name=request.company_name
+        )
+
+        return {
+            "success": True,
+            "data": alignment
+        }
+
+    except Exception as e:
+        print(f"Failed to generate values alignment: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate values alignment: {str(e)}"
         )
