@@ -222,17 +222,39 @@ Format your response with clear section headers and bullet points. Include speci
             content = response.choices[0].message.content
 
             # Extract citations from Perplexity response
-            # Perplexity returns citations in the response object
+            # Perplexity's sonar model returns citations as URLs in the response
             citations = []
+
+            # Check for citations in various possible locations
             if hasattr(response, 'citations') and response.citations:
-                citations = [
-                    {
-                        "title": citation.get("title", "Source"),
-                        "url": citation.get("url", ""),
-                        "text": citation.get("text", "")
-                    }
-                    for citation in response.citations
-                ]
+                # Citations might be a list of URLs (strings) or dictionaries
+                for citation in response.citations:
+                    if isinstance(citation, str):
+                        # Citation is just a URL string
+                        citations.append({
+                            "title": "Source",
+                            "url": citation,
+                            "text": ""
+                        })
+                    elif isinstance(citation, dict):
+                        # Citation is a dictionary
+                        citations.append({
+                            "title": citation.get("title", "Source"),
+                            "url": citation.get("url", citation.get("link", "")),
+                            "text": citation.get("text", citation.get("snippet", ""))
+                        })
+
+            # Also check for sources/references in message metadata
+            if hasattr(response.choices[0].message, 'metadata'):
+                metadata = response.choices[0].message.metadata
+                if isinstance(metadata, dict) and 'citations' in metadata:
+                    for citation in metadata.get('citations', []):
+                        if isinstance(citation, str):
+                            citations.append({
+                                "title": "Source",
+                                "url": citation,
+                                "text": ""
+                            })
 
             print(f"✓ Perplexity research completed: {len(citations)} citations found")
 
