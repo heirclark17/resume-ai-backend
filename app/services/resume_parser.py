@@ -385,8 +385,16 @@ IMPORTANT:
             # Transform experience format to match expected structure
             experience_transformed = []
             for job in parsed_data.get('experience', []):
+                # Format header with comma instead of en-dash for better compatibility
+                title = job.get('title', '')
+                company = job.get('company', '')
+                if title and company:
+                    header = f"{title}, {company}"
+                else:
+                    header = title or company or ''
+
                 experience_transformed.append({
-                    'header': f"{job.get('title', '')} – {job.get('company', '')}",
+                    'header': header,
                     'location': job.get('location', ''),
                     'dates': job.get('dates', ''),
                     'bullets': job.get('bullets', [])
