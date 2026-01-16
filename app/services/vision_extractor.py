@@ -67,15 +67,16 @@ class VisionJobExtractor:
             }
 
             try:
+                # aiohttp follows redirects by default, but let's be explicit
                 async with aiohttp.ClientSession() as session:
-                    async with session.get(api_url, params=params, timeout=30) as response:
+                    async with session.get(api_url, params=params, timeout=45, allow_redirects=True) as response:
                         if response.status == 200:
                             screenshot_bytes = await response.read()
                             screenshot_b64 = base64.b64encode(screenshot_bytes).decode('utf-8')
-                            print(f"✓ Screenshot captured via API ({len(screenshot_bytes)} bytes)")
+                            print(f"Screenshot captured via API ({len(screenshot_bytes)} bytes)")
                             return screenshot_b64, False  # False = it's a screenshot, not text
                         else:
-                            print(f"Screenshot API error: {response.status}")
+                            print(f"Screenshot API error: {response.status} - {await response.text()}")
             except Exception as e:
                 print(f"Screenshot API failed: {e}")
 
