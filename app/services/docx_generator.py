@@ -4,6 +4,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 import os
+import re
 from datetime import datetime
 from app.config import get_settings
 
@@ -165,8 +166,9 @@ class DOCXGenerator:
 
             # Bullets
             for bullet in exp.get('bullets', []):
-                # Skip empty bullets and separator characters
-                if bullet and bullet.strip() and bullet.strip() not in ['|', '/', '•', '-', '–']:
+                # Skip empty bullets and bullets containing only separators/whitespace
+                # This regex catches any combination of whitespace and separator characters
+                if bullet and bullet.strip() and not re.match(r'^[\s\|\/•\-–—]+$', bullet.strip()):
                     bullet_para = doc.add_paragraph(bullet, style='List Bullet')
                     bullet_para.paragraph_format.line_spacing = 1.15
                     bullet_para.paragraph_format.space_after = Pt(6)

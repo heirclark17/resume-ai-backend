@@ -130,8 +130,9 @@ class ResumeExportService:
                     # Add bullet points
                     if exp.get('bullets'):
                         for bullet in exp['bullets']:
-                            # Skip empty bullets and bullets that are just separators
-                            if bullet and bullet.strip() and bullet.strip() not in ['|', '/', '•', '-']:
+                            # Skip empty bullets and bullets containing only separators/whitespace
+                            # This regex catches any combination of whitespace and separator characters
+                            if bullet and bullet.strip() and not re.match(r'^[\s\|\/•\-–—]+$', bullet.strip()):
                                 doc.add_paragraph(bullet, style='List Bullet')
 
                     doc.add_paragraph()  # Spacer between jobs
@@ -269,8 +270,9 @@ class ResumeExportService:
                     # Bullets
                     if exp.get('bullets'):
                         for bullet in exp['bullets']:
-                            # Skip empty bullets and bullets that are just separators
-                            if bullet and bullet.strip() and bullet.strip() not in ['|', '/', '•', '-']:
+                            # Skip empty bullets and bullets containing only separators/whitespace
+                            # This regex catches any combination of whitespace and separator characters
+                            if bullet and bullet.strip() and not re.match(r'^[\s\|\/•\-–—]+$', bullet.strip()):
                                 bullet_text = f"• {bullet}"
                                 elements.append(Paragraph(bullet_text, body_style))
 

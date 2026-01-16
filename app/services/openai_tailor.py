@@ -2,6 +2,7 @@ from openai import OpenAI
 from app.config import get_settings
 import json
 import os
+import re
 
 settings = get_settings()
 
@@ -226,10 +227,11 @@ Return ONLY a valid JSON object with this structure:
                 # Clean up experience bullets - remove separator characters
                 for exp in tailored.get('experience', []):
                     if 'bullets' in exp and isinstance(exp['bullets'], list):
-                        # Filter out empty bullets and separator characters
+                        # Filter out empty bullets and bullets containing only separators/whitespace
+                        # This regex catches any combination of whitespace and separator characters
                         exp['bullets'] = [
                             bullet for bullet in exp['bullets']
-                            if bullet and bullet.strip() and bullet.strip() not in ['|', '/', '•', '-', '–', '—']
+                            if bullet and bullet.strip() and not re.match(r'^[\s\|\/•\-–—]+$', bullet.strip())
                         ]
 
                 return tailored
@@ -243,9 +245,10 @@ Return ONLY a valid JSON object with this structure:
                 for exp in base_resume.get('experience', []):
                     if isinstance(exp, dict) and 'bullets' in exp:
                         cleaned_exp = exp.copy()
+                        # Filter out empty bullets and bullets containing only separators/whitespace
                         cleaned_exp['bullets'] = [
                             bullet for bullet in exp.get('bullets', [])
-                            if bullet and bullet.strip() and bullet.strip() not in ['|', '/', '•', '-', '–', '—']
+                            if bullet and bullet.strip() and not re.match(r'^[\s\|\/•\-–—]+$', bullet.strip())
                         ]
                         cleaned_experience.append(cleaned_exp)
                     else:
