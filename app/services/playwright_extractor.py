@@ -58,7 +58,7 @@ class PlaywrightJobExtractor:
                     # This works for LinkedIn, Indeed, and many company career pages
                     structured_data = await self._extract_structured_data(page)
                     if structured_data and structured_data.get('company') and structured_data.get('title'):
-                        print(f"[Playwright] ✓ Using structured data (JSON-LD): {structured_data['company']} - {structured_data['title']}")
+                        print(f"[Playwright] SUCCESS: Using structured data (JSON-LD): {structured_data['company']} - {structured_data['title']}")
                         await browser.close()
                         return structured_data
 
@@ -84,6 +84,11 @@ class PlaywrightJobExtractor:
                     print(f"[Playwright] Extraction error: {e}")
                     await browser.close()
                     raise Exception(f"Failed to extract job details: {str(e)}")
+
+        except Exception as e:
+            # Catch any unexpected errors from the entire extraction process
+            print(f"[Playwright] Unexpected error: {e}")
+            raise Exception(f"Playwright extraction failed: {str(e)}")
 
     async def _extract_structured_data(self, page) -> Optional[Dict[str, str]]:
         """
