@@ -8,6 +8,7 @@ from typing import Dict, Optional
 import asyncio
 import re
 import os
+import json
 
 
 class PlaywrightJobExtractor:
@@ -53,7 +54,15 @@ class PlaywrightJobExtractor:
                     # Get page title for fallback
                     page_title = await page.title()
 
-                    # Extract job details using multiple strategies
+                    # PRIORITY 0: Try structured data extraction (Schema.org JSON-LD)
+                    # This works for LinkedIn, Indeed, and many company career pages
+                    structured_data = await self._extract_structured_data(page)
+                    if structured_data and structured_data.get('company') and structured_data.get('title'):
+                        print(f"[Playwright] ✓ Using structured data (JSON-LD): {structured_data['company']} - {structured_data['title']}")
+                        await browser.close()
+                        return structured_data
+
+                    # Fallback: Extract job details using multiple DOM strategies
                     job_data = {
                         "company": await self._extract_company(page, url),
                         "title": await self._extract_title(page, page_title),
@@ -75,6 +84,146 @@ class PlaywrightJobExtractor:
                     print(f"[Playwright] Extraction error: {e}")
                     await browser.close()
                     raise Exception(f"Failed to extract job details: {str(e)}")
+
+    async def _extract_structured_data(self, page) -> Optional[Dict[str, str]]:
+        """
+        Extract job details from Schema.org JSON-LD structured data
+
+        Many job sites use structured data for SEO/Google for Jobs.
+        This is the most reliable extraction method when available.
+
+        Supports: LinkedIn, Indeed, Greenhouse, many company career pages
+        """
+        try:
+            # Find all JSON-LD script tags
+            scripts = await page.query_selector_all('script[type="application/ld+json"]')
+
+            for script in scripts:
+                try:
+                    content = await script.inner_text()
+                    data = json.loads(content)
+
+                    # Handle both single object and array of objects
+                    if isinstance(data, list):
+                        # Find JobPosting in array
+                        data = next((item for item in data if item.get('@type') == 'JobPosting'), None)
+
+                    # Check if this is a JobPosting schema
+                    if isinstance(data, dict) and data.get('@type') == 'JobPosting':
+                        # Extract structured data
+                        company = self._extract_company_from_schema(data)
+                        title = data.get('title', '')
+                        description = data.get('description', '')
+                        location = self._extract_location_from_schema(data)
+                        salary = self._extract_salary_from_schema(data)
+
+                        # Only return if we got company and title (required fields)
+                        if company and title:
+                            return {
+                                'company': company,
+                                'title': title,
+                                'description': description or '',
+                                'location': location or '',
+                                'salary': salary or '',
+                            }
+
+                except (json.JSONDecodeError, KeyError, TypeError) as e:
+                    # This script tag didn't contain valid JobPosting data
+                    continue
+
+            return None
+
+        except Exception as e:
+            print(f"[Playwright] Structured data extraction failed: {e}")
+            return None
+
+    def _extract_company_from_schema(self, data: dict) -> str:
+        """Extract company name from JobPosting schema"""
+        hiring_org = data.get('hiringOrganization', {})
+
+        if isinstance(hiring_org, dict):
+            # Try name field first
+            company = hiring_org.get('name', '')
+            if company:
+                return company.strip()
+
+            # Some sites use @name instead
+            company = hiring_org.get('@name', '')
+            if company:
+                return company.strip()
+
+        # Fallback: check if hiringOrganization is just a string
+        if isinstance(hiring_org, str):
+            return hiring_org.strip()
+
+        return ''
+
+    def _extract_location_from_schema(self, data: dict) -> str:
+        """Extract location from JobPosting schema"""
+        job_location = data.get('jobLocation', {})
+
+        if isinstance(job_location, dict):
+            address = job_location.get('address', {})
+
+            if isinstance(address, dict):
+                # Build location string from address components
+                city = address.get('addressLocality', '')
+                state = address.get('addressRegion', '')
+                country = address.get('addressCountry', '')
+
+                parts = [p for p in [city, state, country] if p]
+                if parts:
+                    return ', '.join(parts)
+
+            # Fallback: check for name field (e.g., "Remote")
+            if address:
+                return str(address)
+
+        # Some sites use simple string for location
+        if isinstance(job_location, str):
+            return job_location
+
+        return ''
+
+    def _extract_salary_from_schema(self, data: dict) -> str:
+        """Extract salary from JobPosting schema"""
+        base_salary = data.get('baseSalary', {})
+
+        if isinstance(base_salary, dict):
+            value = base_salary.get('value', {})
+            currency = base_salary.get('currency', '$')
+
+            if isinstance(value, dict):
+                # Handle range (minValue, maxValue)
+                min_val = value.get('minValue')
+                max_val = value.get('maxValue')
+
+                if min_val and max_val:
+                    # Format as range
+                    try:
+                        min_val = int(float(min_val))
+                        max_val = int(float(max_val))
+                        return f"{currency}{min_val:,} - {currency}{max_val:,}"
+                    except (ValueError, TypeError):
+                        return f"{currency}{min_val} - {currency}{max_val}"
+
+                # Handle single value
+                if min_val:
+                    try:
+                        min_val = int(float(min_val))
+                        return f"{currency}{min_val:,}"
+                    except (ValueError, TypeError):
+                        return f"{currency}{min_val}"
+
+            # Some sites use simple value field
+            elif isinstance(value, (int, float)):
+                try:
+                    value = int(float(value))
+                    return f"{currency}{value:,}"
+                except (ValueError, TypeError):
+                    return f"{currency}{value}"
+
+        return ''
 
     async def _extract_company(self, page, url: str) -> str:
         """Extract company name from page"""
