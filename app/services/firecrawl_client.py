@@ -250,7 +250,7 @@ Do not include any other text, only the JSON."""
             }
 
             print(f"✓ Final extracted data: {result['company']} - {result['title']}")
-            return result
+            return await self.validate_extraction_result(result, job_url)
 
         except ImportError:
             print("WARNING: Firecrawl package not installed. Install with: pip install firecrawl-py")
@@ -270,7 +270,7 @@ Do not include any other text, only the JSON."""
                 playwright_result = await extractor.extract_job_details(job_url)
 
                 print(f"✓ Playwright extraction succeeded: {playwright_result['company']} - {playwright_result['title']}")
-                return playwright_result
+                return await self.validate_extraction_result(playwright_result, job_url)
 
             except Exception as playwright_error:
                 print(f"Playwright extraction also failed: {playwright_error}")
@@ -284,7 +284,7 @@ Do not include any other text, only the JSON."""
                     vision_result = await vision_extractor.extract_from_url(job_url)
 
                     print(f"✓ Vision extraction succeeded: {vision_result['company']} - {vision_result['title']}")
-                    return vision_result
+                    return await self.validate_extraction_result(vision_result, job_url)
 
                 except Exception as vision_error:
                     print(f"Vision extraction also failed: {vision_error}")
@@ -296,3 +296,39 @@ Do not include any other text, only the JSON."""
                         f"Vision extraction failed: {str(vision_error)}. "
                         f"Please provide company name and job title manually."
                     )
+
+    # CRITICAL VALIDATION: Apply to ALL extraction paths (Firecrawl, Playwright, Vision)
+    # This validation must happen AFTER all fallback methods complete
+    async def validate_extraction_result(self, result: Dict[str, str], job_url: str) -> Dict[str, str]:
+        """
+        Validate that required fields (company, title) are present in extraction result
+        Applies to all extraction methods: Firecrawl, Playwright, Vision
+
+        Args:
+            result: Extraction result dict
+            job_url: Original job URL (for error messages)
+
+        Returns:
+            Validated result dict
+
+        Raises:
+            ValueError: If company or title is missing/invalid
+        """
+        company = result.get('company', '').strip()
+        title = result.get('title', '').strip()
+
+        # Validate company
+        if not company or company == 'Unknown Company':
+            raise ValueError(
+                f"Could not extract company name from job URL: {job_url}. "
+                "Please provide the company name manually using the 'company' field."
+            )
+
+        # Validate title
+        if not title or title == 'Unknown Position':
+            raise ValueError(
+                f"Could not extract job title from job URL: {job_url}. "
+                "Please provide the job title manually using the 'jobTitle' field."
+            )
+
+        return result
