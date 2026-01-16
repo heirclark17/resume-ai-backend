@@ -165,9 +165,11 @@ class DOCXGenerator:
 
             # Bullets
             for bullet in exp.get('bullets', []):
-                bullet_para = doc.add_paragraph(bullet, style='List Bullet')
-                bullet_para.paragraph_format.line_spacing = 1.15
-                bullet_para.paragraph_format.space_after = Pt(6)
+                # Skip empty bullets and separator characters
+                if bullet and bullet.strip() and bullet.strip() not in ['|', '/', '•', '-', '–']:
+                    bullet_para = doc.add_paragraph(bullet, style='List Bullet')
+                    bullet_para.paragraph_format.line_spacing = 1.15
+                    bullet_para.paragraph_format.space_after = Pt(6)
 
             doc.add_paragraph()  # Spacing between jobs
 
