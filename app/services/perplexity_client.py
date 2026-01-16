@@ -201,6 +201,7 @@ Format your response with clear section headers and bullet points. Include speci
 
         try:
             # Use Perplexity's sonar model for web search with citations
+            # Note: Perplexity automatically returns citations in the response
             response = self.client.chat.completions.create(
                 model="llama-3.1-sonar-large-128k-online",
                 messages=[
@@ -214,9 +215,7 @@ Format your response with clear section headers and bullet points. Include speci
                     }
                 ],
                 temperature=0.2,
-                max_tokens=2000,
-                return_citations=True,  # Request citations
-                return_related_questions=False
+                max_tokens=2000
             )
 
             content = response.choices[0].message.content
