@@ -10,6 +10,7 @@
 [deploy]
   # Set environment variables for Playwright
   # PLAYWRIGHT_BROWSERS_PATH is set to use Railway's persistent storage
+  # Railway expands $PORT when using railway.toml startCommand
   startCommand = "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
 
   # Restart policy

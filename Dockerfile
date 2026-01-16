@@ -16,6 +16,5 @@ COPY . .
 # Expose port
 EXPOSE 8000
 
-# Run the application (Railway sets $PORT dynamically)
-# Use shell form to allow environment variable expansion
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# No CMD - railway.toml startCommand will be used instead
+# This allows Railway to properly expand $PORT environment variable
