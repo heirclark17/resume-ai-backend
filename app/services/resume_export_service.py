@@ -116,16 +116,19 @@ class ResumeExportService:
                         job_title_run.font.size = Pt(11)
                         job_title_run.font.bold = True
 
-                    # Add company/location/dates line
-                    company_para = doc.add_paragraph()
+                    # Add company/location/dates line (only if not empty)
                     if 'header' in exp:
                         # Just location and dates for header format
                         company_text = f"{exp.get('location', '')} | {exp.get('dates', '')}"
                     else:
                         # Full company, location, dates for split format
                         company_text = f"{exp.get('company', '')} | {exp.get('location', '')} | {exp.get('dates', '')}"
-                    company_run = company_para.add_run(company_text)
-                    company_run.font.italic = True
+
+                    # Only add paragraph if company_text is not just separators/whitespace
+                    if company_text and not re.match(r'^[\s\|\/•\-–—]+$', company_text):
+                        company_para = doc.add_paragraph()
+                        company_run = company_para.add_run(company_text)
+                        company_run.font.italic = True
 
                     # Add bullet points
                     if exp.get('bullets'):
