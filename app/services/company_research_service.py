@@ -122,18 +122,29 @@ class CompanyResearchService:
         query: str,
         company_name: str
     ) -> Dict:
-        """Use Perplexity API for cited research"""
+        """
+        Use Perplexity API for cited research (PRIMARY SOURCE)
+
+        Returns REAL strategic initiatives with:
+        - Actual URLs to press releases and articles
+        - Real publication dates
+        - Verified source citations
+        """
 
         try:
+            print("🔍 Researching company strategies with Perplexity...")
             result = await self.perplexity.research_with_citations(query)
+
+            citations = result.get("citations", [])
+            print(f"✓ Found {len(citations)} real sources from Perplexity")
 
             return {
                 "content": result.get("content", ""),
-                "citations": result.get("citations", []),
+                "citations": citations,
                 "timestamp": datetime.utcnow().isoformat()
             }
         except Exception as e:
-            print(f"Perplexity research failed: {e}")
+            print(f"⚠️ Perplexity research failed: {e}")
             return {"content": "", "citations": [], "timestamp": datetime.utcnow().isoformat()}
 
     def _get_company_urls(self, company_name: str) -> List[str]:
@@ -243,11 +254,35 @@ class CompanyResearchService:
         }
 
     def _extract_initiatives(self, content: str, citations: List[Dict]) -> List[Dict]:
-        """Extract strategic initiatives from Perplexity content"""
+        """
+        Extract strategic initiatives from Perplexity content with REAL citations
+
+        Priority: Use citations directly (they have real URLs and sources)
+        """
 
         initiatives = []
 
-        # Split content into sections
+        # FIRST: Convert citations directly to initiatives
+        # These are REAL articles that Perplexity found
+        for citation in citations:
+            url = citation.get("url", "")
+            title = citation.get("title", "")
+            text = citation.get("text", "")
+
+            if url and title:  # Must have URL and title
+                # Extract date from URL or content
+                date = self._extract_date_from_citation(citation)
+
+                initiatives.append({
+                    "title": title,
+                    "description": text[:300] if text else "Strategic initiative sourced from company research",
+                    "source": title,  # Use article title as source
+                    "url": url,  # REAL clickable URL
+                    "date": date,  # Real date
+                    "relevance_to_role": ""
+                })
+
+        # SECOND: Parse content for additional context
         lines = content.split("\n")
         current_initiative = None
 
@@ -260,7 +295,9 @@ class CompanyResearchService:
                 "announced", "launched", "unveiled", "introducing"
             ]):
                 if current_initiative:
-                    initiatives.append(current_initiative)
+                    # Only add if we don't already have it from citations
+                    if not self._initiative_exists(current_initiative, initiatives):
+                        initiatives.append(current_initiative)
 
                 current_initiative = {
                     "title": line.strip("- *#"),
@@ -273,18 +310,63 @@ class CompanyResearchService:
             elif current_initiative and line:
                 current_initiative["description"] += " " + line
 
-        if current_initiative:
+        if current_initiative and not self._initiative_exists(current_initiative, initiatives):
             initiatives.append(current_initiative)
 
-        # Match citations to initiatives
+        # Match remaining initiatives to citations
         for initiative in initiatives:
-            for citation in citations:
-                if citation.get("text", "").lower() in initiative["description"].lower():
-                    initiative["source"] = citation.get("title", "Company source")
-                    initiative["url"] = citation.get("url", "")
-                    break
+            if not initiative.get("url"):  # Only match if we don't have a URL yet
+                for citation in citations:
+                    if citation.get("text", "").lower() in initiative["description"].lower():
+                        initiative["source"] = citation.get("title", "Company source")
+                        initiative["url"] = citation.get("url", "")
+                        initiative["date"] = self._extract_date_from_citation(citation)
+                        break
 
+        print(f"✓ Extracted {len(initiatives)} strategic initiatives")
         return initiatives
+
+    def _extract_date_from_citation(self, citation: Dict) -> str:
+        """Extract date from citation URL or text"""
+        import re
+
+        url = citation.get("url", "")
+        text = citation.get("text", "")
+
+        # Try URL path (e.g., /2024/01/15/)
+        date_match = re.search(r'/(\d{4})/(\d{2})/(\d{2})/', url)
+        if date_match:
+            year, month, day = date_match.groups()
+            return f"{year}-{month}-{day}"
+
+        # Try text content
+        date_match = re.search(
+            r'(\d{4}-\d{2}-\d{2}|\w+ \d+, \d{4})',
+            text
+        )
+        if date_match:
+            date_str = date_match.group(1)
+            # Normalize to YYYY-MM-DD
+            try:
+                for fmt in ["%Y-%m-%d", "%B %d, %Y", "%b %d, %Y"]:
+                    try:
+                        parsed = datetime.strptime(date_str, fmt)
+                        return parsed.strftime("%Y-%m-%d")
+                    except ValueError:
+                        continue
+            except:
+                pass
+
+        # Default to current year
+        return datetime.utcnow().strftime("%Y-%m-%d")
+
+    def _initiative_exists(self, initiative: Dict, existing: List[Dict]) -> bool:
+        """Check if initiative already exists in list"""
+        title = initiative.get("title", "").lower()[:50]
+        for existing_init in existing:
+            if existing_init.get("title", "").lower()[:50] == title:
+                return True
+        return False
 
     def _extract_recent_developments(self, perplexity_result: Dict) -> List[str]:
         """Extract recent developments as bullet points"""

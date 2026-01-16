@@ -141,20 +141,53 @@ class NewsAggregatorService:
         query: str,
         company_name: str
     ) -> List[Dict]:
-        """Search for news using Perplexity"""
+        """
+        Search for news using Perplexity (PRIMARY SOURCE)
+
+        Returns REAL articles with:
+        - Actual URLs users can click
+        - Real publication dates
+        - Real source names (Bloomberg, Reuters, etc.)
+        """
 
         try:
+            print("🔍 Searching Perplexity for real news articles...")
             result = await self.perplexity.research_with_citations(query)
 
-            articles = self._parse_news_from_perplexity(
+            # Extract citations first (these are REAL articles)
+            citations = result.get("citations", [])
+            print(f"✓ Found {len(citations)} real articles from Perplexity")
+
+            # Convert citations to article format
+            articles = []
+            for citation in citations:
+                if citation.get("url"):  # Must have a real URL
+                    articles.append({
+                        "title": citation.get("title", "Article"),
+                        "summary": citation.get("text", "")[:300],
+                        "source": self._extract_source_name(citation.get("url", "")),
+                        "url": citation.get("url", ""),
+                        "published_date": self._extract_date_from_url_or_content(citation),
+                        "relevance_score": 7,  # Perplexity citations are highly relevant
+                        "category": "news",
+                        "impact_summary": ""
+                    })
+
+            # Also parse content for additional context
+            content_articles = self._parse_news_from_perplexity(
                 result.get("content", ""),
-                result.get("citations", [])
+                citations
             )
 
-            return articles
+            # Combine and deduplicate
+            all_articles = articles + content_articles
+            unique_articles = self._deduplicate_by_url(all_articles)
+
+            print(f"✓ Processed {len(unique_articles)} unique news articles")
+            return unique_articles
 
         except Exception as e:
-            print(f"Perplexity news search failed: {e}")
+            print(f"⚠️ Perplexity news search failed: {e}")
             return []
 
     def _parse_news_from_perplexity(
@@ -486,6 +519,49 @@ class NewsAggregatorService:
             return "security"
         else:
             return "general"
+
+    def _extract_date_from_url_or_content(self, citation: Dict) -> str:
+        """
+        Extract publication date from citation URL or content
+
+        Many URLs contain dates (e.g., /2024/01/15/article-name)
+        """
+
+        url = citation.get("url", "")
+        text = citation.get("text", "")
+
+        # Try to extract from URL path
+        date_match = re.search(r'/(\d{4})/(\d{2})/(\d{2})/', url)
+        if date_match:
+            year, month, day = date_match.groups()
+            return f"{year}-{month}-{day}"
+
+        # Try to extract from citation text
+        date_match = re.search(
+            r'(\d{4}-\d{2}-\d{2}|\w+ \d+, \d{4}|\d{1,2}/\d{1,2}/\d{4})',
+            text
+        )
+        if date_match:
+            return self._normalize_date(date_match.group(1))
+
+        # Default to current date
+        return datetime.utcnow().strftime("%Y-%m-%d")
+
+    def _deduplicate_by_url(self, articles: List[Dict]) -> List[Dict]:
+        """Remove duplicate articles by URL"""
+
+        seen_urls = set()
+        unique = []
+
+        for article in articles:
+            url = article.get("url", "")
+            if url and url not in seen_urls:
+                seen_urls.add(url)
+                unique.append(article)
+            elif not url:  # Keep articles without URLs (shouldn't happen with Perplexity)
+                unique.append(article)
+
+        return unique
 
     def _get_fallback_news(self, company_name: str) -> Dict:
         """Fallback data if news aggregation fails"""

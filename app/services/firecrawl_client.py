@@ -297,6 +297,61 @@ Do not include any other text, only the JSON."""
                         f"Please provide company name and job title manually."
                     )
 
+    async def scrape_page(self, url: str, formats: List[str] = None) -> str:
+        """
+        Scrape a page using Firecrawl and return content in requested format
+
+        Args:
+            url: URL to scrape
+            formats: List of formats to return (e.g., ["markdown", "html"])
+
+        Returns:
+            Scraped content as string (markdown by default)
+        """
+        if formats is None:
+            formats = ["markdown"]
+
+        try:
+            from firecrawl import FirecrawlApp
+            import os
+            import asyncio
+
+            firecrawl_api_key = os.getenv('FIRECRAWL_API_KEY', '')
+
+            if not firecrawl_api_key:
+                raise ValueError("FIRECRAWL_API_KEY not found")
+
+            app = FirecrawlApp(api_key=firecrawl_api_key)
+
+            print(f"Scraping page: {url}")
+
+            # Use Firecrawl v2 scrape API
+            scrape_result = await asyncio.to_thread(
+                app.scrape,
+                url,
+                formats=formats,
+                only_main_content=True,
+                timeout=30000
+            )
+
+            # Extract content based on requested format
+            if "markdown" in formats and hasattr(scrape_result, 'markdown'):
+                return scrape_result.markdown or ""
+            elif "html" in formats and hasattr(scrape_result, 'html'):
+                return scrape_result.html or ""
+            else:
+                # Try to get any available content
+                if hasattr(scrape_result, 'markdown'):
+                    return scrape_result.markdown or ""
+                elif hasattr(scrape_result, 'html'):
+                    return scrape_result.html or ""
+                else:
+                    return ""
+
+        except Exception as e:
+            print(f"Failed to scrape {url}: {e}")
+            return ""
+
     # CRITICAL VALIDATION: Apply to ALL extraction paths (Firecrawl, Playwright, Vision)
     # This validation must happen AFTER all fallback methods complete
     async def validate_extraction_result(self, result: Dict[str, str], job_url: str) -> Dict[str, str]:

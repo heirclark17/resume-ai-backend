@@ -160,6 +160,97 @@ Format your response with clear section headers and bullet points. Include speci
                 "error": str(e)
             }
 
+    async def research_with_citations(self, query: str) -> dict:
+        """
+        Research a topic using Perplexity AI with citations
+
+        This is the PRIMARY method for getting real company data.
+        Returns web-sourced research with actual URLs, dates, and sources.
+
+        Args:
+            query: Research question or prompt
+
+        Returns:
+            {
+                "content": str,  # Research findings
+                "citations": [   # Real articles with URLs
+                    {
+                        "title": "Article title",
+                        "url": "https://...",
+                        "text": "Excerpt from source"
+                    }
+                ],
+                "timestamp": str
+            }
+        """
+
+        # TEST MODE: Return mock citations
+        if settings.test_mode:
+            print(f"[TEST MODE] Simulating Perplexity research with citations")
+            return {
+                "content": f"Research findings for: {query[:100]}...\n\nMock research results with citations.",
+                "citations": [
+                    {
+                        "title": "Example Article 1",
+                        "url": "https://example.com/article1",
+                        "text": "Sample citation text"
+                    }
+                ],
+                "timestamp": "2026-01-16T00:00:00Z"
+            }
+
+        try:
+            # Use Perplexity's sonar model for web search with citations
+            response = self.client.chat.completions.create(
+                model="llama-3.1-sonar-large-128k-online",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a research assistant. Provide detailed, factual information with specific sources and dates. Always cite your sources."
+                    },
+                    {
+                        "role": "user",
+                        "content": query
+                    }
+                ],
+                temperature=0.2,
+                max_tokens=2000,
+                return_citations=True,  # Request citations
+                return_related_questions=False
+            )
+
+            content = response.choices[0].message.content
+
+            # Extract citations from Perplexity response
+            # Perplexity returns citations in the response object
+            citations = []
+            if hasattr(response, 'citations') and response.citations:
+                citations = [
+                    {
+                        "title": citation.get("title", "Source"),
+                        "url": citation.get("url", ""),
+                        "text": citation.get("text", "")
+                    }
+                    for citation in response.citations
+                ]
+
+            print(f"✓ Perplexity research completed: {len(citations)} citations found")
+
+            return {
+                "content": content,
+                "citations": citations,
+                "timestamp": response.created if hasattr(response, 'created') else None
+            }
+
+        except Exception as e:
+            print(f"Perplexity research_with_citations error: {str(e)}")
+            return {
+                "content": "",
+                "citations": [],
+                "timestamp": None,
+                "error": str(e)
+            }
+
     async def analyze_job_posting(self, job_url: str = None, job_description: str = None) -> dict:
         """
         Analyze a job posting to extract key requirements
