@@ -534,38 +534,35 @@ class CompanyResearchService:
     ) -> str:
         """Build Perplexity query for values and culture research"""
 
-        query = f"""Research {company_name} company values, culture, and work environment:
+        query = f"""Research {company_name} company values, culture, and work environment FROM OFFICIAL COMPANY SOURCES ONLY:
 
 1. **Core Company Values (with sources and URLs):**
-   - Official mission statement
-   - Stated company values and principles
-   - Cultural priorities or pillars
-   - What the company emphasizes in their culture
+   - Official mission statement from company website
+   - Stated company values and principles from About page
+   - Cultural priorities or pillars from Careers page
+   - What the company emphasizes in their official communications
 
-2. **Work Environment & Culture:**
-   - Work-life balance policies
-   - Remote/hybrid work approach
-   - Diversity, equity, and inclusion initiatives
-   - Employee development and growth opportunities
-   - Benefits and perks that reflect their values
+2. **Work Environment & Culture (Official Sources Only):**
+   - Work-life balance policies stated on company website
+   - Remote/hybrid work approach from official careers page
+   - Diversity, equity, and inclusion initiatives from company DEI page
+   - Employee development programs from official benefits page
+   - Benefits and perks listed on company careers site
 
-3. **Cultural Manifestations:**
-   - How values show up in day-to-day work
-   - Leadership style and decision-making
-   - Team collaboration approaches
-   - Recognition and rewards philosophy
+3. **Leadership Statements & Company Communications:**
+   - CEO or leadership quotes about company culture
+   - Official company blog posts about values
+   - Press releases mentioning company culture
+   - Annual reports discussing workplace culture
 
-4. **Employee Perspectives:**
-   - What current/former employees say about the culture
-   - Glassdoor or Built In ratings if available
-   - Common themes in employee reviews
-
-**Requirements:**
-- Cite specific sources (careers page, about page, employee reviews, news articles)
+**CRITICAL REQUIREMENTS:**
+- USE ONLY OFFICIAL COMPANY SOURCES (company website, careers page, about page, official blog)
+- DO NOT USE third-party review sites (Glassdoor, Built In, Indeed, etc.)
+- DO NOT USE employee review platforms
+- Cite specific URLs from company's official domains only
 - Include URLs for all information
-- Focus on official sources first (company website, careers page)
-- Include employee perspectives from review sites
-- Provide exact quotes for stated values"""
+- Provide exact quotes for stated values directly from company sources
+- Prioritize company's own words about their culture and values"""
 
         if industry:
             query += f"\n- Industry context: {industry}"
@@ -574,6 +571,76 @@ class CompanyResearchService:
             query += f"\n- Relate findings to: {job_title} role expectations"
 
         return query
+
+    def _is_official_company_source(self, url: str, company_name: str) -> bool:
+        """
+        Check if URL is from an official company source (not third-party reviews)
+
+        Returns True only if URL is from:
+        - Company's own domain
+        - Company's official blog/careers/about pages
+
+        Returns False for:
+        - Glassdoor, Indeed, Built In, Comparably
+        - Other review sites
+        - Generic news sites (unless it's company's official newsroom)
+        """
+        if not url:
+            return False
+
+        url_lower = url.lower()
+
+        # BLOCKLIST: Third-party review and rating sites
+        blocked_domains = [
+            'glassdoor.com',
+            'indeed.com',
+            'builtin.com',
+            'comparably.com',
+            'kununu.com',
+            'vault.com',
+            'fairygodboss.com',
+            'inhersight.com',
+            'theladders.com',
+            'zippia.com',
+            'careerbliss.com',
+            'salary.com',
+            'payscale.com'
+        ]
+
+        # Reject if from blocked domains
+        if any(blocked in url_lower for blocked in blocked_domains):
+            return False
+
+        # ALLOWLIST: Check if URL contains company name or known company domains
+        company_slug = company_name.lower().replace(" ", "").replace("&", "and")
+        company_keywords = [
+            company_slug,
+            company_name.lower().replace(" ", "-"),
+            company_name.lower().split()[0]  # First word of company name
+        ]
+
+        # Accept if URL contains company name in domain
+        if any(keyword in url_lower for keyword in company_keywords):
+            return True
+
+        # Accept known official company pages for specific companies
+        special_allowlist = {
+            'jpmorgan': ['jpmorganchase.com', 'jpmorgan.com', 'chase.com'],
+            'oracle': ['oracle.com'],
+            'microsoft': ['microsoft.com'],
+            'amazon': ['amazon.com', 'aboutamazon.com', 'amazon.jobs'],
+            'google': ['google.com', 'alphabet.com'],
+            'meta': ['meta.com', 'facebook.com'],
+            'apple': ['apple.com'],
+        }
+
+        company_key = company_name.lower().split()[0]
+        if company_key in special_allowlist:
+            if any(domain in url_lower for domain in special_allowlist[company_key]):
+                return True
+
+        # If we can't confirm it's official, reject it
+        return False
 
     def _get_company_values_urls(self, company_name: str) -> List[str]:
         """Get likely URLs for company values and culture pages"""
@@ -616,7 +683,8 @@ class CompanyResearchService:
         # Extract values from Perplexity citations and content
         stated_values = self._extract_values(
             perplexity_result.get("content", ""),
-            perplexity_result.get("citations", [])
+            perplexity_result.get("citations", []),
+            company_name  # Pass company name for source filtering
         )
 
         # Add values from direct sources
@@ -644,7 +712,7 @@ class CompanyResearchService:
             "company_name": company_name
         }
 
-    def _extract_values(self, content: str, citations: List[Dict]) -> List[Dict]:
+    def _extract_values(self, content: str, citations: List[Dict], company_name: str) -> List[Dict]:
         """
         Extract company values from Perplexity content with citations
 
@@ -653,6 +721,13 @@ class CompanyResearchService:
         2. Pattern matching for value statements
         3. Common value keywords
         4. GPT-4 extraction fallback
+
+        ONLY uses citations from official company sources (not review sites)
+
+        Args:
+            content: Text content from Perplexity
+            citations: List of citations from Perplexity
+            company_name: Name of the company (for source filtering)
         """
         import re
 
@@ -660,7 +735,25 @@ class CompanyResearchService:
 
         print(f"Extracting values from {len(content)} chars of content with {len(citations)} citations")
 
-        # Get primary citation URL for values
+        # FILTER: Only use citations from official company sources
+        official_citations = []
+
+        for citation in citations:
+            url = citation.get("url", "")
+
+            # Check if this is an official company source
+            if self._is_official_company_source(url, company_name):
+                official_citations.append(citation)
+                print(f"✓ Using official source: {url[:80]}")
+            else:
+                print(f"✗ Skipping third-party source: {url[:80]}")
+
+        print(f"Filtered to {len(official_citations)} official company sources (from {len(citations)} total)")
+
+        # Use only official citations
+        citations = official_citations
+
+        # Get primary citation URL for values (from official sources only)
         primary_values_url = ""
         for citation in citations:
             url_lower = citation.get("url", "").lower()
