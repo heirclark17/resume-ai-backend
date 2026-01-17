@@ -1,6 +1,6 @@
 """
 Career Path Synthesis Service
-Uses OpenAI with STRICT structured outputs to generate complete career plans
+Uses Perplexity AI for web-grounded, thoroughly researched career plans with real data
 Includes schema validation and JSON repair
 """
 from typing import Dict, Any, Optional
@@ -15,6 +15,9 @@ from app.schemas.career_plan import (
     ValidationResult,
     ValidationError as SchemaValidationError
 )
+from app.config import get_settings
+
+settings = get_settings()
 
 
 class CareerPathSynthesisService:
@@ -23,9 +26,13 @@ class CareerPathSynthesisService:
     """
 
     def __init__(self):
-        self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        # Use gpt-4.1-mini - 2026 model optimized for structured output and cost-efficiency
-        self.model = os.getenv("CAREER_PATH_MODEL", os.getenv("OPENAI_MODEL", "gpt-4.1-mini"))
+        # Use Perplexity AI for web-grounded research and real data
+        self.client = OpenAI(
+            api_key=settings.perplexity_api_key,
+            base_url="https://api.perplexity.ai"
+        )
+        # Use sonar model - Perplexity's research-focused model with web search
+        self.model = "sonar"
 
     async def generate_career_plan(
         self,
@@ -171,7 +178,20 @@ class CareerPathSynthesisService:
 {json.dumps(sources[:10], indent=2) if sources else "None"}
 
 # YOUR TASK
-Generate a complete career plan JSON object matching this EXACT schema:
+
+STEP 1: RESEARCH THE WEB
+Before generating the plan, search the web for:
+1. Current job market data for {intake.target_role_interest or "the suggested roles"}
+2. Real salary ranges from job postings in {intake.location} (check LinkedIn, Indeed, Glassdoor)
+3. Actual skills required in recent job postings (last 30 days)
+4. Real companies actively hiring for these roles
+5. Current industry trends and demand (BLS data, tech blogs, industry reports)
+6. Actual bridge roles that companies use as stepping stones
+7. Real networking events in {intake.location} happening in 2025-2026
+
+STEP 2: USE REAL DATA IN YOUR RESPONSE
+Generate a complete career plan JSON object using ACTUAL data from your web search.
+Match this EXACT schema:
 
 {{
   "generated_at": "2026-01-16T12:00:00Z",
@@ -180,11 +200,11 @@ Generate a complete career plan JSON object matching this EXACT schema:
 
   "target_roles": [
     {{
-      "title": "Specific Job Title",
-      "why_aligned": "How user's background maps to this role",
-      "growth_outlook": "Job market data",
-      "salary_range": "$XX,XXX - $XX,XXX",
-      "typical_requirements": ["req1", "req2", "req3"],
+      "title": "Specific Job Title (from real job postings)",
+      "why_aligned": "How user's background maps to this role based on actual requirements",
+      "growth_outlook": "REAL DATA: e.g., '23% growth 2024-2034 per BLS, 15,000+ current openings on LinkedIn'",
+      "salary_range": "ACTUAL RANGE: e.g., '$95,000 - $135,000 based on 50+ {intake.location} postings on Indeed/Glassdoor'",
+      "typical_requirements": ["Real skill from job postings", "Another actual requirement", "Certification companies mention"],
       "bridge_roles": [
         {{
           "title": "Bridge Role Title",
@@ -347,20 +367,32 @@ Generate the plan now:"""
         return prompt
 
     def _get_system_prompt(self) -> str:
-        """System prompt for OpenAI"""
+        """System prompt for Perplexity AI"""
 
-        return """You are an expert career transition coach and strategist.
-You help professionals successfully transition to new career paths by:
-- Analyzing transferable skills from their current background
-- Identifying gaps and creating realistic learning plans
-- Recommending certifications, education, and hands-on experience
-- Building timelines that fit their constraints
-- Crafting resume assets aligned to their target role
+        return """You are an expert career transition research analyst with real-time web access.
 
-You ALWAYS return valid JSON matching the exact schema provided.
-You NEVER invent URLs - only use URLs from verified research data.
-You prioritize practical, actionable advice over theoretical concepts.
-You ensure all recommendations are realistic given the user's time and budget constraints."""
+CRITICAL REQUIREMENTS:
+1. SEARCH THE WEB for current, factual data about job markets, salaries, skills, and career paths
+2. Use ACTUAL job postings, salary data, and labor market statistics from 2025-2026
+3. Cite REAL sources - include URLs from authoritative websites (LinkedIn, Glassdoor, BLS, Indeed, company career pages)
+4. Provide SPECIFIC numbers: actual salary ranges, real job growth percentages, current market demand
+5. Reference REAL certifications with current costs and official links
+6. Find ACTUAL companies hiring for these roles with real requirements
+
+You help professionals successfully transition by providing:
+- Web-researched analysis of transferable skills based on current job market
+- Gap analysis using real job posting requirements from major employers
+- Current certifications that employers are actually requiring (with official URLs)
+- Real education programs and bootcamps with current pricing
+- Actual networking events and conferences happening in 2025-2026
+- Realistic timelines based on current market data
+
+You MUST:
+- Return valid JSON matching the exact schema provided
+- Use ONLY real URLs from your web search (no invented links)
+- Include current market data (salary ranges from 2025-2026, not outdated info)
+- Base recommendations on ACTUAL job postings and employer requirements
+- Provide thorough, well-researched answers grounded in real-world data"""
 
     def _validate_plan(self, plan_data: Dict[str, Any]) -> ValidationResult:
         """
