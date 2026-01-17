@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
+from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
 from typing import List, Optional, Dict
 from app.database import get_db
@@ -1230,7 +1231,9 @@ async def generate_practice_questions(
             raise HTTPException(status_code=404, detail="Interview prep not found")
 
         result = await db.execute(
-            select(TailoredResume).where(
+            select(TailoredResume)
+            .options(selectinload(TailoredResume.job))
+            .where(
                 TailoredResume.id == interview_prep.tailored_resume_id,
                 TailoredResume.is_deleted == False
             )
@@ -1251,7 +1254,7 @@ async def generate_practice_questions(
 
         job_description = ""
         if tailored_resume.job:
-            job_description = tailored_resume.job.get("description", "")
+            job_description = tailored_resume.job.description or ""
 
         service = PracticeQuestionsService()
         questions = service.generate_job_specific_questions(
@@ -1310,7 +1313,9 @@ async def generate_star_story(
             raise HTTPException(status_code=404, detail="Interview prep not found")
 
         result = await db.execute(
-            select(TailoredResume).where(
+            select(TailoredResume)
+            .options(selectinload(TailoredResume.job))
+            .where(
                 TailoredResume.id == interview_prep.tailored_resume_id,
                 TailoredResume.is_deleted == False
             )
@@ -1320,7 +1325,7 @@ async def generate_star_story(
         if not tailored_resume:
             raise HTTPException(status_code=404, detail="Tailored resume not found")
 
-        candidate_background = tailored_resume.summary or ""
+        candidate_background = tailored_resume.tailored_summary or tailored_resume.summary or ""
 
         prep_data = interview_prep.prep_data
         role_analysis = prep_data.get("role_analysis", {})
@@ -1328,7 +1333,7 @@ async def generate_star_story(
 
         job_description = ""
         if tailored_resume.job:
-            job_description = tailored_resume.job.get("description", "")
+            job_description = tailored_resume.job.description or ""
 
         service = PracticeQuestionsService()
         star_story = service.generate_star_story(
