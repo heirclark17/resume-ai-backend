@@ -14,6 +14,8 @@ from app.services.company_research_service import CompanyResearchService
 from app.services.news_aggregator_service import NewsAggregatorService
 from app.services.interview_questions_scraper import InterviewQuestionsScraperService
 from app.services.interview_intelligence_service import InterviewIntelligenceService
+from app.services.practice_questions_service import PracticeQuestionsService
+from app.models.practice_question_response import PracticeQuestionResponse
 from datetime import datetime
 import json
 
@@ -1194,4 +1196,311 @@ async def generate_values_alignment(request: ValuesAlignmentRequest):
         raise HTTPException(
             status_code=500,
             detail=f"Failed to generate values alignment: {str(e)}"
+        )
+
+
+# ============================================================================
+# PRACTICE QUESTIONS - JOB-SPECIFIC WITH AI-GENERATED STAR STORIES
+# ============================================================================
+
+class GeneratePracticeQuestionsRequest(BaseModel):
+    interview_prep_id: int
+    num_questions: int = 10
+
+
+@router.post("/generate-practice-questions")
+async def generate_practice_questions(
+    request: GeneratePracticeQuestionsRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Generate job-specific practice questions based on job description responsibilities.
+    Returns: List of tailored questions with category, difficulty, why_asked, key_skills_tested
+    """
+    try:
+        result = await db.execute(
+            select(InterviewPrep).where(
+                InterviewPrep.id == request.interview_prep_id,
+                InterviewPrep.is_deleted == False
+            )
+        )
+        interview_prep = result.scalar_one_or_none()
+
+        if not interview_prep:
+            raise HTTPException(status_code=404, detail="Interview prep not found")
+
+        result = await db.execute(
+            select(TailoredResume).where(
+                TailoredResume.id == interview_prep.tailored_resume_id,
+                TailoredResume.is_deleted == False
+            )
+        )
+        tailored_resume = result.scalar_one_or_none()
+
+        if not tailored_resume:
+            raise HTTPException(status_code=404, detail="Tailored resume not found")
+
+        prep_data = interview_prep.prep_data
+        role_analysis = prep_data.get("role_analysis", {})
+        company_profile = prep_data.get("company_profile", {})
+
+        job_title = role_analysis.get("job_title", "")
+        core_responsibilities = role_analysis.get("core_responsibilities", [])
+        must_have_skills = role_analysis.get("must_have_skills", [])
+        company_name = company_profile.get("name", "")
+
+        job_description = ""
+        if tailored_resume.job:
+            job_description = tailored_resume.job.get("description", "")
+
+        service = PracticeQuestionsService()
+        questions = service.generate_job_specific_questions(
+            job_description=job_description,
+            job_title=job_title,
+            core_responsibilities=core_responsibilities,
+            must_have_skills=must_have_skills,
+            company_name=company_name,
+            num_questions=request.num_questions
+        )
+
+        return {
+            "success": True,
+            "data": {
+                "questions": questions,
+                "job_title": job_title,
+                "company_name": company_name,
+                "total_questions": len(questions)
+            }
+        }
+
+    except Exception as e:
+        print(f"Failed to generate practice questions: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate practice questions: {str(e)}"
+        )
+
+
+class GenerateStarStoryRequest(BaseModel):
+    interview_prep_id: int
+    question: str
+
+
+@router.post("/generate-star-story")
+async def generate_star_story(
+    request: GenerateStarStoryRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Generate an AI-powered STAR story to answer a specific interview question.
+    Returns: STAR story with Situation, Task, Action, Result
+    """
+    try:
+        result = await db.execute(
+            select(InterviewPrep).where(
+                InterviewPrep.id == request.interview_prep_id,
+                InterviewPrep.is_deleted == False
+            )
+        )
+        interview_prep = result.scalar_one_or_none()
+
+        if not interview_prep:
+            raise HTTPException(status_code=404, detail="Interview prep not found")
+
+        result = await db.execute(
+            select(TailoredResume).where(
+                TailoredResume.id == interview_prep.tailored_resume_id,
+                TailoredResume.is_deleted == False
+            )
+        )
+        tailored_resume = result.scalar_one_or_none()
+
+        if not tailored_resume:
+            raise HTTPException(status_code=404, detail="Tailored resume not found")
+
+        candidate_background = tailored_resume.summary or ""
+
+        prep_data = interview_prep.prep_data
+        role_analysis = prep_data.get("role_analysis", {})
+        job_title = role_analysis.get("job_title", "")
+
+        job_description = ""
+        if tailored_resume.job:
+            job_description = tailored_resume.job.get("description", "")
+
+        service = PracticeQuestionsService()
+        star_story = service.generate_star_story(
+            question=request.question,
+            candidate_background=candidate_background,
+            job_description=job_description,
+            job_title=job_title
+        )
+
+        return {
+            "success": True,
+            "data": {
+                "star_story": star_story,
+                "question": request.question
+            }
+        }
+
+    except Exception as e:
+        print(f"Failed to generate STAR story: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate STAR story: {str(e)}"
+        )
+
+
+class SavePracticeResponseRequest(BaseModel):
+    interview_prep_id: int
+    question_text: str
+    question_category: Optional[str] = None
+    star_story: Optional[Dict] = None
+    audio_recording_url: Optional[str] = None
+    video_recording_url: Optional[str] = None
+    written_answer: Optional[str] = None
+    practice_duration_seconds: Optional[int] = None
+
+
+@router.post("/save-practice-response")
+async def save_practice_response(
+    request: SavePracticeResponseRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Save or update a practice question response with recordings and STAR story.
+    Returns: Saved response ID
+    """
+    try:
+        result = await db.execute(
+            select(PracticeQuestionResponse).where(
+                and_(
+                    PracticeQuestionResponse.interview_prep_id == request.interview_prep_id,
+                    PracticeQuestionResponse.question_text == request.question_text,
+                    PracticeQuestionResponse.is_deleted == False
+                )
+            )
+        )
+        existing_response = result.scalar_one_or_none()
+
+        if existing_response:
+            if request.star_story:
+                existing_response.star_story = request.star_story
+            if request.audio_recording_url:
+                existing_response.audio_recording_url = request.audio_recording_url
+            if request.video_recording_url:
+                existing_response.video_recording_url = request.video_recording_url
+            if request.written_answer is not None:
+                existing_response.written_answer = request.written_answer
+            if request.practice_duration_seconds:
+                existing_response.practice_duration_seconds = request.practice_duration_seconds
+
+            existing_response.times_practiced += 1
+            existing_response.last_practiced_at = datetime.utcnow()
+            existing_response.updated_at = datetime.utcnow()
+
+            await db.commit()
+            await db.refresh(existing_response)
+
+            return {
+                "success": True,
+                "data": {
+                    "id": existing_response.id,
+                    "times_practiced": existing_response.times_practiced,
+                    "message": "Practice response updated successfully"
+                }
+            }
+        else:
+            new_response = PracticeQuestionResponse(
+                interview_prep_id=request.interview_prep_id,
+                question_text=request.question_text,
+                question_category=request.question_category,
+                star_story=request.star_story,
+                audio_recording_url=request.audio_recording_url,
+                video_recording_url=request.video_recording_url,
+                written_answer=request.written_answer,
+                practice_duration_seconds=request.practice_duration_seconds,
+                times_practiced=1,
+                last_practiced_at=datetime.utcnow()
+            )
+
+            db.add(new_response)
+            await db.commit()
+            await db.refresh(new_response)
+
+            return {
+                "success": True,
+                "data": {
+                    "id": new_response.id,
+                    "times_practiced": 1,
+                    "message": "Practice response saved successfully"
+                }
+            }
+
+    except Exception as e:
+        await db.rollback()
+        print(f"Failed to save practice response: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to save practice response: {str(e)}"
+        )
+
+
+@router.get("/practice-responses/{interview_prep_id}")
+async def get_practice_responses(
+    interview_prep_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get all practice responses for an interview prep.
+    Returns: List of all practice responses with recordings and STAR stories
+    """
+    try:
+        result = await db.execute(
+            select(PracticeQuestionResponse).where(
+                and_(
+                    PracticeQuestionResponse.interview_prep_id == interview_prep_id,
+                    PracticeQuestionResponse.is_deleted == False
+                )
+            ).order_by(PracticeQuestionResponse.last_practiced_at.desc())
+        )
+        responses = result.scalars().all()
+
+        return {
+            "success": True,
+            "data": {
+                "responses": [
+                    {
+                        "id": r.id,
+                        "question_text": r.question_text,
+                        "question_category": r.question_category,
+                        "star_story": r.star_story,
+                        "audio_recording_url": r.audio_recording_url,
+                        "video_recording_url": r.video_recording_url,
+                        "written_answer": r.written_answer,
+                        "practice_duration_seconds": r.practice_duration_seconds,
+                        "times_practiced": r.times_practiced,
+                        "last_practiced_at": r.last_practiced_at.isoformat() if r.last_practiced_at else None,
+                        "created_at": r.created_at.isoformat()
+                    }
+                    for r in responses
+                ],
+                "total_responses": len(responses)
+            }
+        }
+
+    except Exception as e:
+        print(f"Failed to get practice responses: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get practice responses: {str(e)}"
         )

@@ -6,6 +6,7 @@ from app.models.company import CompanyResearch
 from app.models.interview_prep import InterviewPrep
 from app.models.star_story import StarStory
 from app.models.saved_comparison import SavedComparison, TailoredResumeEdit
+from app.models.practice_question_response import PracticeQuestionResponse
 
 __all__ = [
     "User",
@@ -17,4 +18,5 @@ __all__ = [
     "StarStory",
     "SavedComparison",
     "TailoredResumeEdit",
+    "PracticeQuestionResponse",
 ]
