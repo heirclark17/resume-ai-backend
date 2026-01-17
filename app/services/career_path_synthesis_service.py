@@ -27,12 +27,25 @@ class CareerPathSynthesisService:
 
     def __init__(self):
         # Use Perplexity AI for web-grounded research and real data
-        self.client = OpenAI(
-            api_key=settings.perplexity_api_key,
-            base_url="https://api.perplexity.ai"
-        )
-        # Use sonar model - Perplexity's research-focused model with web search
-        self.model = "sonar"
+        if not settings.perplexity_api_key:
+            if not settings.test_mode:
+                raise ValueError(
+                    "PERPLEXITY_API_KEY not found. Please set it in Railway environment variables, "
+                    "or set TEST_MODE=true to use mock data. "
+                    "Railway dashboard -> Variables -> Add Variable -> PERPLEXITY_API_KEY"
+                )
+            else:
+                # TEST MODE: Don't initialize client, will use mock data
+                self.client = None
+                self.model = "test"
+                print("[TEST MODE] CareerPathSynthesisService using mock data")
+        else:
+            self.client = OpenAI(
+                api_key=settings.perplexity_api_key,
+                base_url="https://api.perplexity.ai"
+            )
+            # Use sonar model - Perplexity's research-focused model with web search
+            self.model = "sonar"
 
     async def generate_career_plan(
         self,
@@ -51,6 +64,11 @@ class CareerPathSynthesisService:
         """
 
         print(f"📝 Generating career plan for {intake.current_role_title} -> {intake.target_role_interest or 'TBD'}")
+
+        # TEST MODE: Return mock career plan
+        if settings.test_mode or self.client is None:
+            print("[TEST MODE] Returning mock career plan")
+            return await self._generate_mock_plan(intake)
 
         # Build synthesis prompt
         prompt = self._build_synthesis_prompt(intake, research_data)
@@ -541,3 +559,157 @@ Return the fixed JSON now:"""
                 "success": False,
                 "error": f"Repair exception: {str(e)}"
             }
+
+    async def _generate_mock_plan(self, intake: IntakeRequest) -> Dict[str, Any]:
+        """Generate a mock career plan for testing when Perplexity API is unavailable"""
+        from datetime import datetime, timedelta
+
+        target_role = intake.target_role_interest or "Senior Professional"
+        location = intake.location or "Remote"
+
+        mock_plan = {
+            "generated_at": datetime.utcnow().isoformat() + "Z",
+            "version": "1.0",
+            "profile_summary": f"Professional transitioning from {intake.current_role_title or 'current role'} to {target_role} with {intake.years_experience or 5}+ years of experience. This is TEST MODE data.",
+
+            "target_roles": [
+                {
+                    "title": target_role,
+                    "why_aligned": f"Your background in {intake.current_role_title or 'your field'} provides strong foundation for this role.",
+                    "growth_outlook": "[TEST MODE] 15% projected growth through 2030 based on market analysis",
+                    "salary_range": f"[TEST MODE] $85,000 - $135,000 in {location}",
+                    "typical_requirements": [
+                        f"{intake.years_experience or 5}+ years relevant experience",
+                        "Strong communication skills",
+                        "Industry certifications preferred"
+                    ]
+                }
+            ],
+
+            "skills_analysis": {
+                "already_have": [
+                    {
+                        "skill": skill,
+                        "how_it_transfers": f"Your {skill} experience applies directly to {target_role}",
+                        "evidence_from_background": f"Demonstrated through {intake.years_experience or 5}+ years in field"
+                    }
+                    for skill in (intake.skills_have[:3] if intake.skills_have else ["Problem Solving", "Communication", "Leadership"])
+                ],
+                "need_to_build": [
+                    {
+                        "skill": "Advanced Technical Skills",
+                        "why_important": "Required for senior-level responsibilities",
+                        "how_to_acquire": "Take online courses and earn certifications",
+                        "timeline_weeks": 12
+                    }
+                ],
+                "gaps_analysis": f"[TEST MODE] Based on your background in {intake.current_role_title or 'your field'}, focus on building advanced technical skills and industry-specific knowledge."
+            },
+
+            "certifications": [
+                {
+                    "name": "Industry-Standard Professional Certification",
+                    "level": "intermediate",
+                    "prerequisites": ["1-2 years experience"],
+                    "est_study_weeks": 12,
+                    "est_cost_range": "$300-$600",
+                    "official_links": ["https://example.com/certification"],
+                    "what_it_unlocks": "Industry credibility and career advancement",
+                    "alternatives": []
+                }
+            ],
+
+            "education_options": [
+                {
+                    "type": "online-course",
+                    "name": "Professional Development Program",
+                    "duration": "12-16 weeks",
+                    "cost_range": "$500-$2000",
+                    "format": "online",
+                    "official_link": "https://example.com/program",
+                    "pros": ["Flexible schedule", "Industry-recognized", "Practical skills"],
+                    "cons": ["Requires self-discipline", "No degree credit"]
+                }
+            ],
+
+            "experience_plan": [
+                {
+                    "project_type": "Professional Development Project",
+                    "what_to_build": f"Build a project demonstrating {target_role} skills",
+                    "skills_demonstrated": intake.skills_have[:3] if intake.skills_have else ["Leadership", "Technical Skills"],
+                    "timeline_weeks": 8,
+                    "portfolio_worthy": True,
+                    "resume_bullet": f"[TEST MODE] Led professional development project demonstrating {target_role} competencies"
+                }
+            ],
+
+            "bridge_roles": [
+                {
+                    "title": f"Mid-Level {target_role}",
+                    "why_stepping_stone": "Provides pathway to senior role",
+                    "typical_duration": "1-2 years",
+                    "key_experiences_to_gain": ["Advanced technical skills", "Leadership experience"]
+                }
+            ],
+
+            "events": [
+                {
+                    "name": "Industry Professional Conference",
+                    "type": "conference",
+                    "date_or_season": "Annual - Check website",
+                    "location": location,
+                    "price_range": "$200-$500",
+                    "beginner_friendly": True,
+                    "why_attend": "Network with industry professionals and learn latest trends",
+                    "registration_link": "https://example.com/event"
+                }
+            ],
+
+            "timeline": {
+                "milestones": [
+                    {
+                        "phase": "Foundation Building",
+                        "start_month": 1,
+                        "end_month": 3,
+                        "deliverables": ["Complete foundational certification", "Build initial portfolio project"]
+                    },
+                    {
+                        "phase": "Skill Development",
+                        "start_month": 4,
+                        "end_month": 8,
+                        "deliverables": ["Advanced training", "Professional networking"]
+                    },
+                    {
+                        "phase": "Job Search",
+                        "start_month": 9,
+                        "end_month": 12,
+                        "deliverables": ["Resume optimization", "Interview preparation", "Job applications"]
+                    }
+                ],
+                "total_months": 12,
+                "notes": "[TEST MODE] This is a mock timeline for testing purposes"
+            },
+
+            "resume_assets": {
+                "summary": f"[TEST MODE] Experienced {intake.current_role_title or 'professional'} with {intake.years_experience or 5}+ years transitioning to {target_role}. Proven track record of success.",
+                "skills_section": intake.skills_have[:8] if intake.skills_have else ["Leadership", "Communication", "Problem Solving", "Technical Skills", "Project Management"],
+                "target_role_bullets": [
+                    f"[TEST MODE] Led {intake.current_role_title or 'professional'} initiatives",
+                    "[TEST MODE] Achieved measurable results through strategic planning",
+                    "[TEST MODE] Collaborated with cross-functional teams"
+                ],
+                "keywords_for_ats": [target_role] + (intake.skills_have[:5] if intake.skills_have else ["Leadership", "Management", "Strategy"])
+            },
+
+            "research_sources": [
+                "https://example.com/source1",
+                "https://example.com/source2"
+            ]
+        }
+
+        return {
+            "success": True,
+            "plan": mock_plan,
+            "validation": ValidationResult(valid=True, errors=[]),
+            "test_mode": True
+        }
