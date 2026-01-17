@@ -332,12 +332,12 @@ Generate a complete career plan JSON object matching this EXACT schema:
 
 # CRITICAL REQUIREMENTS
 1. ONLY use URLs that appear in the research data - NEVER invent URLs
-2. Ensure every array has minimum items (target_roles: 1+, already_have skills: 3+, etc.)
+2. Ensure every array has minimum items (target_roles: 1+, already_have skills: 1+, events: 1+, experience: 1+)
 3. Make timeline realistic given {intake.time_per_week} hours/week
 4. Sequence certifications logically with clear prerequisites
-5. Resume bullets must be achievement-focused with measurable outcomes
-6. Profile summary must be 150-500 characters
-7. Resume summary must be 100-1000 characters
+5. Resume bullets must be achievement-focused with measurable outcomes (minimum 3 bullets)
+6. Profile summary must be 50-500 characters
+7. Resume summary must be 50-1000 characters
 8. Timeline must have 10-14 weekly tasks and 5-7 monthly phases (typically 12 weeks and 6 months)
 9. If target_role_interest is empty, suggest 3-6 aligned roles based on user background
 10. Return ONLY valid JSON - no markdown, no extra text

@@ -76,7 +76,7 @@ class GapSkill(BaseModel):
 
 class SkillsAnalysis(BaseModel):
     """Complete skills breakdown"""
-    already_have: List[TransferableSkill] = Field(..., min_items=3)
+    already_have: List[TransferableSkill] = Field(..., min_items=1)  # Reduced from 3 to 1
     can_reframe: List[ReframableSkill] = Field(default_factory=list)
     need_to_build: List[GapSkill] = Field(..., min_items=1)
 
@@ -164,10 +164,10 @@ class Timeline(BaseModel):
 class ResumeAssets(BaseModel):
     """AI-generated resume content aligned to the plan"""
     headline: str = Field(..., max_length=200)
-    summary: str = Field(..., min_length=100, max_length=1000)
-    skills_section: List[str] = Field(..., min_items=8, max_items=20)
-    target_role_bullets: List[str] = Field(..., min_items=6, max_items=10, description="Achievement bullets")
-    keywords_for_ats: List[str] = Field(..., min_items=10)
+    summary: str = Field(..., min_length=50, max_length=1000)  # Reduced from 100 to 50
+    skills_section: List[str] = Field(..., min_items=5, max_items=20)  # Reduced from 8 to 5
+    target_role_bullets: List[str] = Field(..., min_items=3, max_items=10, description="Achievement bullets")  # Reduced from 6 to 3
+    keywords_for_ats: List[str] = Field(..., min_items=5)  # Reduced from 10 to 5
 
 
 # ========== Complete Career Plan Schema ==========
@@ -178,18 +178,18 @@ class CareerPlan(BaseModel):
     version: str = Field(default="1.0")
 
     # Core sections
-    profile_summary: str = Field(..., min_length=100, max_length=500)
+    profile_summary: str = Field(..., min_length=50, max_length=500)  # Reduced from 100 to 50
     target_roles: List[TargetRole] = Field(..., min_items=1, max_items=6)
     skills_analysis: SkillsAnalysis
     certification_path: List[Certification] = Field(..., min_items=1, max_items=8)
     education_options: List[EducationOption] = Field(..., min_items=1, max_items=5)
-    experience_plan: List[ExperienceProject] = Field(..., min_items=2, max_items=10)
-    events: List[Event] = Field(..., min_items=3, max_items=15)
+    experience_plan: List[ExperienceProject] = Field(..., min_items=1, max_items=10)  # Reduced from 2 to 1
+    events: List[Event] = Field(..., min_items=1, max_items=15)  # Reduced from 3 to 1
     timeline: Timeline
     resume_assets: ResumeAssets
 
     # Source tracking
-    research_sources: List[str] = Field(..., min_items=3, description="All web-grounded sources")
+    research_sources: List[str] = Field(..., min_items=1, description="All web-grounded sources")  # Reduced from 3 to 1
 
 
 # ========== API Request/Response Schemas ==========
