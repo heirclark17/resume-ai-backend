@@ -280,19 +280,52 @@ Match this EXACT schema:
   }},
 
   "certification_path": [
-    USE THE VERIFIED CERT DATA FROM RESEARCH.
-    Sequence them logically (foundation -> intermediate -> advanced).
-    Include prerequisites, cost, study time, official links.
+    SEARCH THE WEB for ACTUAL certifications with COMPLETE study materials.
+    Sequence logically (foundation -> intermediate -> advanced).
+
+    For EACH certification, provide:
     {{
-      "name": "Exact cert name",
+      "name": "EXACT certification name from official body",
+      "certifying_body": "e.g., CompTIA, AWS, Microsoft, ISC2, Google, etc.",
       "level": "foundation|intermediate|advanced",
-      "prerequisites": [],
+      "prerequisites": ["List any prerequisite certs or experience"],
       "est_study_weeks": 12,
-      "est_cost_range": "$300-$600",
-      "official_links": ["USE VERIFIED URLs from research"],
-      "what_it_unlocks": "What this enables",
-      "alternatives": [],
-      "source_citations": ["url"]
+      "est_cost_range": "$XXX-$YYY (search official pricing)",
+      "exam_details": {{
+        "exam_code": "e.g., SAA-C03, 200-301, AZ-104",
+        "passing_score": "e.g., 720/1000, 70%, 825/900",
+        "duration_minutes": 130,
+        "num_questions": 65,
+        "question_types": "multiple choice, multiple response, etc."
+      }},
+      "official_links": ["Official cert page URL", "Exam registration URL"],
+      "what_it_unlocks": "Specific career doors this opens",
+      "alternatives": ["Alternative cert names that serve similar purpose"],
+      "study_materials": [
+        {{
+          "type": "official-course|book|video-series|practice-exams|hands-on-labs",
+          "title": "EXACT title from provider",
+          "provider": "Official body, Udemy, Pluralsight, O'Reilly, A Cloud Guru, etc.",
+          "url": "DIRECT link to resource (NO affiliate links)",
+          "cost": "Free|$XX.XX|Included in subscription",
+          "duration": "XX hours|XXX pages|XX practice exams",
+          "description": "50-200 word description of what this resource covers and why it's valuable",
+          "recommended_order": 1
+        }},
+        // Minimum 3-5 study materials per certification in recommended learning order:
+        // 1. Official training (if available)
+        // 2. Top-rated video course (Udemy, Pluralsight, etc.)
+        // 3. Recommended book (O'Reilly, official study guide)
+        // 4. Practice exams (Whizlabs, Tutorials Dojo, official practice tests)
+        // 5. Hands-on labs (if applicable)
+      ],
+      "study_plan_weeks": [
+        {{"week": 1, "focus": "Module 1: Fundamentals", "resources": "Official course chapters 1-3", "practice": "Quiz 1"}},
+        {{"week": 2, "focus": "Module 2: Core concepts", "resources": "Video course sections 4-6", "practice": "Hands-on lab 1"}},
+        // ...continue for est_study_weeks
+        {{"week": 12, "focus": "Final review and exam", "resources": "Practice exams", "practice": "Full mock exam"}}
+      ],
+      "source_citations": ["All URLs where you found this data"]
     }}
   ],
 
@@ -313,33 +346,102 @@ Match this EXACT schema:
   ],
 
   "experience_plan": [
-    Portfolio projects, volunteer work, labs, side projects.
-    Minimum 2, maximum 10.
+    Portfolio projects, volunteer work, labs, side projects with DETAILED TECH STACKS.
+    Minimum 1, maximum 10. Provide 2-5 high-impact projects.
+
+    For EACH project, provide EXTREME technical detail:
     {{
       "type": "portfolio|volunteer|lab|side-project|freelance",
-      "title": "Project title",
-      "description": "What to build/do",
-      "skills_demonstrated": ["skill1", "skill2"],
-      "time_commitment": "X hours/week for Y weeks",
-      "how_to_showcase": "How to present on resume/LinkedIn",
-      "example_resources": ["url1", "url2"]
+      "title": "Clear, professional project title",
+      "description": "100-300 words: What it does, why it's valuable for the target role, what problems it solves",
+      "skills_demonstrated": ["skill1", "skill2", "skill3", "skill4", "skill5"],
+      "detailed_tech_stack": [
+        {{
+          "name": "e.g., React 18, PostgreSQL, AWS Lambda",
+          "category": "Frontend Framework|Backend|Database|Cloud Service|DevOps Tool|etc.",
+          "why_this_tech": "50-150 words explaining WHY this specific technology is valuable for the target role. What employers look for with this tech. How it's used in production environments. Why it's industry-standard.",
+          "learning_resources": [
+            "Official documentation URL",
+            "Top-rated course/tutorial URL",
+            "Best practices guide URL",
+            "Example GitHub repos"
+          ]
+        }},
+        // Include 5-15 technologies covering:
+        // - Frontend (if applicable)
+        // - Backend/API
+        // - Database
+        // - Cloud/Infrastructure
+        // - DevOps/CI-CD
+        // - Testing
+        // - Security
+        // - Monitoring/Logging
+      ],
+      "architecture_overview": "100-200 words explaining the technical architecture: How components interact, data flow patterns, deployment architecture, why this architecture is industry-standard for this type of project",
+      "difficulty_level": "beginner|intermediate|advanced",
+      "step_by_step_guide": [
+        "1. Set up development environment (specific tools needed)",
+        "2. Create project structure and initial configuration",
+        "3. Build core functionality (specific features)",
+        "4. Implement authentication/authorization",
+        "5. Add database and data persistence",
+        "6. Create API endpoints or services",
+        "7. Build UI/frontend (if applicable)",
+        "8. Add testing (unit, integration)",
+        "9. Deploy to cloud platform",
+        "10. Set up CI/CD pipeline"
+        // 5-10 high-level steps
+      ],
+      "time_commitment": "Realistic estimate: XX hours over X weeks (XX hrs/week)",
+      "how_to_showcase": "How to present on resume (2-3 achievement bullets), LinkedIn project section template, what to include in GitHub README, how to discuss in interviews",
+      "example_resources": ["Tutorial URLs", "Documentation", "Similar project examples"],
+      "github_example_repos": [
+        "https://github.com/user/similar-project-1",
+        "https://github.com/user/similar-project-2",
+        // 3-5 well-documented example repos
+      ]
     }}
   ],
 
   "events": [
-    USE VERIFIED EVENTS FROM RESEARCH.
-    Include conferences, meetups, virtual events, career fairs.
+    SEARCH FOR ACTUAL EVENTS with complete details.
+    Include: major conferences, regional events, local meetups, virtual options.
+    Provide mix of local (in {intake.location}) and national events.
+
+    For EACH event, provide COMPREHENSIVE details:
     {{
-      "name": "Event name",
+      "name": "EXACT official event name",
+      "organizer": "Who runs this event (e.g., Linux Foundation, OWASP, local user group, company name)",
       "type": "conference|meetup|virtual|career-fair|workshop",
-      "date_or_season": "Date or season",
-      "location": "City or Virtual",
-      "price_range": "$0-$500 or Free",
+      "date_or_season": "Specific date if known, or recurring pattern (e.g., 'March 15-17, 2026', 'Every 2nd Thursday', 'Annual - Q2', 'Monthly meetup')",
+      "location": "Specific city and venue for in-person, or 'Virtual', or 'Hybrid'",
+      "scope": "local|regional|national|international",
+      "price_range": "Search for actual pricing: Free|$50-$200|$500-$1500|etc.",
+      "attendee_count": "Research and estimate: '5,000-8,000 attendees', 'Small group 20-30', '500-1000', etc.",
       "beginner_friendly": true|false,
-      "why_attend": "Specific value",
-      "registration_link": "VERIFIED URL from research",
-      "source_citations": ["url"]
-    }}
+      "target_audience": "Who this is for: 'Junior Developers', 'Security Professionals', 'Cloud Architects', 'Career Changers', etc.",
+      "why_attend": "100-200 words: Specific networking opportunities (who attends - recruiters, hiring managers?), learning tracks, certifications/credits offered, hands-on labs, hiring/recruiting presence, speaker quality, why this specific event is valuable for career transition",
+      "key_topics": ["Main topic 1", "Main topic 2", "Main topic 3", "Main topic 4", "Main topic 5"],
+      "notable_speakers": ["Known speaker/company 1", "Known speaker/company 2"] or [] if not applicable,
+      "registration_link": "ACTUAL URL from event website, Meetup.com, Eventbrite, etc.",
+      "recurring": true|false,
+      "virtual_option_available": true|false,
+      "source_citations": ["Event website URL", "Meetup.com URL", "etc."]
+    }},
+
+    // REQUIRED MIX:
+    // - 2-3 major national/international conferences (even if expensive - good to know about)
+    // - 3-5 regional or local in-person events in {intake.location}
+    // - 5-10 virtual events (accessible from anywhere)
+    // - Ongoing meetups (recurring community events)
+
+    // RESEARCH SOURCES TO USE:
+    // - Meetup.com for local groups in {intake.location}
+    // - Eventbrite for workshops
+    // - Conference websites (search: "[target role] conference 2026")
+    // - Professional associations (ACM, IEEE, ISACA, etc.)
+    // - LinkedIn Events for {intake.location}
+    // - Tech company event calendars
   ],
 
   "timeline": {{
@@ -366,31 +468,85 @@ Match this EXACT schema:
   }},
 
   "resume_assets": {{
-    "headline": "LinkedIn headline aligned to target role",
-    "summary": "100-1000 char professional summary for resume",
-    "skills_section": ["skill1", "skill2", ...],  // 8-20 skills
-    "target_role_bullets": [
-      "Achievement bullet 1 with metrics",
-      "Achievement bullet 2 with metrics",
-      // ...6-10 bullets total
+    // PROVIDE EXTREME DETAIL AND GUIDANCE FOR RESUME TRANSFORMATION
+
+    // === HEADLINE & SUMMARY ===
+    "headline": "Optimized LinkedIn/resume headline for target role (max 200 chars)",
+    "headline_explanation": "100-200 words: WHY this headline is effective. Explain keyword choices, positioning strategy, ATS optimization, what makes it stand out to recruiters. Reference job posting analysis.",
+
+    "summary": "100-1000 char professional summary for resume following PROBLEM-SOLUTION-RESULT framework",
+    "summary_breakdown": "200-400 words: Detailed sentence-by-sentence explanation of the summary. For EACH sentence explain: What it does, why it works, what keywords it includes, how it positions the candidate. Show the strategic intent behind each phrase.",
+    "summary_strategy": "100-200 words: Overall strategy behind this summary. How does it address hiring manager concerns? What framework does it follow? How does it balance technical skills with business impact?",
+
+    // === SKILLS SECTION ===
+    "skills_grouped": [
+      {{
+        "category": "e.g., Cloud Platforms, Programming Languages, DevOps Tools",
+        "skills": ["skill1", "skill2", "skill3", "skill4"],
+        "why_group_these": "50-100 words: Why these skills are grouped together, how they relate to the target role, why this categorization is strategic",
+        "priority": "core|important|supplementary"
+      }},
+      // Minimum 2-4 skill groups covering different technical areas
     ],
-    "keywords_for_ats": ["keyword1", "keyword2", ...]  // 10+ keywords
+    "skills_ordering_rationale": "100-200 words: Explain the overall skills ordering strategy. Why are skills ordered this way? What's the logic (market demand, ATS optimization, career level signaling)? How does this maximize visibility?",
+
+    // === ACHIEVEMENT BULLETS ===
+    "target_role_bullets": [
+      {{
+        "bullet_text": "50-300 char achievement bullet following CAR/STAR method with specific metrics",
+        "why_this_works": "100-200 words: Detailed explanation of why this bullet is effective. How does it demonstrate value? What makes the metrics credible? Why does this matter to hiring managers?",
+        "what_to_emphasize": "When discussing this in interviews, emphasize: [specific talking points, complexity indicators, leadership aspects]",
+        "keywords_included": ["keyword1", "keyword2", "keyword3"],
+        "structure_explanation": "How this follows CAR/STAR method: Challenge/Situation → Action → Result. Break down each component."
+      }},
+      // Minimum 3, maximum 10 bullets. Provide 5-8 high-impact bullets.
+      // Cover variety: technical execution, leadership, business impact, innovation
+    ],
+    "bullets_overall_strategy": "150-300 words: How do these bullets collectively position the candidate? What story do they tell? How do they progress from technical → leadership → business impact? What percentage of job description keywords do they hit?",
+
+    // === EXPERIENCE REFRAMING ===
+    "how_to_reframe_current_role": "200-400 words: DETAILED guide on repositioning current experience for target role. Explain title approach, which responsibilities to emphasize vs. de-emphasize, language shifts (engineer → architect), specific reframes for common scenarios. Provide before/after examples.",
+    "experience_gaps_to_address": [
+      "Gap 1: [description] - Strategy: [how to address this gap through positioning]",
+      "Gap 2: [description] - Strategy: [how to spin this positively]",
+      // Address 2-5 common gaps or concerns
+    ],
+
+    // === KEYWORDS & ATS ===
+    "keywords_for_ats": ["keyword1", "keyword2", "keyword3", ...],  // 5-15 keywords
+    "keyword_placement_strategy": "100-200 words: WHERE and HOW to naturally incorporate keywords. Which keywords in summary? Which in skills? How to avoid keyword stuffing while maximizing ATS matching? Long-tail vs. generic keywords strategy.",
+
+    // === LINKEDIN OPTIMIZATION ===
+    "linkedin_headline": "220-char optimized LinkedIn headline (different from resume, search-optimized)",
+    "linkedin_about_section": "200-2000 char LinkedIn about section. Expanded version of resume summary with: opening hook, specialization paragraph, approach/philosophy, key achievements, current focus, call to action.",
+    "linkedin_strategy": "100-200 words: How to optimize LinkedIn beyond the profile. Content strategy (posting frequency, topics), connection strategy, group participation, Open to Work settings, featured section optimization.",
+
+    // === COVER LETTER ===
+    "cover_letter_template": "500-1000 char customizable cover letter framework following PROBLEM-SOLUTION-FIT structure. Include [PLACEHOLDERS] for company-specific customization. Opening hook referencing company pain points, body paragraphs matching requirements, cultural fit statement, clear call to action.",
+    "cover_letter_guidance": "200-400 words: How to adapt this template for different companies. Required research checklist (15 min before writing). Personalization points to customize. Tone adjustment by company type (startup vs. enterprise). Length optimization. What NOT to include."
   }},
 
   "research_sources": {json.dumps(sources[:20], indent=2)}
 }}
 
 # CRITICAL REQUIREMENTS
-1. ONLY use URLs that appear in the research data - NEVER invent URLs
-2. Ensure every array has minimum items (target_roles: 1+, already_have skills: 1+, events: 1+, experience: 1+)
-3. Make timeline realistic given {intake.time_per_week} hours/week
-4. Sequence certifications logically with clear prerequisites
-5. Resume bullets must be achievement-focused with measurable outcomes (minimum 3 bullets)
-6. Profile summary must be 50-500 characters
-7. Resume summary must be 50-1000 characters
-8. Timeline must have 10-14 weekly tasks and 5-7 monthly phases (typically 12 weeks and 6 months)
-9. If target_role_interest is empty, suggest 3-6 aligned roles based on user background
-10. Return ONLY valid JSON - no markdown, no extra text
+1. **WEB RESEARCH REQUIRED**: Search the web for ACTUAL data. DO NOT make up URLs, certifications, events, or study materials.
+2. **Study Materials**: Each certification MUST have 3-5 study materials with real URLs, costs, and detailed descriptions (50-200 words each)
+3. **Tech Stack Details**: Each project MUST have 5-15 technologies, each with 50-150 word "why_this_tech" explanation and real learning resource URLs
+4. **Event Details**: Each event MUST have organizer, scope, attendee_count, target_audience, key_topics, and 100-200 word "why_attend" explanation
+5. **Resume Guidance**: ALL resume_assets fields MUST include detailed explanations (100-400 words). Every bullet needs "why_this_works" explanation.
+6. **Minimum Items**: target_roles: 1+, skills.already_have: 1+, certification_path: 1+, events: 1+, experience_plan: 1+
+7. **Field Length Requirements**:
+   - summary: 100-1000 chars
+   - headline_explanation: 100-200 words
+   - summary_breakdown: 200-400 words
+   - why_this_works (per bullet): 100-200 words
+   - how_to_reframe_current_role: 200-400 words
+   - linkedin_about_section: 200-2000 chars
+   - cover_letter_template: 500-1000 chars
+8. **Timeline**: Must have 10-14 weekly tasks and 5-7 monthly phases based on {intake.time_per_week} hours/week
+9. **Certification Sequencing**: Order foundation → intermediate → advanced with clear prerequisites
+10. **JSON Only**: Return ONLY valid JSON - no markdown code blocks, no explanatory text before/after
 
 IMPORTANT: Your response must be ONLY a JSON object. Do not include:
 - Markdown code blocks (no ```json or ```)
@@ -405,33 +561,60 @@ Generate the plan now:"""
     def _get_system_prompt(self) -> str:
         """System prompt for Perplexity AI"""
 
-        return """You are an expert career transition research analyst with real-time web access.
+        return """You are an EXPERT career transition research analyst with real-time web access. You provide EXTREMELY DETAILED, comprehensive career guidance with ACTUAL real-world data.
 
 CRITICAL REQUIREMENTS:
-1. SEARCH THE WEB for current, factual data about job markets, salaries, skills, and career paths
-2. Use ACTUAL job postings, salary data, and labor market statistics from 2025-2026
-3. Cite REAL sources - include URLs from authoritative websites (LinkedIn, Glassdoor, BLS, Indeed, company career pages)
-4. Provide SPECIFIC numbers: actual salary ranges, real job growth percentages, current market demand
-5. Reference REAL certifications with current costs and official links
-6. Find ACTUAL companies hiring for these roles with real requirements
+1. **WEB RESEARCH MANDATORY**: Search the web for EVERY piece of data. Use LinkedIn, Indeed, Glassdoor, BLS, certification bodies, Meetup.com, conference sites, course platforms, GitHub, etc.
+2. **NO GENERIC RESPONSES**: Every recommendation must be backed by specific, current data from 2025-2026
+3. **REAL URLs ONLY**: NEVER invent URLs. Only include links you find through web research
+4. **EXTREME DETAIL**: Provide 100-400 word explanations for guidance fields. Users need THOROUGH understanding, not summaries.
+5. **ACTUAL DATA**: Real certifications with exam codes, real events with registration links, real study materials with prices
 
-You help professionals successfully transition by providing:
-- Web-researched analysis of transferable skills based on current job market
-- Gap analysis using real job posting requirements from major employers
-- Current certifications that employers are actually requiring (with official URLs)
-- Real education programs and bootcamps with current pricing
-- Actual networking events and conferences happening in 2025-2026
-- Realistic timelines based on current market data
+YOU PROVIDE COMPREHENSIVE CAREER GUIDANCE:
 
-You MUST:
-- Return ONLY valid JSON - no markdown, no explanations, no extra text before or after
-- Match the exact schema provided (use proper JSON syntax with quotes, commas, brackets)
-- Use ONLY real URLs from your web search (no invented links)
-- Include current market data (salary ranges from 2025-2026, not outdated info)
-- Base recommendations on ACTUAL job postings and employer requirements
-- Provide thorough, well-researched answers grounded in real-world data
+**Certifications (with complete study paths):**
+- Search official certification bodies (CompTIA, AWS, Microsoft, ISC2, Google, etc.)
+- Find ACTUAL study materials: official courses, top Udemy courses, books, practice exams, hands-on labs
+- Include REAL prices, durations, URLs
+- Provide week-by-week study plans
+- Explain exam details: code, passing score, duration, question count
 
-CRITICAL: Your entire response must be a single valid JSON object. Start with {{ and end with }}. No other text."""
+**Tech Stack Guidance (with detailed explanations):**
+- For each technology, explain in 50-150 words WHY it's valuable for the target role
+- Include REAL learning resources: official docs, courses, tutorials, GitHub examples
+- Explain architecture patterns and industry standards
+- Provide step-by-step build guides
+
+**Events (with comprehensive details):**
+- Search Meetup.com, Eventbrite, conference sites for ACTUAL events
+- Include local (in user's location), regional, and national options
+- Provide organizer, scope, attendee count, target audience, key topics
+- Explain in 100-200 words WHY to attend each event
+- Include REAL registration links
+
+**Resume Transformation (with extreme guidance):**
+- Provide 100-400 word explanations for EVERY guidance field
+- Explain WHY each headline/summary/bullet works
+- Break down strategy sentence-by-sentence
+- Include reframing guides, LinkedIn optimization, cover letter templates
+- Show positioning strategy, keyword placement, ATS optimization
+
+YOU MUST:
+- Return ONLY valid JSON (no markdown, no text before/after the JSON)
+- Match exact schema provided
+- Use proper JSON syntax (quotes, commas, brackets, no trailing commas)
+- Provide MINIMUM word counts for explanation fields (100-400 words as specified)
+- Include ALL required sub-fields (study_materials, detailed_tech_stack, skills_grouped, etc.)
+- Base ALL data on real web research from 2025-2026
+
+QUALITY STANDARDS:
+- Every certification: 3-5 study materials with real URLs and 50-200 word descriptions
+- Every project: 5-15 technologies with 50-150 word "why_this_tech" explanations
+- Every event: Organizer, scope, attendee count, 100-200 word "why_attend"
+- Every resume bullet: 100-200 word "why_this_works" explanation
+- Resume guidance: 200-400 word detailed explanations for reframing, LinkedIn, cover letter
+
+CRITICAL: Your entire response must be a single valid JSON object starting with {{ and ending with }}. No other text. No markdown code blocks."""
 
     def _validate_plan(self, plan_data: Dict[str, Any]) -> ValidationResult:
         """
