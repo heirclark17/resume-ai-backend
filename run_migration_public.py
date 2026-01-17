@@ -1,25 +1,18 @@
 #!/usr/bin/env python3
-import os
-import sys
 import psycopg2
 
 print("=" * 70)
-print("Running Practice Questions Migration")
+print("Running Practice Questions Migration on Railway")
 print("=" * 70)
 
-database_url = os.getenv('DATABASE_URL')
-if not database_url:
-    print("\nERROR: DATABASE_URL not found")
-    sys.exit(1)
+# Use Railway public database URL
+database_url = "postgresql://postgres:SUCByvKQvPeSxnLxystaiyRvEMpRvDUn@switchyard.proxy.rlwy.net:54571/railway"
 
-print("\n[OK] Found DATABASE_URL")
+print("\n[OK] Connecting to Railway Postgres...")
 
-print("\nReading migration SQL...")
 with open('migrations/add_practice_question_responses.sql', 'r') as f:
     migration_sql = f.read()
-print(f"[OK] Loaded migration file ({len(migration_sql)} bytes)")
 
-print("\nConnecting to database...")
 conn = psycopg2.connect(database_url)
 conn.autocommit = True
 print("[OK] Connected successfully")
@@ -54,5 +47,4 @@ print("\n" + "=" * 70)
 print("MIGRATION COMPLETE!")
 print(f"  Successful: {success_count}, Skipped: {skip_count}")
 print("=" * 70)
-print("\nThe practice_question_responses table is ready!")
-print("Users can now generate AI practice questions and save recordings.")
+print("\npractice_question_responses table is ready!")
