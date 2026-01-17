@@ -56,7 +56,7 @@ class CareerPathSynthesisService:
         prompt = self._build_synthesis_prompt(intake, research_data)
 
         try:
-            # Call OpenAI with strict structured output
+            # Call Perplexity with web search for real data
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -70,12 +70,24 @@ class CareerPathSynthesisService:
                     }
                 ],
                 temperature=0.7,
-                max_tokens=16000,  # Increased to accommodate full career plans without truncation
-                response_format={"type": "json_object"}  # Enforce JSON output
+                max_tokens=16000  # Perplexity doesn't support response_format parameter
             )
 
             raw_json = response.choices[0].message.content
-            print(f"✓ OpenAI returned {len(raw_json)} characters of JSON")
+            print(f"✓ Perplexity returned {len(raw_json)} characters")
+
+            # Clean up markdown code blocks if present (Perplexity sometimes adds these)
+            if raw_json.strip().startswith("```"):
+                # Remove markdown code blocks
+                raw_json = raw_json.strip()
+                if raw_json.startswith("```json"):
+                    raw_json = raw_json[7:]  # Remove ```json
+                elif raw_json.startswith("```"):
+                    raw_json = raw_json[3:]  # Remove ```
+                if raw_json.endswith("```"):
+                    raw_json = raw_json[:-3]  # Remove trailing ```
+                raw_json = raw_json.strip()
+                print(f"✓ Cleaned markdown code blocks, {len(raw_json)} characters remain")
 
             # Parse and validate
             plan_data = json.loads(raw_json)
@@ -362,6 +374,12 @@ Match this EXACT schema:
 9. If target_role_interest is empty, suggest 3-6 aligned roles based on user background
 10. Return ONLY valid JSON - no markdown, no extra text
 
+IMPORTANT: Your response must be ONLY a JSON object. Do not include:
+- Markdown code blocks (no ```json or ```)
+- Explanatory text before or after the JSON
+- Comments or notes
+- Just the raw JSON starting with {{ and ending with }}
+
 Generate the plan now:"""
 
         return prompt
@@ -388,11 +406,14 @@ You help professionals successfully transition by providing:
 - Realistic timelines based on current market data
 
 You MUST:
-- Return valid JSON matching the exact schema provided
+- Return ONLY valid JSON - no markdown, no explanations, no extra text before or after
+- Match the exact schema provided (use proper JSON syntax with quotes, commas, brackets)
 - Use ONLY real URLs from your web search (no invented links)
 - Include current market data (salary ranges from 2025-2026, not outdated info)
 - Base recommendations on ACTUAL job postings and employer requirements
-- Provide thorough, well-researched answers grounded in real-world data"""
+- Provide thorough, well-researched answers grounded in real-world data
+
+CRITICAL: Your entire response must be a single valid JSON object. Start with {{ and end with }}. No other text."""
 
     def _validate_plan(self, plan_data: Dict[str, Any]) -> ValidationResult:
         """
@@ -488,8 +509,7 @@ Return the fixed JSON now:"""
                     }
                 ],
                 temperature=0.3,  # Lower temperature for precise repairs
-                max_tokens=16000,  # Increased to accommodate full career plans without truncation
-                response_format={"type": "json_object"}
+                max_tokens=16000  # Perplexity doesn't support response_format parameter
             )
 
             repaired_json = response.choices[0].message.content
