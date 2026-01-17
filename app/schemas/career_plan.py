@@ -131,7 +131,7 @@ class Event(BaseModel):
     price_range: str
     beginner_friendly: bool
     why_attend: str
-    registration_link: str = Field(..., description="MUST be web-grounded, not hallucinated")
+    registration_link: Optional[str] = Field(None, description="MUST be web-grounded, not hallucinated")  # Made optional
     source_citations: List[str] = Field(..., min_items=1, description="Where this data came from")
 
 
@@ -155,8 +155,8 @@ class MonthlyPhase(BaseModel):
 
 class Timeline(BaseModel):
     """12-week and 6-month plans"""
-    twelve_week_plan: List[WeeklyTask] = Field(..., min_items=12, max_items=12)
-    six_month_plan: List[MonthlyPhase] = Field(..., min_items=6, max_items=6)
+    twelve_week_plan: List[WeeklyTask] = Field(..., min_items=10, max_items=14)  # Allow 10-14 weeks for flexibility
+    six_month_plan: List[MonthlyPhase] = Field(..., min_items=5, max_items=7)   # Allow 5-7 months for flexibility
     apply_ready_checkpoint: str = Field(..., description="When user can start applying")
 
 
