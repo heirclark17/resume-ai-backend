@@ -13,7 +13,7 @@ from typing import Dict, Any, List
 class ResumeAnalysisService:
     def __init__(self):
         self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        self.model = "gpt-4.1-mini"
+        self.model = "gpt-4o-mini"
 
     async def analyze_resume_changes(
         self,

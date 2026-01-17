@@ -203,7 +203,7 @@ Do not include any other text, only the JSON."""
                 try:
                     ai_response = await asyncio.to_thread(
                         openai_client.chat.completions.create,
-                        model="gpt-4.1-mini",
+                        model="gpt-4o-mini",
                         messages=[
                             {"role": "system", "content": "You are a job posting analyzer. Extract company name and job title accurately."},
                             {"role": "user", "content": extraction_prompt}

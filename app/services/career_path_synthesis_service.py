@@ -24,8 +24,8 @@ class CareerPathSynthesisService:
 
     def __init__(self):
         self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        # Use gpt-4.1-mini - 2026 model optimized for structured output and cost-efficiency
-        self.model = os.getenv("CAREER_PATH_MODEL", os.getenv("OPENAI_MODEL", "gpt-4.1-mini"))
+        # Use gpt-4o-mini - Latest mini model with excellent JSON mode support
+        self.model = os.getenv("CAREER_PATH_MODEL", os.getenv("OPENAI_MODEL", "gpt-4o-mini"))
 
     async def generate_career_plan(
         self,
