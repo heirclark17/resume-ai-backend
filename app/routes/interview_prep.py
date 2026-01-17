@@ -1291,8 +1291,8 @@ class GenerateStarStoryRequest(BaseModel):
     question: str
 
 
-@router.post("/generate-star-story")
-async def generate_star_story(
+@router.post("/generate-practice-star-story")
+async def generate_practice_star_story(
     request: GenerateStarStoryRequest,
     db: AsyncSession = Depends(get_db)
 ):
