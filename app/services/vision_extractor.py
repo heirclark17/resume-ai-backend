@@ -229,7 +229,7 @@ If any field is not found in the text, use empty string "" or empty array []."""
         try:
             response = await asyncio.to_thread(
                 self.client.chat.completions.create,
-                model="gpt-4o-mini",  # Use text model (cheaper than vision)
+                model="gpt-4.1-mini",  # Use text model (cheaper than vision)
                 messages=[
                     {"role": "system", "content": "You are a job posting analyzer. Extract information accurately from text."},
                     {"role": "user", "content": extraction_prompt}

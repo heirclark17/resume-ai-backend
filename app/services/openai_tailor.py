@@ -174,8 +174,8 @@ Return ONLY a valid JSON object with this structure:
 """
 
         try:
-            # Use gpt-4o-mini (user has API key for this model)
-            models_to_try = ["gpt-4o-mini"]
+            # Use gpt-4.1-mini (user has API key for this model)
+            models_to_try = ["gpt-4.1-mini"]
 
             response = None
             for model_name in models_to_try:

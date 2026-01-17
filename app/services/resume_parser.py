@@ -356,7 +356,7 @@ IMPORTANT:
 
         try:
             response = self.client.chat.completions.create(
-                model="gpt-4o-mini",  # Latest mini model with excellent structured extraction
+                model="gpt-4.1-mini",  # Latest 2026 model - outperforms gpt-4o-mini, optimized for structured extraction
                 max_tokens=8000,
                 temperature=0.2,
                 response_format={"type": "json_object"},

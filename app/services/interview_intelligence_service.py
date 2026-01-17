@@ -96,7 +96,7 @@ Return ONLY a JSON object with this structure:
 
         try:
             response = await self.openai_client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-4.1-mini",
                 messages=[
                     {
                         "role": "system",
@@ -190,7 +190,7 @@ Generate actionable talking points. Return ONLY a JSON object:
 
         try:
             response = await self.openai_client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-4.1-mini",
                 messages=[
                     {
                         "role": "system",
@@ -276,7 +276,7 @@ Focus on the TOP 5-7 most important requirements from the job description."""
 
         try:
             response = await self.openai_client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-4.1-mini",
                 messages=[
                     {
                         "role": "system",
@@ -518,7 +518,7 @@ Create a values alignment scorecard. Return ONLY a JSON object:
 
         try:
             response = await self.openai_client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-4.1-mini",
                 messages=[
                     {
                         "role": "system",

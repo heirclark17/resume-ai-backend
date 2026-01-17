@@ -13,7 +13,7 @@ from typing import Dict, Any, List
 class CertificationService:
     def __init__(self):
         self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        self.model = "gpt-4o-mini"
+        self.model = "gpt-4.1-mini"
 
     async def recommend_certifications(
         self,
