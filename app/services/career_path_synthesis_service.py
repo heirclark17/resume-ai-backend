@@ -63,7 +63,7 @@ class CareerPathSynthesisService:
                     }
                 ],
                 temperature=0.7,
-                max_tokens=4000,
+                max_tokens=16000,  # Increased to accommodate full career plans without truncation
                 response_format={"type": "json_object"}  # Enforce JSON output
             )
 
@@ -456,7 +456,7 @@ Return the fixed JSON now:"""
                     }
                 ],
                 temperature=0.3,  # Lower temperature for precise repairs
-                max_tokens=4000,
+                max_tokens=16000,  # Increased to accommodate full career plans without truncation
                 response_format={"type": "json_object"}
             )
 
