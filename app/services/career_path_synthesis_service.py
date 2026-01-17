@@ -84,6 +84,9 @@ class CareerPathSynthesisService:
 
             # Validation failed - attempt repair
             print(f"⚠ Plan validation failed with {len(validation_result.errors)} errors")
+            # Log first 5 errors for debugging
+            for i, e in enumerate(validation_result.errors[:5]):
+                print(f"  Error {i+1}: {e.field} - {e.error} (expected: {e.expected}, got: {e.received})")
             print("🔧 Attempting JSON repair...")
 
             repaired = await self._repair_plan(plan_data, validation_result)
@@ -335,7 +338,7 @@ Generate a complete career plan JSON object matching this EXACT schema:
 5. Resume bullets must be achievement-focused with measurable outcomes
 6. Profile summary must be 150-500 characters
 7. Resume summary must be 100-1000 characters
-8. Timeline must have exactly 12 weekly tasks and 6 monthly phases
+8. Timeline must have 10-14 weekly tasks and 5-7 monthly phases (typically 12 weeks and 6 months)
 9. If target_role_interest is empty, suggest 3-6 aligned roles based on user background
 10. Return ONLY valid JSON - no markdown, no extra text
 
@@ -416,7 +419,7 @@ You ensure all recommendations are realistic given the user's time and budget co
 
         error_summary = "\n".join([
             f"- Field '{e.field}': {e.error} (expected: {e.expected}, got: {e.received})"
-            for e in validation_result.errors[:10]  # Limit to top 10 errors
+            for e in validation_result.errors[:25]  # Limit to top 25 errors for better repair
         ])
 
         repair_prompt = f"""The following JSON failed schema validation with these errors:
