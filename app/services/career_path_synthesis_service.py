@@ -818,18 +818,23 @@ Return the fixed JSON now:"""
             "skills_analysis": {
                 "already_have": [
                     {
-                        "skill": skill,
-                        "how_it_transfers": f"Your {skill} experience applies directly to {target_role}",
-                        "evidence_from_background": f"Demonstrated through {intake.years_experience or 5}+ years in field"
+                        "skill_name": skill,
+                        "evidence_from_input": f"Listed as strength in intake",
+                        "target_role_mapping": f"Your {skill} experience applies directly to {target_role}",
+                        "resume_bullets": [
+                            f"Demonstrated {skill} through {intake.years_experience or 5}+ years of experience",
+                            f"Applied {skill} to achieve measurable outcomes"
+                        ]
                     }
                     for skill in (intake.strengths[:3] if intake.strengths else ["Problem Solving", "Communication", "Leadership"])
                 ],
                 "need_to_build": [
                     {
-                        "skill": "Advanced Technical Skills",
-                        "why_important": "Required for senior-level responsibilities",
-                        "how_to_acquire": "Take online courses and earn certifications",
-                        "timeline_weeks": 12
+                        "skill_name": "Advanced Technical Skills",
+                        "why_needed": "Required for senior-level responsibilities",
+                        "priority": "high",
+                        "how_to_build": "Take online courses and earn certifications",
+                        "estimated_time": "12 weeks"
                     }
                 ],
                 "gaps_analysis": f"[TEST MODE] Based on your background in {intake.current_role_title or 'your field'}, focus on building advanced technical skills and industry-specific knowledge."
