@@ -2,7 +2,7 @@
 Career Path Designer API Routes
 Orchestrates research -> synthesis -> validation -> storage
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from typing import List
@@ -24,7 +24,6 @@ from app.schemas.career_plan import (
 from app.services.career_path_research_service import CareerPathResearchService
 from app.services.career_path_synthesis_service import CareerPathSynthesisService
 from app.services.job_store import job_store
-import asyncio
 
 
 router = APIRouter(prefix="/api/career-path", tags=["career-path"])
@@ -371,6 +370,7 @@ async def refresh_events(
 @router.post("/generate-async")
 async def generate_career_plan_async(
     request: GenerateRequest,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -395,8 +395,11 @@ async def generate_career_plan_async(
         )
 
         # Start background task
-        asyncio.create_task(
-            process_career_plan_job(job_id, request, db)
+        background_tasks.add_task(
+            process_career_plan_job,
+            job_id,
+            request,
+            db
         )
 
         return {
