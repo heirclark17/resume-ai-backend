@@ -104,13 +104,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         ]
         response.headers["Permissions-Policy"] = ", ".join(permissions)
         
-        # Cross-Origin-Opener-Policy
-        response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
-        
-        # Cross-Origin-Resource-Policy
-        response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
-        
-        # Cross-Origin-Embedder-Policy
-        response.headers["Cross-Origin-Embedder-Policy"] = "require-corp"
-        
+        # Cross-Origin-* policies - Allow for API endpoints
+        # Only set these for non-API routes to avoid blocking CORS
+        if not request.url.path.startswith("/api/"):
+            response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+            response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+            response.headers["Cross-Origin-Embedder-Policy"] = "require-corp"
+
         return response
