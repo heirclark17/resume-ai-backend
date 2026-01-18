@@ -590,14 +590,16 @@ Match this EXACT schema:
    - education_options: At least 1 (degree programs, bootcamps, or self-study paths)
    - experience_plan: At least 1
    - events: At least 1 (conferences, meetups, or networking opportunities)
-   - timeline.twelve_week_plan: At least 10 weekly tasks
-   - timeline.six_month_plan: At least 5 monthly phases
+   - timeline.twelve_week_plan: EXACTLY 12 weekly tasks (one per week, Week 1 through Week 12)
+   - timeline.six_month_plan: EXACTLY 6 monthly phases (Month 1 through Month 6)
    - resume_assets.skills_grouped: At least 2 skill groups
+   - research_sources: At least 1 source (can be placeholder like "Industry research and market data")
 7. **FIELD TYPE REQUIREMENTS**:
    - Week fields (in study_plan_weeks): MUST be strings like "Week 1", "Week 2", NOT numbers
+   - what_to_emphasize: MUST be a single string (NOT a list/array), e.g., "Technical leadership in cloud security"
    - profile_summary: 150-500 characters (MUST NOT EXCEED 500)
    - All URL fields: Can use placeholders like "https://example.com/..." if real URLs unavailable
-8. **Timeline**: Must have at least 10 weekly tasks in twelve_week_plan based on {intake.time_per_week} hours/week
+8. **Timeline Requirements**: twelve_week_plan must have 12 weekly tasks (Week 1-12), six_month_plan must have 6 monthly phases (Month 1-6)
 9. **Certification Sequencing**: Order foundation → intermediate → advanced with clear prerequisites
 10. **JSON Only**: Return ONLY valid JSON - no markdown code blocks, no explanatory text before/after
 
