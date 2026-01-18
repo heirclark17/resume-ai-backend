@@ -46,7 +46,7 @@ class IntakeRequest(BaseModel):
     technical_background: str = Field(..., description="non-technical/some-technical/technical/highly-technical")
 
     # Motivation & Goals
-    transition_motivation: List[str] = Field(..., min_items=1, max_items=5, description="Why transitioning: better-pay/work-life-balance/interesting-work/remote-work/career-growth")
+    transition_motivation: List[str] = Field(..., min_items=1, max_items=6, description="Why transitioning: better-pay/work-life-balance/interesting-work/remote-work/career-growth/passion")
     specific_technologies_interest: List[str] = Field(default_factory=list, max_items=20, description="Specific tech/frameworks want to learn")
     certification_areas_interest: List[str] = Field(default_factory=list, max_items=10, description="Areas want to get certified in")
 
