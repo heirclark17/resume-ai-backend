@@ -94,18 +94,9 @@ class CareerPathSynthesisService:
             raw_json = response.choices[0].message.content
             print(f"✓ Perplexity returned {len(raw_json)} characters")
 
-            # Clean up markdown code blocks if present (Perplexity sometimes adds these)
-            if raw_json.strip().startswith("```"):
-                # Remove markdown code blocks
-                raw_json = raw_json.strip()
-                if raw_json.startswith("```json"):
-                    raw_json = raw_json[7:]  # Remove ```json
-                elif raw_json.startswith("```"):
-                    raw_json = raw_json[3:]  # Remove ```
-                if raw_json.endswith("```"):
-                    raw_json = raw_json[:-3]  # Remove trailing ```
-                raw_json = raw_json.strip()
-                print(f"✓ Cleaned markdown code blocks, {len(raw_json)} characters remain")
+            # Clean and extract JSON more robustly
+            raw_json = self._extract_and_clean_json(raw_json)
+            print(f"✓ Cleaned JSON, {len(raw_json)} characters remain")
 
             # Parse and validate
             plan_data = json.loads(raw_json)
@@ -144,6 +135,10 @@ class CareerPathSynthesisService:
 
         except json.JSONDecodeError as e:
             print(f"✗ JSON decode error: {e}")
+            print(f"✗ Problematic JSON (first 500 chars):")
+            print(raw_json[:500] if len(raw_json) > 500 else raw_json)
+            print(f"✗ Problematic JSON (last 500 chars):")
+            print(raw_json[-500:] if len(raw_json) > 500 else "")
             return {
                 "success": False,
                 "error": f"Invalid JSON from OpenAI: {str(e)}"
@@ -157,6 +152,45 @@ class CareerPathSynthesisService:
                 "success": False,
                 "error": str(e)
             }
+
+    def _extract_and_clean_json(self, raw_text: str) -> str:
+        """
+        Extract and clean JSON from Perplexity response.
+        Handles markdown code blocks, trailing commas, and other common issues.
+        """
+        import re
+
+        # Step 1: Remove markdown code blocks
+        text = raw_text.strip()
+        if text.startswith("```"):
+            if text.startswith("```json"):
+                text = text[7:]
+            elif text.startswith("```"):
+                text = text[3:]
+        if text.endswith("```"):
+            text = text[:-3]
+        text = text.strip()
+
+        # Step 2: Try to extract JSON object if embedded in other text
+        # Find the first { and last }
+        start_idx = text.find('{')
+        end_idx = text.rfind('}')
+
+        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+            text = text[start_idx:end_idx+1]
+
+        # Step 3: Fix common JSON issues
+        # Remove trailing commas before closing braces/brackets
+        text = re.sub(r',(\s*[}\]])', r'\1', text)
+
+        # Remove comments (// and /* */)
+        text = re.sub(r'//.*?$', '', text, flags=re.MULTILINE)
+        text = re.sub(r'/\*.*?\*/', '', text, flags=re.DOTALL)
+
+        # Fix unescaped quotes in strings (basic attempt)
+        # This is tricky and may need refinement
+
+        return text.strip()
 
     def _build_synthesis_prompt(
         self,
