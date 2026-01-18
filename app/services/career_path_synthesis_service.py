@@ -582,10 +582,21 @@ Match this EXACT schema:
 3. **Tech Stack Details**: Each project should have 3-5 key technologies, each with a brief "why_this_tech" explanation
 4. **Event Details**: Each event should have organizer, scope, attendee_count, target_audience, key_topics, and "why_attend" explanation
 5. **Resume Guidance**: Provide practical resume guidance including headlines, summaries, and bullet point strategies.
-6. **Minimum Items**: target_roles: 1+, skills.already_have: 1+, certification_path: 1+, events: 1+, experience_plan: 1+
-7. **Field Length Requirements**:
-   - profile_summary: 150-500 chars (MUST NOT EXCEED 500)
-   - Other text fields: Keep concise and focused
+6. **MINIMUM ITEMS REQUIRED (validate before submitting)**:
+   - target_roles: At least 1
+   - skills_analysis.already_have: At least 1
+   - skills_analysis.need_to_build: At least 1
+   - certification_path: At least 1 (with source_citations having at least 1 URL)
+   - education_options: At least 1 (degree programs, bootcamps, or self-study paths)
+   - experience_plan: At least 1
+   - events: At least 1 (conferences, meetups, or networking opportunities)
+   - timeline.twelve_week_plan: At least 10 weekly tasks
+   - timeline.six_month_plan: At least 5 monthly phases
+   - resume_assets.skills_grouped: At least 2 skill groups
+7. **FIELD TYPE REQUIREMENTS**:
+   - Week fields (in study_plan_weeks): MUST be strings like "Week 1", "Week 2", NOT numbers
+   - profile_summary: 150-500 characters (MUST NOT EXCEED 500)
+   - All URL fields: Can use placeholders like "https://example.com/..." if real URLs unavailable
 8. **Timeline**: Must have at least 10 weekly tasks in twelve_week_plan based on {intake.time_per_week} hours/week
 9. **Certification Sequencing**: Order foundation → intermediate → advanced with clear prerequisites
 10. **JSON Only**: Return ONLY valid JSON - no markdown code blocks, no explanatory text before/after
