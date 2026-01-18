@@ -86,7 +86,7 @@ class CareerPathSynthesisService:
                 ],
                 response_format={"type": "json_object"},  # Ensures valid JSON
                 temperature=0.7,
-                max_tokens=16000  # GPT-4.1-mini supports up to 32,768 tokens
+                max_tokens=6000  # Balanced for Railway 60s timeout + GPT-4.1-mini speed
             )
 
             raw_json = response.choices[0].message.content
