@@ -41,8 +41,8 @@ class CareerPathSynthesisService:
                 print("[TEST MODE] CareerPathSynthesisService using mock data")
         else:
             self.client = OpenAI(api_key=settings.openai_api_key)
-            # Use GPT-4 for high-quality career planning
-            self.model = "gpt-4-turbo-preview"
+            # Use GPT-4o for high-quality career planning with large token limit
+            self.model = "gpt-4o"
 
     async def generate_career_plan(
         self,
@@ -86,7 +86,7 @@ class CareerPathSynthesisService:
                 ],
                 response_format={"type": "json_object"},  # Ensures valid JSON
                 temperature=0.7,
-                max_tokens=4000  # GPT-4 Turbo max is 4096
+                max_tokens=12000  # GPT-4o supports up to 16384 tokens
             )
 
             raw_json = response.choices[0].message.content
