@@ -822,7 +822,7 @@ Return the fixed JSON now:"""
                         "how_it_transfers": f"Your {skill} experience applies directly to {target_role}",
                         "evidence_from_background": f"Demonstrated through {intake.years_experience or 5}+ years in field"
                     }
-                    for skill in (intake.skills_have[:3] if intake.skills_have else ["Problem Solving", "Communication", "Leadership"])
+                    for skill in (intake.strengths[:3] if intake.strengths else ["Problem Solving", "Communication", "Leadership"])
                 ],
                 "need_to_build": [
                     {
@@ -865,7 +865,7 @@ Return the fixed JSON now:"""
                 {
                     "project_type": "Professional Development Project",
                     "what_to_build": f"Build a project demonstrating {target_role} skills",
-                    "skills_demonstrated": intake.skills_have[:3] if intake.skills_have else ["Leadership", "Technical Skills"],
+                    "skills_demonstrated": intake.strengths[:3] if intake.strengths else ["Leadership", "Technical Skills"],
                     "timeline_weeks": 8,
                     "portfolio_worthy": True,
                     "resume_bullet": f"[TEST MODE] Led professional development project demonstrating {target_role} competencies"
@@ -921,13 +921,13 @@ Return the fixed JSON now:"""
 
             "resume_assets": {
                 "summary": f"[TEST MODE] Experienced {intake.current_role_title or 'professional'} with {intake.years_experience or 5}+ years transitioning to {target_role}. Proven track record of success.",
-                "skills_section": intake.skills_have[:8] if intake.skills_have else ["Leadership", "Communication", "Problem Solving", "Technical Skills", "Project Management"],
+                "skills_section": intake.strengths[:8] if intake.strengths else ["Leadership", "Communication", "Problem Solving", "Technical Skills", "Project Management"],
                 "target_role_bullets": [
                     f"[TEST MODE] Led {intake.current_role_title or 'professional'} initiatives",
                     "[TEST MODE] Achieved measurable results through strategic planning",
                     "[TEST MODE] Collaborated with cross-functional teams"
                 ],
-                "keywords_for_ats": [target_role] + (intake.skills_have[:5] if intake.skills_have else ["Leadership", "Management", "Strategy"])
+                "keywords_for_ats": [target_role] + (intake.strengths[:5] if intake.strengths else ["Leadership", "Management", "Strategy"])
             },
 
             "research_sources": [
