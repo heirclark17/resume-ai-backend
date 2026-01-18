@@ -86,7 +86,7 @@ class CareerPathSynthesisService:
                 ],
                 response_format={"type": "json_object"},  # Ensures valid JSON
                 temperature=0.7,
-                max_tokens=16000
+                max_tokens=4000  # GPT-4 Turbo max is 4096
             )
 
             raw_json = response.choices[0].message.content
