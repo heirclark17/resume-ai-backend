@@ -262,18 +262,12 @@ class CareerPathSynthesisService:
 
 # YOUR TASK
 
-STEP 1: RESEARCH THE WEB
-Before generating the plan, search the web for:
-1. Current job market data for {intake.target_role_interest or "the suggested roles"}
-2. Real salary ranges from job postings in {intake.location} (check LinkedIn, Indeed, Glassdoor)
-3. Actual skills required in recent job postings (last 30 days)
-4. Real companies actively hiring for these roles
-5. Current industry trends and demand (BLS data, tech blogs, industry reports)
-6. Actual bridge roles that companies use as stepping stones
-7. Real networking events in {intake.location} happening in 2025-2026
+Generate a complete career plan JSON object based on:
+1. The user's background and goals above
+2. Current industry best practices and trends
+3. Your knowledge of typical requirements for target roles
+4. The research data provided above (if any)
 
-STEP 2: USE REAL DATA IN YOUR RESPONSE
-Generate a complete career plan JSON object using ACTUAL data from your web search.
 Match this EXACT schema:
 
 {{
@@ -283,11 +277,11 @@ Match this EXACT schema:
 
   "target_roles": [
     {{
-      "title": "Specific Job Title (from real job postings)",
-      "why_aligned": "How user's background maps to this role based on actual requirements",
-      "growth_outlook": "REAL DATA: e.g., '23% growth 2024-2034 per BLS, 15,000+ current openings on LinkedIn'",
-      "salary_range": "ACTUAL RANGE: e.g., '$95,000 - $135,000 based on 50+ {intake.location} postings on Indeed/Glassdoor'",
-      "typical_requirements": ["Real skill from job postings", "Another actual requirement", "Certification companies mention"],
+      "title": "Specific Job Title",
+      "why_aligned": "How user's background maps to this role based on typical requirements",
+      "growth_outlook": "Industry growth trends and demand, e.g., '23% growth 2024-2034 per BLS, strong demand in market'",
+      "salary_range": "Typical salary range, e.g., '$95,000 - $135,000 for {intake.location} market'",
+      "typical_requirements": ["Key skill for this role", "Another important skill", "Relevant certification or qualification"],
       "bridge_roles": [
         {{
           "title": "Bridge Role Title",
@@ -333,7 +327,7 @@ Match this EXACT schema:
   }},
 
   "certification_path": [
-    SEARCH THE WEB for ACTUAL certifications with COMPLETE study materials.
+    Recommend relevant certifications for the target role.
     Sequence logically (foundation -> intermediate -> advanced).
 
     For EACH certification, provide:
@@ -457,26 +451,26 @@ Match this EXACT schema:
   ],
 
   "events": [
-    SEARCH FOR ACTUAL EVENTS with complete details.
+    Recommend relevant industry events and networking opportunities.
     Include: major conferences, regional events, local meetups, virtual options.
     Provide mix of local (in {intake.location}) and national events.
 
-    For EACH event, provide COMPREHENSIVE details:
+    For EACH event, provide details:
     {{
-      "name": "EXACT official event name",
+      "name": "Event name",
       "organizer": "Who runs this event (e.g., Linux Foundation, OWASP, local user group, company name)",
       "type": "conference|meetup|virtual|career-fair|workshop",
       "date_or_season": "Specific date if known, or recurring pattern (e.g., 'March 15-17, 2026', 'Every 2nd Thursday', 'Annual - Q2', 'Monthly meetup')",
       "location": "Specific city and venue for in-person, or 'Virtual', or 'Hybrid'",
       "scope": "local|regional|national|international",
-      "price_range": "Search for actual pricing: Free|$50-$200|$500-$1500|etc.",
-      "attendee_count": "Research and estimate: '5,000-8,000 attendees', 'Small group 20-30', '500-1000', etc.",
+      "price_range": "Typical pricing: Free|$50-$200|$500-$1500|etc.",
+      "attendee_count": "Typical attendance: '5,000-8,000 attendees', 'Small group 20-30', '500-1000', etc.",
       "beginner_friendly": true|false,
       "target_audience": "Who this is for: 'Junior Developers', 'Security Professionals', 'Cloud Architects', 'Career Changers', etc.",
       "why_attend": "100-200 words: Specific networking opportunities (who attends - recruiters, hiring managers?), learning tracks, certifications/credits offered, hands-on labs, hiring/recruiting presence, speaker quality, why this specific event is valuable for career transition",
       "key_topics": ["Main topic 1", "Main topic 2", "Main topic 3", "Main topic 4", "Main topic 5"],
       "notable_speakers": ["Known speaker/company 1", "Known speaker/company 2"] or [] if not applicable,
-      "registration_link": "ACTUAL URL from event website, Meetup.com, Eventbrite, etc.",
+      "registration_link": "https://example.com/event (use placeholder or omit if unavailable)",
       "recurring": true|false,
       "virtual_option_available": true|false,
       "source_citations": ["Event website URL", "Meetup.com URL", "etc."]
@@ -583,21 +577,16 @@ Match this EXACT schema:
 }}
 
 # CRITICAL REQUIREMENTS
-1. **WEB RESEARCH REQUIRED**: Search the web for ACTUAL data. DO NOT make up URLs, certifications, events, or study materials.
-2. **Study Materials**: Each certification MUST have 3-5 study materials with real URLs, costs, and detailed descriptions (50-200 words each)
-3. **Tech Stack Details**: Each project MUST have 5-15 technologies, each with 50-150 word "why_this_tech" explanation and real learning resource URLs
-4. **Event Details**: Each event MUST have organizer, scope, attendee_count, target_audience, key_topics, and 100-200 word "why_attend" explanation
-5. **Resume Guidance**: ALL resume_assets fields MUST include detailed explanations (100-400 words). Every bullet needs "why_this_works" explanation.
+1. **COMPLETE ALL FIELDS**: Provide comprehensive career guidance based on your knowledge of industry practices. Use placeholders for URLs if needed.
+2. **Study Materials**: Each certification should have 2-3 study materials with descriptions (50-150 words each)
+3. **Tech Stack Details**: Each project should have 3-5 key technologies, each with a brief "why_this_tech" explanation
+4. **Event Details**: Each event should have organizer, scope, attendee_count, target_audience, key_topics, and "why_attend" explanation
+5. **Resume Guidance**: Provide practical resume guidance including headlines, summaries, and bullet point strategies.
 6. **Minimum Items**: target_roles: 1+, skills.already_have: 1+, certification_path: 1+, events: 1+, experience_plan: 1+
 7. **Field Length Requirements**:
-   - summary: 100-1000 chars
-   - headline_explanation: 100-200 words
-   - summary_breakdown: 200-400 words
-   - why_this_works (per bullet): 100-200 words
-   - how_to_reframe_current_role: 200-400 words
-   - linkedin_about_section: 200-2000 chars
-   - cover_letter_template: 500-1000 chars
-8. **Timeline**: Must have 10-14 weekly tasks and 5-7 monthly phases based on {intake.time_per_week} hours/week
+   - profile_summary: 150-500 chars (MUST NOT EXCEED 500)
+   - Other text fields: Keep concise and focused
+8. **Timeline**: Must have at least 10 weekly tasks in twelve_week_plan based on {intake.time_per_week} hours/week
 9. **Certification Sequencing**: Order foundation → intermediate → advanced with clear prerequisites
 10. **JSON Only**: Return ONLY valid JSON - no markdown code blocks, no explanatory text before/after
 
@@ -612,62 +601,62 @@ Generate the plan now:"""
         return prompt
 
     def _get_system_prompt(self) -> str:
-        """System prompt for Perplexity AI"""
+        """System prompt for OpenAI career plan generation"""
 
-        return """You are an EXPERT career transition research analyst with real-time web access. You provide EXTREMELY DETAILED, comprehensive career guidance with ACTUAL real-world data.
+        return """You are an EXPERT career transition advisor. You provide DETAILED, comprehensive career guidance based on industry best practices and current market trends.
 
 CRITICAL REQUIREMENTS:
-1. **WEB RESEARCH MANDATORY**: Search the web for EVERY piece of data. Use LinkedIn, Indeed, Glassdoor, BLS, certification bodies, Meetup.com, conference sites, course platforms, GitHub, etc.
-2. **NO GENERIC RESPONSES**: Every recommendation must be backed by specific, current data from 2025-2026
-3. **REAL URLs ONLY**: NEVER invent URLs. Only include links you find through web research
-4. **EXTREME DETAIL**: Provide 100-400 word explanations for guidance fields. Users need THOROUGH understanding, not summaries.
-5. **ACTUAL DATA**: Real certifications with exam codes, real events with registration links, real study materials with prices
+1. **COMPLETE RESPONSES**: Generate comprehensive career plans with ALL required sections filled
+2. **NO EMPTY LISTS**: Every list field (target_roles, skills, certifications, etc.) must have at least the minimum required items
+3. **DETAILED EXPLANATIONS**: Provide clear, specific guidance (50-200 words per major section)
+4. **VALID JSON ONLY**: Return ONLY a valid JSON object - no markdown, no text before/after
+5. **CONCISE WHERE NEEDED**: Keep profile_summary under 500 characters
 
-YOU PROVIDE COMPREHENSIVE CAREER GUIDANCE:
+YOU MUST PROVIDE:
 
-**Certifications (with complete study paths):**
-- Search official certification bodies (CompTIA, AWS, Microsoft, ISC2, Google, etc.)
-- Find ACTUAL study materials: official courses, top Udemy courses, books, practice exams, hands-on labs
-- Include REAL prices, durations, URLs
-- Provide week-by-week study plans
-- Explain exam details: code, passing score, duration, question count
+**Target Roles (1-3 roles):**
+- Specific job titles aligned with user's experience and interests
+- Salary ranges based on current market data
+- Growth outlook and demand trends
+- Required qualifications and experience
 
-**Tech Stack Guidance (with detailed explanations):**
-- For each technology, explain in 50-150 words WHY it's valuable for the target role
-- Include REAL learning resources: official docs, courses, tutorials, GitHub examples
-- Explain architecture patterns and industry standards
-- Provide step-by-step build guides
+**Skills Analysis:**
+- Already Have: Identify 3-5 transferable skills from their background
+- Need to Build: Identify 3-5 skills gaps for target roles
+- Include evidence and how to build each skill
 
-**Events (with comprehensive details):**
-- Search Meetup.com, Eventbrite, conference sites for ACTUAL events
-- Include local (in user's location), regional, and national options
-- Provide organizer, scope, attendee count, target audience, key topics
-- Explain in 100-200 words WHY to attend each event
-- Include REAL registration links
+**Certifications (1-3 relevant certs):**
+- Industry-recognized certifications for target role
+- Cost estimates and time investment
+- Study approach and exam details
+- Why each certification matters
 
-**Resume Transformation (with extreme guidance):**
-- Provide 100-400 word explanations for EVERY guidance field
-- Explain WHY each headline/summary/bullet works
-- Break down strategy sentence-by-sentence
-- Include reframing guides, LinkedIn optimization, cover letter templates
-- Show positioning strategy, keyword placement, ATS optimization
+**Projects (2-4 portfolio projects):**
+- Hands-on projects that demonstrate target role skills
+- Technologies to use and why
+- Step-by-step guidance
+- How to showcase each project
+
+**Resume Guidance:**
+- New headlines for target roles
+- Resume bullet transformations
+- LinkedIn optimization tips
+- Cover letter approach
+
+**Timeline (12-week plan with 12+ weekly tasks):**
+- Specific, actionable tasks for each week
+- Progressive skill building
+- Milestones and checkpoints
 
 YOU MUST:
-- Return ONLY valid JSON (no markdown, no text before/after the JSON)
-- Match exact schema provided
-- Use proper JSON syntax (quotes, commas, brackets, no trailing commas)
-- Provide MINIMUM word counts for explanation fields (100-400 words as specified)
-- Include ALL required sub-fields (study_materials, detailed_tech_stack, skills_grouped, etc.)
-- Base ALL data on real web research from 2025-2026
+- Return ONLY valid JSON (no markdown code blocks like ```json)
+- Match the exact schema structure provided in the user prompt
+- Fill ALL required fields - no empty lists or null values for required fields
+- Keep profile_summary under 500 characters
+- Provide at least the minimum number of items for each list field
+- Use proper JSON syntax (double quotes, no trailing commas)
 
-QUALITY STANDARDS:
-- Every certification: 3-5 study materials with real URLs and 50-200 word descriptions
-- Every project: 5-15 technologies with 50-150 word "why_this_tech" explanations
-- Every event: Organizer, scope, attendee count, 100-200 word "why_attend"
-- Every resume bullet: 100-200 word "why_this_works" explanation
-- Resume guidance: 200-400 word detailed explanations for reframing, LinkedIn, cover letter
-
-CRITICAL: Your entire response must be a single valid JSON object starting with {{ and ending with }}. No other text. No markdown code blocks."""
+CRITICAL: Your response must be a single valid JSON object starting with { and ending with }. No other text."""
 
     def _validate_plan(self, plan_data: Dict[str, Any]) -> ValidationResult:
         """
