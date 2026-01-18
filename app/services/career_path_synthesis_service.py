@@ -187,8 +187,21 @@ class CareerPathSynthesisService:
         text = re.sub(r'//.*?$', '', text, flags=re.MULTILINE)
         text = re.sub(r'/\*.*?\*/', '', text, flags=re.DOTALL)
 
-        # Fix unescaped quotes in strings (basic attempt)
-        # This is tricky and may need refinement
+        # Step 4: Fix control characters in string values
+        # JSON doesn't allow unescaped control characters (ASCII 0-31)
+        # Replace common control characters with escaped versions
+        control_char_fixes = {
+            '\n': '\\n',
+            '\r': '\\r',
+            '\t': '\\t',
+            '\b': '\\b',
+            '\f': '\\f'
+        }
+        for char, escaped in control_char_fixes.items():
+            text = text.replace(char, escaped)
+
+        # Remove any remaining control characters (except those we escaped)
+        text = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', text)
 
         return text.strip()
 
