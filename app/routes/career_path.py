@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from typing import List
 from datetime import datetime
+import os
 
 from app.database import get_db
 from app.models.career_plan import CareerPlan as CareerPlanModel
@@ -103,8 +104,20 @@ async def generate_career_plan(
     try:
         # Step 1: Research if not provided
         research_data = None
+        skip_research = os.getenv("SKIP_RESEARCH", "false").lower() == "true"
+
         if request.research_data:
             research_data = request.research_data.dict()
+        elif skip_research:
+            # Skip research to avoid Railway timeout (60s limit)
+            # Synthesis will work with empty research data
+            print("  ⚠ Skipping research (SKIP_RESEARCH=true)")
+            research_data = {
+                "certifications": [],
+                "education_options": [],
+                "events": [],
+                "research_sources": []
+            }
         else:
             # Determine target roles for research
             target_roles = []
