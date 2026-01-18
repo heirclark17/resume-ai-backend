@@ -416,6 +416,97 @@ async def generate_career_plan_async(
         )
 
 
+@router.post("/generate-tasks")
+async def generate_tasks_for_role(request: dict):
+    """
+    Auto-generate typical tasks for a given job role using Perplexity AI
+
+    Request body:
+    - role_title: str (e.g., "Software Engineer", "Product Manager")
+    - industry: str (optional, e.g., "Technology", "Healthcare")
+
+    Returns:
+    - tasks: List[str] (3-5 typical tasks for the role)
+    """
+    from app.services.perplexity_client import PerplexityClient
+
+    role_title = request.get("role_title", "").strip()
+    industry = request.get("industry", "").strip()
+
+    if not role_title:
+        raise HTTPException(status_code=400, detail="role_title is required")
+
+    try:
+        perplexity = PerplexityClient()
+
+        industry_context = f" in the {industry} industry" if industry else ""
+        query = f"What are the top 3-5 most common daily tasks and responsibilities for a {role_title}{industry_context}? List them as a brief, concrete tasks that someone in this role performs regularly."
+
+        response = perplexity.client.chat.completions.create(
+            model="llama-3.1-sonar-small-128k-online",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a career expert. Provide concise, specific daily tasks for job roles. Each task should be 3-8 words, actionable, and realistic."
+                },
+                {
+                    "role": "user",
+                    "content": query
+                }
+            ],
+            temperature=0.3,
+            max_tokens=500
+        )
+
+        answer = response.choices[0].message.content.strip()
+
+        # Parse the answer to extract task lines
+        tasks = []
+        lines = answer.split('\n')
+        for line in lines:
+            line = line.strip()
+            # Remove numbering (1., 2., -, *, etc.)
+            line = line.lstrip('0123456789.-* ')
+            if line and len(line) > 10 and len(line) < 100:
+                tasks.append(line)
+
+        # Limit to 3-5 tasks
+        tasks = tasks[:5]
+
+        if not tasks or len(tasks) < 3:
+            # Fallback generic tasks
+            tasks = [
+                "Collaborate with team members",
+                "Complete assigned project work",
+                "Attend meetings and provide updates"
+            ]
+
+        return {
+            "success": True,
+            "role_title": role_title,
+            "industry": industry or "General",
+            "tasks": tasks
+        }
+
+    except Exception as e:
+        print(f"✗ Error generating tasks: {e}")
+        import traceback
+        traceback.print_exc()
+
+        # Return generic fallback tasks
+        return {
+            "success": True,
+            "role_title": role_title,
+            "industry": industry or "General",
+            "tasks": [
+                "Collaborate with team members",
+                "Complete assigned project work",
+                "Attend meetings and provide updates"
+            ],
+            "fallback": True
+        }
+
+
 @router.get("/job/{job_id}")
 async def get_job_status(job_id: str):
     """
