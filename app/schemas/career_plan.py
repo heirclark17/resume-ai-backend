@@ -223,7 +223,7 @@ class Timeline(BaseModel):
 class ResumeBullet(BaseModel):
     """Single resume bullet with detailed guidance"""
     bullet_text: str = Field(..., min_length=50, max_length=300)
-    why_this_works: str = Field(..., min_length=100, description="Detailed explanation of why this bullet is effective")
+    why_this_works: str = Field(..., min_length=50, description="Detailed explanation of why this bullet is effective")
     what_to_emphasize: str = Field(..., description="What aspect of your experience to highlight")
     keywords_included: List[str] = Field(..., description="ATS keywords naturally incorporated")
     structure_explanation: str = Field(..., description="How this follows STAR/CAR method")

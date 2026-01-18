@@ -94,6 +94,14 @@ class CareerPathSynthesisService:
 
             # OpenAI JSON mode guarantees valid JSON - no cleaning needed
             plan_data = json.loads(raw_json)
+
+            # Fix: Move research_sources to root level if OpenAI placed it inside resume_assets
+            if "resume_assets" in plan_data and "research_sources" in plan_data.get("resume_assets", {}):
+                if "research_sources" not in plan_data:
+                    plan_data["research_sources"] = plan_data["resume_assets"]["research_sources"]
+                    del plan_data["resume_assets"]["research_sources"]
+                    print("✓ Moved research_sources from resume_assets to root level")
+
             validation_result = self._validate_plan(plan_data)
 
             if validation_result.valid:
@@ -541,7 +549,7 @@ Match this EXACT schema:
     "target_role_bullets": [
       {{
         "bullet_text": "50-300 char achievement bullet following CAR/STAR method with specific metrics",
-        "why_this_works": "100-200 words: Detailed explanation of why this bullet is effective. How does it demonstrate value? What makes the metrics credible? Why does this matter to hiring managers?",
+        "why_this_works": "50+ chars: Detailed explanation of why this bullet is effective. How does it demonstrate value? What makes the metrics credible? Why does this matter to hiring managers?",
         "what_to_emphasize": "When discussing this in interviews, emphasize: [specific talking points, complexity indicators, leadership aspects]",
         "keywords_included": ["keyword1", "keyword2", "keyword3"],
         "structure_explanation": "How this follows CAR/STAR method: Challenge/Situation → Action → Result. Break down each component."
