@@ -58,7 +58,7 @@ async def research_career_path(
             location=request.location,
             current_experience=5.0,  # TODO: Get from intake
             current_education=request.education_level,
-            budget=request.budget,
+            budget="flexible",  # Budget field removed from intake form
             format_preference="online"  # TODO: Get from intake
         )
 
@@ -122,7 +122,7 @@ async def generate_career_plan(
                 location=request.intake.location,
                 current_experience=request.intake.years_experience,
                 current_education=request.intake.education_level,
-                budget=request.intake.budget,
+                budget="flexible",  # Budget field removed from intake form
                 format_preference=request.intake.in_person_vs_remote
             )
             research_data = research_result

@@ -190,7 +190,6 @@ class CareerPathSynthesisService:
 - Education Level: {intake.education_level}
 - Location: {intake.location}
 - Time Available: {intake.time_per_week} hours/week
-- Budget: {intake.budget}
 - Timeline: {intake.timeline}
 - Format Preference: {intake.in_person_vs_remote}
 
