@@ -149,9 +149,17 @@ async def generate_career_plan(
         )
 
         if not synthesis_result.get("success"):
+            # Log validation errors if present
+            validation_errors = synthesis_result.get("validation_errors", [])
+            if validation_errors:
+                print(f"  ✗ Validation errors ({len(validation_errors)} total):")
+                for i, err in enumerate(validation_errors[:10]):
+                    print(f"    {i+1}. {err.get('field', 'unknown')}: {err.get('error', 'unknown')}")
+
             return GenerateResponse(
                 success=False,
-                error=synthesis_result.get("error", "Synthesis failed")
+                error=synthesis_result.get("error", "Synthesis failed"),
+                validation_errors=validation_errors if validation_errors else None
             )
 
         plan_data = synthesis_result["plan"]

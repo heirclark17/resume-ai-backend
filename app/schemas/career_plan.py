@@ -322,6 +322,7 @@ class GenerateResponse(BaseModel):
     plan: Optional[CareerPlan] = None
     plan_id: Optional[int] = None
     error: Optional[str] = None
+    validation_errors: Optional[List[Dict[str, Any]]] = None
 
 
 class RefreshEventsRequest(BaseModel):
