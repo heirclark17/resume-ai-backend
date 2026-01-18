@@ -108,7 +108,11 @@ class CareerPathSynthesisService:
             print(f"⚠ Plan validation failed with {len(validation_result.errors)} errors")
             # Log first 5 errors for debugging
             for i, e in enumerate(validation_result.errors[:5]):
-                print(f"  Error {i+1}: {e.field} - {e.error} (expected: {e.expected}, got: {e.received})")
+                print(f"  Error {i+1}: {e.field} - {e.error}")
+                if hasattr(e, 'expected'):
+                    print(f"      Expected: {e.expected}")
+                if hasattr(e, 'received'):
+                    print(f"      Received: {e.received}")
             print("🔧 Attempting JSON repair...")
 
             repaired = await self._repair_plan(plan_data, validation_result)
@@ -118,6 +122,15 @@ class CareerPathSynthesisService:
                 return repaired
             else:
                 print("✗ Repair failed")
+                print(f"✗ Validation errors ({len(validation_result.errors)} total):")
+                for i, e in enumerate(validation_result.errors[:10]):  # Show first 10
+                    print(f"  {i+1}. Field: {e.field}")
+                    print(f"      Error: {e.error}")
+                    if hasattr(e, 'expected'):
+                        print(f"      Expected: {e.expected}")
+                    if hasattr(e, 'received'):
+                        print(f"      Received: {e.received}")
+
                 return {
                     "success": False,
                     "error": "Schema validation failed and repair unsuccessful",
