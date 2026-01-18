@@ -26,13 +26,13 @@ class CareerPathSynthesisService:
     """
 
     def __init__(self):
-        # Use Perplexity AI for web-grounded research and real data
-        if not settings.perplexity_api_key:
+        # Use OpenAI for reliable JSON generation
+        if not settings.openai_api_key:
             if not settings.test_mode:
                 raise ValueError(
-                    "PERPLEXITY_API_KEY not found. Please set it in Railway environment variables, "
+                    "OPENAI_API_KEY not found. Please set it in Railway environment variables, "
                     "or set TEST_MODE=true to use mock data. "
-                    "Railway dashboard -> Variables -> Add Variable -> PERPLEXITY_API_KEY"
+                    "Railway dashboard -> Variables -> Add Variable -> OPENAI_API_KEY"
                 )
             else:
                 # TEST MODE: Don't initialize client, will use mock data
@@ -40,12 +40,9 @@ class CareerPathSynthesisService:
                 self.model = "test"
                 print("[TEST MODE] CareerPathSynthesisService using mock data")
         else:
-            self.client = OpenAI(
-                api_key=settings.perplexity_api_key,
-                base_url="https://api.perplexity.ai"
-            )
-            # Use sonar model - Perplexity's research-focused model with web search
-            self.model = "sonar"
+            self.client = OpenAI(api_key=settings.openai_api_key)
+            # Use GPT-4 for high-quality career planning
+            self.model = "gpt-4-turbo-preview"
 
     async def generate_career_plan(
         self,
@@ -74,7 +71,7 @@ class CareerPathSynthesisService:
         prompt = self._build_synthesis_prompt(intake, research_data)
 
         try:
-            # Call Perplexity with web search for real data
+            # Call OpenAI with JSON mode for guaranteed valid JSON
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -87,18 +84,15 @@ class CareerPathSynthesisService:
                         "content": prompt
                     }
                 ],
+                response_format={"type": "json_object"},  # Ensures valid JSON
                 temperature=0.7,
-                max_tokens=16000  # Perplexity doesn't support response_format parameter
+                max_tokens=16000
             )
 
             raw_json = response.choices[0].message.content
-            print(f"✓ Perplexity returned {len(raw_json)} characters")
+            print(f"✓ OpenAI returned {len(raw_json)} characters")
 
-            # Clean and extract JSON more robustly
-            raw_json = self._extract_and_clean_json(raw_json)
-            print(f"✓ Cleaned JSON, {len(raw_json)} characters remain")
-
-            # Parse and validate
+            # OpenAI JSON mode guarantees valid JSON - no cleaning needed
             plan_data = json.loads(raw_json)
             validation_result = self._validate_plan(plan_data)
 
