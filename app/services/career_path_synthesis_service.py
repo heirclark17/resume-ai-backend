@@ -86,7 +86,7 @@ class CareerPathSynthesisService:
                 ],
                 response_format={"type": "json_object"},  # Ensures valid JSON
                 temperature=0.7,
-                max_tokens=7000  # Balanced for complete JSON + Railway 60s timeout
+                max_tokens=9000  # Trying higher limit for complete JSON
             )
 
             raw_json = response.choices[0].message.content
