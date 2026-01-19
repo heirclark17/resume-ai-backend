@@ -646,6 +646,13 @@ YOU MUST PROVIDE:
 - Need to Build: Identify 3-5 skills gaps for target roles
 - Include evidence and how to build each skill
 
+**Skills Guidance (REQUIRED - separate from Skills Analysis):**
+- Soft Skills (3-8 items): Communication, leadership, problem-solving, collaboration, time management, etc.
+  * For EACH soft skill: why_needed (100+ chars), how_to_improve (150+ chars), importance (critical/high/medium), estimated_time, resources (URLs), real_world_application (100+ chars)
+- Hard Skills (3-10 items): Technical/domain-specific skills for target role
+  * For EACH hard skill: Same detailed structure as soft skills
+- skill_development_strategy: Overall strategy for building both soft and hard skills in parallel (200+ chars)
+
 **Certifications (1-3 relevant certs):**
 - Industry-recognized certifications for target role
 - Cost estimates and study time (keep brief)
