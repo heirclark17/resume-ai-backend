@@ -41,8 +41,8 @@ class CareerPathSynthesisService:
                 print("[TEST MODE] CareerPathSynthesisService using mock data")
         else:
             self.client = OpenAI(api_key=settings.openai_api_key)
-            # Use GPT-4o-mini for fast, accurate career planning with 16K output limit
-            self.model = "gpt-4o-mini"
+            # Use GPT-4.1-mini for fast, accurate career planning with 16K output limit
+            self.model = "gpt-4.1-mini"
 
     async def generate_career_plan(
         self,
