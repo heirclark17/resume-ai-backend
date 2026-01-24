@@ -16,6 +16,7 @@ from app.services.news_aggregator_service import NewsAggregatorService
 from app.services.interview_questions_scraper import InterviewQuestionsScraperService
 from app.services.interview_intelligence_service import InterviewIntelligenceService
 from app.services.practice_questions_service import PracticeQuestionsService
+from app.services.interview_questions_generator import InterviewQuestionsGenerator
 from app.models.practice_question_response import PracticeQuestionResponse
 from datetime import datetime
 import json
@@ -1510,4 +1511,256 @@ async def get_practice_responses(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to get practice responses: {str(e)}"
+        )
+
+
+class GenerateBehavioralTechnicalQuestionsRequest(BaseModel):
+    interview_prep_id: int
+
+
+@router.post("/generate-behavioral-technical-questions")
+async def generate_behavioral_technical_questions(
+    request: GenerateBehavioralTechnicalQuestionsRequest,
+    x_user_id: str = Header(None, alias="X-User-ID"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Generate 10 behavioral and 10 technical interview questions.
+
+    This endpoint:
+    1. Fetches interview prep, tailored resume, base resume, and job data
+    2. Uses Perplexity to research company's actual tech stack
+    3. Generates 10 behavioral questions with STAR story prompts
+    4. Generates 10 technical questions aligned to:
+       - Company's tech stack
+       - Candidate's skills from resume
+       - Job requirements
+
+    Returns:
+    - company_tech_stack: Real technologies the company uses
+    - behavioral: 10 questions with STAR prompts and guidance
+    - technical: 10 questions with skill leverage tips
+    - tech_stack_analysis: How candidate skills match company needs
+    """
+    try:
+        if not x_user_id:
+            raise HTTPException(status_code=400, detail="X-User-ID header is required")
+
+        # Fetch interview prep with user validation
+        result = await db.execute(
+            select(InterviewPrep, TailoredResume)
+            .join(TailoredResume, InterviewPrep.tailored_resume_id == TailoredResume.id)
+            .where(
+                and_(
+                    InterviewPrep.id == request.interview_prep_id,
+                    InterviewPrep.is_deleted == False,
+                    TailoredResume.session_user_id == x_user_id,
+                    TailoredResume.is_deleted == False
+                )
+            )
+        )
+        result_row = result.first()
+
+        if not result_row:
+            raise HTTPException(status_code=404, detail="Interview prep not found")
+
+        interview_prep, tailored_resume = result_row
+        prep_data = interview_prep.prep_data
+
+        # Fetch base resume for candidate skills and experience
+        result = await db.execute(
+            select(BaseResume).where(BaseResume.id == tailored_resume.base_resume_id)
+        )
+        base_resume = result.scalar_one_or_none()
+
+        if not base_resume:
+            raise HTTPException(status_code=404, detail="Base resume not found")
+
+        # Fetch job
+        result = await db.execute(
+            select(Job).where(Job.id == tailored_resume.job_id)
+        )
+        job = result.scalar_one_or_none()
+
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        # Parse candidate data from resume
+        candidate_skills = []
+        if base_resume.skills:
+            try:
+                skills_data = json.loads(base_resume.skills) if isinstance(base_resume.skills, str) else base_resume.skills
+                candidate_skills = skills_data if isinstance(skills_data, list) else []
+            except:
+                candidate_skills = []
+
+        candidate_experience = []
+        if base_resume.experience:
+            try:
+                exp_data = json.loads(base_resume.experience) if isinstance(base_resume.experience, str) else base_resume.experience
+                candidate_experience = exp_data if isinstance(exp_data, list) else []
+            except:
+                candidate_experience = []
+
+        # Extract data from prep_data
+        role_analysis = prep_data.get('role_analysis', {})
+        values_culture = prep_data.get('values_and_culture', {})
+        company_profile = prep_data.get('company_profile', {})
+
+        core_responsibilities = role_analysis.get('core_responsibilities', [])
+        must_have_skills = role_analysis.get('must_have_skills', [])
+        nice_to_have_skills = role_analysis.get('nice_to_have_skills', [])
+
+        # Get company values for behavioral questions
+        company_values = [v.get('name', '') for v in values_culture.get('stated_values', [])]
+
+        # Build job description
+        job_description = f"""
+Job Title: {job.title}
+Company: {job.company}
+Location: {job.location or 'Not specified'}
+
+Description:
+{job.description or 'No description available'}
+
+Requirements:
+{job.requirements or 'No specific requirements listed'}
+"""
+
+        # Initialize the question generator service
+        generator = InterviewQuestionsGenerator()
+
+        # Generate full question set
+        questions_data = await generator.generate_full_interview_questions(
+            job_description=job_description,
+            job_title=job.title,
+            company_name=job.company,
+            core_responsibilities=core_responsibilities,
+            must_have_skills=must_have_skills,
+            nice_to_have_skills=nice_to_have_skills,
+            candidate_skills=candidate_skills,
+            candidate_experience=candidate_experience,
+            company_values=company_values,
+            industry=company_profile.get('industry')
+        )
+
+        return {
+            "success": True,
+            "data": questions_data
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Failed to generate behavioral/technical questions: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate questions: {str(e)}"
+        )
+
+
+class SaveStarStoryForQuestionRequest(BaseModel):
+    interview_prep_id: int
+    question_id: int
+    question_text: str
+    question_type: str  # "behavioral" or "technical"
+    star_story: dict  # {situation, task, action, result}
+
+
+@router.post("/save-question-star-story")
+async def save_star_story_for_question(
+    request: SaveStarStoryForQuestionRequest,
+    x_user_id: str = Header(None, alias="X-User-ID"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Save a user's STAR story for a specific behavioral/technical question.
+    Uses the PracticeQuestionResponse model to store the response.
+    """
+    try:
+        if not x_user_id:
+            raise HTTPException(status_code=400, detail="X-User-ID header is required")
+
+        # Validate interview prep belongs to user
+        result = await db.execute(
+            select(InterviewPrep, TailoredResume)
+            .join(TailoredResume, InterviewPrep.tailored_resume_id == TailoredResume.id)
+            .where(
+                and_(
+                    InterviewPrep.id == request.interview_prep_id,
+                    InterviewPrep.is_deleted == False,
+                    TailoredResume.session_user_id == x_user_id,
+                    TailoredResume.is_deleted == False
+                )
+            )
+        )
+
+        if not result.first():
+            raise HTTPException(status_code=404, detail="Interview prep not found")
+
+        # Check if response already exists for this question
+        unique_question_key = f"{request.question_type}_{request.question_id}"
+        result = await db.execute(
+            select(PracticeQuestionResponse).where(
+                and_(
+                    PracticeQuestionResponse.interview_prep_id == request.interview_prep_id,
+                    PracticeQuestionResponse.question_text == request.question_text,
+                    PracticeQuestionResponse.is_deleted == False
+                )
+            )
+        )
+        existing_response = result.scalar_one_or_none()
+
+        if existing_response:
+            # Update existing response
+            existing_response.star_story = request.star_story
+            existing_response.question_category = request.question_type
+            existing_response.updated_at = datetime.utcnow()
+            existing_response.times_practiced = (existing_response.times_practiced or 0) + 1
+            existing_response.last_practiced_at = datetime.utcnow()
+            await db.commit()
+            await db.refresh(existing_response)
+
+            return {
+                "success": True,
+                "data": {
+                    "id": existing_response.id,
+                    "message": "STAR story updated",
+                    "times_practiced": existing_response.times_practiced
+                }
+            }
+        else:
+            # Create new response
+            new_response = PracticeQuestionResponse(
+                interview_prep_id=request.interview_prep_id,
+                question_text=request.question_text,
+                question_category=request.question_type,
+                star_story=request.star_story,
+                times_practiced=1,
+                last_practiced_at=datetime.utcnow()
+            )
+            db.add(new_response)
+            await db.commit()
+            await db.refresh(new_response)
+
+            return {
+                "success": True,
+                "data": {
+                    "id": new_response.id,
+                    "message": "STAR story saved",
+                    "times_practiced": 1
+                }
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Failed to save STAR story: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to save STAR story: {str(e)}"
         )
