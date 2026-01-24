@@ -31,7 +31,7 @@ async def get_db() -> AsyncSession:
 async def init_db():
     """Create all database tables"""
     # Import models to register them with Base
-    from app.models import resume, job, company, user, interview_prep, star_story
+    from app.models import resume, job, company, user, interview_prep, star_story, analysis_cache
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
