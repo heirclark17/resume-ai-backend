@@ -51,6 +51,13 @@ class BatchTailorRequest(BaseModel):
     base_resume_id: int
     job_urls: List[str]  # Max 10 URLs
 
+class UpdateTailoredResumeRequest(BaseModel):
+    """Request model for updating tailored resume content"""
+    summary: str = None
+    competencies: List[str] = None
+    experience: List[dict] = None
+    alignment_statement: str = None
+
 @router.post("/tailor")
 @limiter.limit("10/hour")  # Rate limit: 10 tailoring operations per hour per IP
 async def tailor_resume(
@@ -390,6 +397,57 @@ async def get_tailored_resume(
         "docx_path": tailored.docx_path,
         "quality_score": tailored.quality_score,
         "created_at": tailored.created_at.isoformat()
+    }
+
+
+@router.put("/tailored/{tailored_id}")
+async def update_tailored_resume(
+    tailored_id: int,
+    update_request: UpdateTailoredResumeRequest,
+    user_id: str = Depends(get_user_id),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update a tailored resume's content (requires ownership)"""
+    result = await db.execute(
+        select(TailoredResume).where(TailoredResume.id == tailored_id)
+    )
+    tailored = result.scalar_one_or_none()
+
+    if not tailored:
+        raise HTTPException(status_code=404, detail="Tailored resume not found")
+
+    # Check if deleted
+    if tailored.is_deleted:
+        raise HTTPException(status_code=404, detail="Tailored resume has been deleted")
+
+    # Verify ownership via session user ID
+    if tailored.session_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Access denied: You don't own this tailored resume")
+
+    # Update fields if provided
+    if update_request.summary is not None:
+        tailored.tailored_summary = update_request.summary
+
+    if update_request.competencies is not None:
+        tailored.tailored_skills = json.dumps(update_request.competencies)
+
+    if update_request.experience is not None:
+        tailored.tailored_experience = json.dumps(update_request.experience)
+
+    if update_request.alignment_statement is not None:
+        tailored.alignment_statement = update_request.alignment_statement
+
+    await db.commit()
+    await db.refresh(tailored)
+
+    return {
+        "success": True,
+        "id": tailored.id,
+        "summary": tailored.tailored_summary,
+        "competencies": safe_json_loads(tailored.tailored_skills, []),
+        "experience": safe_json_loads(tailored.tailored_experience, []),
+        "alignment_statement": tailored.alignment_statement,
+        "updated_at": datetime.utcnow().isoformat()
     }
 
 

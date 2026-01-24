@@ -105,6 +105,25 @@ class SkillsAnalysis(BaseModel):
     need_to_build: List[GapSkill] = Field(..., min_items=1)
 
 
+# ========== Skills Guidance Schemas ==========
+class SkillGuidanceItem(BaseModel):
+    """Individual skill with guidance on why and how to develop it"""
+    skill_name: str
+    why_needed: str = Field(..., min_length=100, description="Detailed explanation of why this skill is critical for the target role")
+    how_to_improve: str = Field(..., min_length=150, description="Specific actionable steps to develop this skill")
+    importance: str = Field(..., description="critical/high/medium - priority level")
+    estimated_time: str = Field(..., description="Time to develop proficiency (e.g., '3-6 months', '1-2 years')")
+    resources: List[str] = Field(default_factory=list, max_items=5, description="Specific learning resources (courses, books, platforms)")
+    real_world_application: str = Field(..., min_length=100, description="How this skill is used in day-to-day work")
+
+
+class SkillsGuidance(BaseModel):
+    """Comprehensive guidance on soft and hard skills needed for target role"""
+    soft_skills: List[SkillGuidanceItem] = Field(..., min_items=3, max_items=8, description="Essential soft skills for the target role")
+    hard_skills: List[SkillGuidanceItem] = Field(..., min_items=3, max_items=10, description="Essential technical/hard skills for the target role")
+    skill_development_strategy: str = Field(..., min_length=200, description="Overall strategy for building these skills in parallel")
+
+
 # ========== Certification Schemas ==========
 class StudyMaterial(BaseModel):
     """Study materials for certification prep"""
@@ -282,6 +301,7 @@ class CareerPlan(BaseModel):
     profile_summary: str = Field(..., min_length=50, max_length=500)  # Reduced from 100 to 50
     target_roles: List[TargetRole] = Field(..., min_items=1, max_items=6)
     skills_analysis: SkillsAnalysis
+    skills_guidance: SkillsGuidance
     certification_path: List[Certification] = Field(..., min_items=1, max_items=8)
     education_options: List[EducationOption] = Field(..., min_items=1, max_items=5)
     experience_plan: List[ExperienceProject] = Field(..., min_items=1, max_items=10)  # Reduced from 2 to 1

@@ -1,6 +1,7 @@
 from openai import OpenAI
 from app.config import get_settings
 from app.services.company_research_service import CompanyResearchService
+from app.services.news_aggregator_service import NewsAggregatorService
 import json
 import os
 
@@ -20,6 +21,7 @@ class OpenAIInterviewPrep:
         try:
             self.client = OpenAI(api_key=openai_api_key)
             self.company_research_service = CompanyResearchService()
+            self.news_aggregator_service = NewsAggregatorService()
         except Exception as e:
             raise ValueError(
                 f"Failed to initialize OpenAI client: {str(e)}. "
@@ -61,6 +63,35 @@ class OpenAIInterviewPrep:
                 print(f"⚠️ Perplexity values research failed: {e}, will use GPT inference")
                 perplexity_values = None
 
+        # STEP 2: Fetch REAL company news and strategies using Perplexity
+        perplexity_news = None
+        perplexity_strategies = None
+        if company_name:
+            try:
+                print(f"🔍 Fetching real company news from Perplexity for: {company_name}")
+                perplexity_news = await self.news_aggregator_service.aggregate_company_news(
+                    company_name=company_name,
+                    industry=company_research.get('industry'),
+                    job_title=job_title,
+                    days_back=90
+                )
+                print(f"✓ Perplexity returned {len(perplexity_news.get('news_articles', []))} real news articles")
+            except Exception as e:
+                print(f"⚠️ Perplexity news fetch failed: {e}, will use GPT inference")
+                perplexity_news = None
+
+            try:
+                print(f"🔍 Fetching real company strategies from Perplexity for: {company_name}")
+                perplexity_strategies = await self.company_research_service.research_company_strategies(
+                    company_name=company_name,
+                    industry=company_research.get('industry'),
+                    job_title=job_title
+                )
+                print(f"✓ Perplexity returned {len(perplexity_strategies.get('strategic_initiatives', []))} strategic initiatives")
+            except Exception as e:
+                print(f"⚠️ Perplexity strategies fetch failed: {e}, will use GPT inference")
+                perplexity_strategies = None
+
         # Build real values section if Perplexity data available
         real_values_section = ""
         if perplexity_values and perplexity_values.get('stated_values'):
@@ -80,10 +111,48 @@ class OpenAIInterviewPrep:
 
             real_values_section += "\n=== END REAL VALUES ===\n"
 
+        # Build real news section if Perplexity data available
+        real_news_section = ""
+        if perplexity_news and perplexity_news.get('news_articles'):
+            real_news_section = "\n\n=== REAL COMPANY NEWS (FROM PERPLEXITY WEB RESEARCH) ===\n"
+            real_news_section += "USE THESE EXACT NEWS ITEMS WITH THEIR URLs - DO NOT MAKE UP NEWS:\n\n"
+
+            for article in perplexity_news.get('news_articles', [])[:10]:
+                real_news_section += f"- {article.get('title', 'News')}\n"
+                real_news_section += f"  Date: {article.get('published_date', 'Recent')}\n"
+                real_news_section += f"  Summary: {article.get('summary', '')[:200]}\n"
+                real_news_section += f"  Source: {article.get('source', 'News')}\n"
+                if article.get('url'):
+                    real_news_section += f"  URL: {article.get('url')}\n"
+                real_news_section += "\n"
+
+            real_news_section += "=== END REAL NEWS ===\n"
+
+        # Build real strategies section if Perplexity data available
+        real_strategies_section = ""
+        if perplexity_strategies and perplexity_strategies.get('strategic_initiatives'):
+            real_strategies_section = "\n\n=== REAL STRATEGIC INITIATIVES (FROM PERPLEXITY WEB RESEARCH) ===\n"
+            real_strategies_section += "USE THESE EXACT INITIATIVES WITH THEIR URLs:\n\n"
+
+            for initiative in perplexity_strategies.get('strategic_initiatives', [])[:8]:
+                real_strategies_section += f"- {initiative.get('title', 'Initiative')}\n"
+                real_strategies_section += f"  Date: {initiative.get('date', 'Recent')}\n"
+                real_strategies_section += f"  Description: {initiative.get('description', '')[:200]}\n"
+                if initiative.get('url'):
+                    real_strategies_section += f"  URL: {initiative.get('url')}\n"
+                real_strategies_section += "\n"
+
+            if perplexity_strategies.get('technology_focus'):
+                real_strategies_section += f"\nTechnology Focus: {', '.join(perplexity_strategies.get('technology_focus', []))}\n"
+
+            real_strategies_section += "\n=== END REAL STRATEGIES ===\n"
+
         # Build company information text
         company_info = f"""
 Company Industry: {company_research.get('industry', 'Unknown')}
 {real_values_section}
+{real_news_section}
+{real_strategies_section}
 Mission & Values:
 {company_research.get('mission_values', 'No information available')}
 
@@ -118,6 +187,8 @@ You will be given:
 - A job description (JD) for a specific role.
 - Company information (may be unstructured research text with multiple sections).
 - **REAL COMPANY VALUES** from Perplexity web research (if available, marked with === REAL COMPANY VALUES ===)
+- **REAL COMPANY NEWS** from Perplexity web research (if available, marked with === REAL COMPANY NEWS ===)
+- **REAL STRATEGIC INITIATIVES** from Perplexity web research (if available, marked with === REAL STRATEGIC INITIATIVES ===)
 
 CRITICAL INSTRUCTIONS FOR VALUES & CULTURE:
 
@@ -130,30 +201,27 @@ CRITICAL INSTRUCTIONS FOR VALUES & CULTURE:
 
 **IF NO REAL VALUES ARE PROVIDED:**
 - Then you may infer values from the company research text
-- Look for keywords like "values", "mission", "culture", "principles"
 
-For OTHER sections (Strategy & News, Role Analysis, etc.):
+CRITICAL INSTRUCTIONS FOR STRATEGY & NEWS:
 
-1. **Strategy & News:** AGGRESSIVELY search for recent events, announcements, initiatives, strategic themes.
-   - Look for dates (2024, 2025, 2026, "last year", "recently", "Q1", "Q2", "Q3", "Q4")
-   - Look for keywords like "launched", "announced", "partnership", "acquisition", "expansion", "raised", "funding", "growth", "transformation", "initiative"
-   - Look for financial news ($X million, revenue, investment, valuation)
-   - Look for product launches, new markets, executive changes, strategic pivots
-   - Extract specific events with dates and impact
-   - Identify strategic themes and rationale
-   - **MINIMUM: Extract at least 3-5 recent events or strategic themes**
-   - If specific dates not found, use "2025", "Recent", or "Last 12 months"
-   - Infer strategic direction from job description if company info is limited
-   - Use industry trends if company-specific news is unavailable
+**IF "=== REAL COMPANY NEWS (FROM PERPLEXITY WEB RESEARCH) ===" IS PROVIDED:**
+- You MUST use those news items in strategy_and_news.recent_events
+- INCLUDE the URLs exactly as provided - these are clickable links
+- INCLUDE the source name and date
+- DO NOT make up news articles
 
-2. **Handle Redundancy:** The company information may repeat the same text in multiple sections.
-   - Read through ALL sections to find relevant information
-   - Deduplicate and organize findings
-   - Don't skip extraction just because text appears multiple times
+**IF "=== REAL STRATEGIC INITIATIVES (FROM PERPLEXITY WEB RESEARCH) ===" IS PROVIDED:**
+- Use those initiatives to inform strategic_themes
+- INCLUDE the URLs for initiatives in recent_events
+- Extract technology_focus from the provided data
+
+**IF NO REAL NEWS/STRATEGIES ARE PROVIDED:**
+- Then infer from the company research text
+- Use industry trends if company-specific news is unavailable
 
 You must:
 - Analyze the JD and company information.
-- **USE REAL VALUES** from Perplexity when provided (don't infer if real values exist).
+- **USE REAL DATA** from Perplexity when provided (don't infer if real data exists).
 - Produce a single valid JSON object that matches the JSON schema below.
 - Write all content so it can be rendered directly on the Interview Prep page.
 
@@ -161,10 +229,10 @@ Important rules:
 - Respond with JSON only, no markdown, no comments, no prose.
 - Do not add or remove top-level keys.
 - **For values_and_culture.stated_values: USE REAL VALUES if provided. Only infer if no real values given.**
-- **For strategy_and_news.recent_events: MINIMUM 3-5 events. Extract from text or infer from job description/industry trends.**
-- **For strategy_and_news.strategic_themes: MINIMUM 2-4 themes. Identify patterns from available information.**
+- **For strategy_and_news.recent_events: USE REAL NEWS if provided. Include URLs! Only infer if no real news given.**
+- **For strategy_and_news.strategic_themes: Extract from real initiatives if provided.**
+- **For strategy_and_news.technology_focus: List specific technologies the company is investing in.**
 - Be concise and avoid repetition; write in clear, plain language optimized for on-screen scanning.
-- Use qualitative descriptors like "mid-sized", "fast-growing", "recent" when exact numbers aren't available.
 - Focus on actionable, interview-oriented information.
 
 JSON schema (structure and key names MUST be followed exactly):
@@ -194,6 +262,9 @@ JSON schema (structure and key names MUST be followed exactly):
       {
         "date": "string",
         "title": "string",
+        "summary": "string",
+        "source": "string",
+        "url": "string",
         "impact_summary": "string"
       }
     ],
@@ -201,6 +272,13 @@ JSON schema (structure and key names MUST be followed exactly):
       {
         "theme": "string",
         "rationale": "string"
+      }
+    ],
+    "technology_focus": [
+      {
+        "technology": "string",
+        "description": "string",
+        "relevance_to_role": "string"
       }
     ]
   },
