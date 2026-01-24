@@ -1,5 +1,6 @@
 from openai import OpenAI
 from app.config import get_settings
+from app.services.company_research_service import CompanyResearchService
 import json
 import os
 
@@ -18,6 +19,7 @@ class OpenAIInterviewPrep:
 
         try:
             self.client = OpenAI(api_key=openai_api_key)
+            self.company_research_service = CompanyResearchService()
         except Exception as e:
             raise ValueError(
                 f"Failed to initialize OpenAI client: {str(e)}. "
@@ -27,23 +29,61 @@ class OpenAIInterviewPrep:
     async def generate_interview_prep(
         self,
         job_description: str,
-        company_research: dict
+        company_research: dict,
+        company_name: str = None,
+        job_title: str = None
     ) -> dict:
         """
-        Generate interview prep data using OpenAI GPT-4o
+        Generate interview prep data using OpenAI GPT-4o with Perplexity-powered values research
 
         Args:
             job_description: Full job description text
             company_research: {mission_values, initiatives, team_culture, compliance, tech_stack, industry, sources}
+            company_name: Company name for Perplexity research
+            job_title: Job title for context
 
         Returns:
             Complete interview prep JSON matching the schema
         """
 
+        # STEP 1: Fetch REAL company values using Perplexity
+        perplexity_values = None
+        if company_name:
+            try:
+                print(f"🔍 Fetching real company values from Perplexity for: {company_name}")
+                perplexity_values = await self.company_research_service.research_company_values_culture(
+                    company_name=company_name,
+                    industry=company_research.get('industry'),
+                    job_title=job_title
+                )
+                print(f"✓ Perplexity returned {len(perplexity_values.get('stated_values', []))} real values")
+            except Exception as e:
+                print(f"⚠️ Perplexity values research failed: {e}, will use GPT inference")
+                perplexity_values = None
+
+        # Build real values section if Perplexity data available
+        real_values_section = ""
+        if perplexity_values and perplexity_values.get('stated_values'):
+            real_values_section = "\n\n=== REAL COMPANY VALUES (FROM PERPLEXITY WEB RESEARCH) ===\n"
+            real_values_section += "USE THESE EXACT VALUES - DO NOT INFER OR MAKE UP VALUES:\n\n"
+
+            for value in perplexity_values.get('stated_values', []):
+                real_values_section += f"- {value.get('name', 'Unknown')}: {value.get('description', value.get('source_snippet', ''))}\n"
+                if value.get('url'):
+                    real_values_section += f"  Source: {value.get('url')}\n"
+
+            if perplexity_values.get('cultural_priorities'):
+                real_values_section += f"\nCultural Priorities: {', '.join(perplexity_values.get('cultural_priorities', []))}\n"
+
+            if perplexity_values.get('work_environment'):
+                real_values_section += f"\nWork Environment: {perplexity_values.get('work_environment')}\n"
+
+            real_values_section += "\n=== END REAL VALUES ===\n"
+
         # Build company information text
         company_info = f"""
 Company Industry: {company_research.get('industry', 'Unknown')}
-
+{real_values_section}
 Mission & Values:
 {company_research.get('mission_values', 'No information available')}
 
@@ -77,17 +117,24 @@ Interview Prep page.
 You will be given:
 - A job description (JD) for a specific role.
 - Company information (may be unstructured research text with multiple sections).
+- **REAL COMPANY VALUES** from Perplexity web research (if available, marked with === REAL COMPANY VALUES ===)
 
-CRITICAL: The company information may contain UNSTRUCTURED TEXT from research.
-You MUST actively extract and structure this information:
+CRITICAL INSTRUCTIONS FOR VALUES & CULTURE:
 
-1. **Values & Culture:** Search for company values, mission statements, cultural principles.
-   - Look for keywords like "values", "mission", "culture", "principles", "what we believe"
-   - Extract each value as a separate item with name and description
-   - If sources/URLs are mentioned, include them
-   - If no explicit values found, infer from company description
+**IF "=== REAL COMPANY VALUES (FROM PERPLEXITY WEB RESEARCH) ===" IS PROVIDED:**
+- You MUST use ONLY those values in the values_and_culture.stated_values section
+- DO NOT infer, guess, or make up additional values
+- Copy the value names and descriptions exactly as provided
+- Include the source URLs provided
+- These are REAL values from the company's official website
 
-2. **Strategy & News:** AGGRESSIVELY search for recent events, announcements, initiatives, strategic themes.
+**IF NO REAL VALUES ARE PROVIDED:**
+- Then you may infer values from the company research text
+- Look for keywords like "values", "mission", "culture", "principles"
+
+For OTHER sections (Strategy & News, Role Analysis, etc.):
+
+1. **Strategy & News:** AGGRESSIVELY search for recent events, announcements, initiatives, strategic themes.
    - Look for dates (2024, 2025, 2026, "last year", "recently", "Q1", "Q2", "Q3", "Q4")
    - Look for keywords like "launched", "announced", "partnership", "acquisition", "expansion", "raised", "funding", "growth", "transformation", "initiative"
    - Look for financial news ($X million, revenue, investment, valuation)
@@ -99,28 +146,23 @@ You MUST actively extract and structure this information:
    - Infer strategic direction from job description if company info is limited
    - Use industry trends if company-specific news is unavailable
 
-3. **Handle Redundancy:** The company information may repeat the same text in multiple sections.
+2. **Handle Redundancy:** The company information may repeat the same text in multiple sections.
    - Read through ALL sections to find relevant information
    - Deduplicate and organize findings
    - Don't skip extraction just because text appears multiple times
 
 You must:
 - Analyze the JD and company information.
-- **ACTIVELY EXTRACT** structured data from unstructured text.
+- **USE REAL VALUES** from Perplexity when provided (don't infer if real values exist).
 - Produce a single valid JSON object that matches the JSON schema below.
 - Write all content so it can be rendered directly on the Interview Prep page.
 
 Important rules:
 - Respond with JSON only, no markdown, no comments, no prose.
 - Do not add or remove top-level keys.
-- **CRITICAL: DO NOT leave values_and_culture or strategy_and_news empty. ALWAYS populate these sections.**
-- **For values_and_culture.stated_values: MINIMUM 3-5 values. Extract from text or infer from company description/industry.**
+- **For values_and_culture.stated_values: USE REAL VALUES if provided. Only infer if no real values given.**
 - **For strategy_and_news.recent_events: MINIMUM 3-5 events. Extract from text or infer from job description/industry trends.**
 - **For strategy_and_news.strategic_themes: MINIMUM 2-4 themes. Identify patterns from available information.**
-- If company-specific data is limited, use:
-  - Industry common values (e.g., "Innovation" for tech, "Safety" for healthcare)
-  - Recent industry trends as "recent events" (e.g., "AI/ML investment", "Cloud transformation")
-  - Strategic themes based on job requirements (e.g., "Security modernization" if hiring security roles)
 - Be concise and avoid repetition; write in clear, plain language optimized for on-screen scanning.
 - Use qualitative descriptors like "mid-sized", "fast-growing", "recent" when exact numbers aren't available.
 - Focus on actionable, interview-oriented information.
@@ -240,19 +282,22 @@ Here is the company information (about page, careers/values, recent news, etc.):
 
 {company_info}
 
-Using ONLY the information above plus your general knowledge of interview
-preparation and the STAR method, fill out the JSON schema defined in the
-system prompt. The JSON will populate a dedicated Interview Prep page
-that the user opened by pressing an "Interview Prep" button from their
-tailored resume screen.
+Using the information above, fill out the JSON schema defined in the
+system prompt. The JSON will populate a dedicated Interview Prep page.
 
-**CRITICAL REQUIREMENTS:**
-1. values_and_culture.stated_values: MUST have 3-5 items (extract or infer)
-2. strategy_and_news.recent_events: MUST have 3-5 items (extract or infer)
-3. strategy_and_news.strategic_themes: MUST have 2-4 items (extract or infer)
+**CRITICAL REQUIREMENTS FOR VALUES & CULTURE:**
+- If "=== REAL COMPANY VALUES (FROM PERPLEXITY WEB RESEARCH) ===" section is present above:
+  - Use ONLY those exact values in values_and_culture.stated_values
+  - Include the source URLs provided
+  - DO NOT add or infer additional values
+- If NO real values section is present:
+  - Then infer 3-5 values from the company research text
 
-If company information is limited:
-- Infer values from industry norms and job description
+**CRITICAL REQUIREMENTS FOR OTHER SECTIONS:**
+1. strategy_and_news.recent_events: MUST have 3-5 items (extract or infer)
+2. strategy_and_news.strategic_themes: MUST have 2-4 items (extract or infer)
+
+If company information is limited for strategy/news:
 - Infer recent events from industry trends (e.g., "AI adoption", "Cloud migration", "Security investment")
 - Infer strategic themes from job requirements and market position
 

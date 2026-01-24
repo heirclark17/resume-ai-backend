@@ -123,7 +123,9 @@ Requirements:
         print(f"Generating interview prep for job: {job.company} - {job.title}")
         prep_data = await ai_service.generate_interview_prep(
             job_description=job_description,
-            company_research=company_data
+            company_research=company_data,
+            company_name=job.company,
+            job_title=job.title
         )
 
         # Save to database
