@@ -1514,6 +1514,50 @@ async def get_practice_responses(
         )
 
 
+@router.get("/{interview_prep_id}/practice-history")
+async def get_practice_history(
+    interview_prep_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get practice history for an interview prep (alias for practice-responses).
+    Returns: List of practice history items with question text, category, response, and STAR story
+    """
+    try:
+        result = await db.execute(
+            select(PracticeQuestionResponse).where(
+                and_(
+                    PracticeQuestionResponse.interview_prep_id == interview_prep_id,
+                    PracticeQuestionResponse.is_deleted == False
+                )
+            ).order_by(PracticeQuestionResponse.last_practiced_at.desc())
+        )
+        responses = result.scalars().all()
+
+        return [
+            {
+                "id": r.id,
+                "question_text": r.question_text,
+                "question_category": r.question_category,
+                "response_text": r.written_answer,
+                "star_story": r.star_story,
+                "times_practiced": r.times_practiced,
+                "last_practiced_at": r.last_practiced_at.isoformat() if r.last_practiced_at else None,
+                "practice_duration_seconds": r.practice_duration_seconds
+            }
+            for r in responses
+        ]
+
+    except Exception as e:
+        print(f"Failed to get practice history: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get practice history: {str(e)}"
+        )
+
+
 class GenerateBehavioralTechnicalQuestionsRequest(BaseModel):
     interview_prep_id: int
 
