@@ -217,27 +217,38 @@ async def list_interview_preps(
 @router.get("/{tailored_resume_id}")
 async def get_interview_prep(
     tailored_resume_id: int,
+    x_user_id: str = Header(None, alias="X-User-ID"),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Get existing interview prep for a tailored resume.
     Returns 404 if no prep exists yet.
     Includes cached AI-generated data if available.
+    Validates user ownership via TailoredResume.session_user_id.
     """
+    if not x_user_id:
+        raise HTTPException(status_code=401, detail="User ID required")
+
     try:
+        # Join with TailoredResume to validate user ownership
         result = await db.execute(
-            select(InterviewPrep).where(
+            select(InterviewPrep, TailoredResume)
+            .join(TailoredResume, InterviewPrep.tailored_resume_id == TailoredResume.id)
+            .where(
                 InterviewPrep.tailored_resume_id == tailored_resume_id,
-                InterviewPrep.is_deleted == False
+                InterviewPrep.is_deleted == False,
+                TailoredResume.session_user_id == x_user_id
             )
         )
-        interview_prep = result.scalar_one_or_none()
+        row = result.first()
 
-        if not interview_prep:
+        if not row:
             raise HTTPException(
                 status_code=404,
-                detail="Interview prep not found. Generate it first using POST /generate/{tailored_resume_id}"
+                detail="Interview prep not found or access denied"
             )
+
+        interview_prep = row[0]
 
         # Safely get created_at
         created_at_str = interview_prep.created_at.isoformat() if interview_prep.created_at else None
