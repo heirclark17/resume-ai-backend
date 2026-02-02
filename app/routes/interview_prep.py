@@ -224,36 +224,56 @@ async def get_interview_prep(
     Returns 404 if no prep exists yet.
     Includes cached AI-generated data if available.
     """
-
-    result = await db.execute(
-        select(InterviewPrep).where(
-            InterviewPrep.tailored_resume_id == tailored_resume_id,
-            InterviewPrep.is_deleted == False
+    try:
+        result = await db.execute(
+            select(InterviewPrep).where(
+                InterviewPrep.tailored_resume_id == tailored_resume_id,
+                InterviewPrep.is_deleted == False
+            )
         )
-    )
-    interview_prep = result.scalar_one_or_none()
+        interview_prep = result.scalar_one_or_none()
 
-    if not interview_prep:
-        raise HTTPException(
-            status_code=404,
-            detail="Interview prep not found. Generate it first using POST /generate/{tailored_resume_id}"
-        )
+        if not interview_prep:
+            raise HTTPException(
+                status_code=404,
+                detail="Interview prep not found. Generate it first using POST /generate/{tailored_resume_id}"
+            )
 
-    return {
-        "success": True,
-        "interview_prep_id": interview_prep.id,
-        "prep_data": interview_prep.prep_data,
-        "created_at": interview_prep.created_at.isoformat(),
-        # Include cached AI-generated data
-        "cached_data": {
-            "company_research": interview_prep.company_research_data,
-            "strategic_news": interview_prep.strategic_news_data,
-            "values_alignment": interview_prep.values_alignment_data,
-            "readiness_score": interview_prep.readiness_score_data,
-            "competitive_intelligence": interview_prep.competitive_intelligence_data,
-            "interview_strategy": interview_prep.interview_strategy_data,
+        # Safely get created_at
+        created_at_str = interview_prep.created_at.isoformat() if interview_prep.created_at else None
+
+        # Safely build cached_data (handle missing columns gracefully)
+        cached_data = {}
+        try:
+            cached_data = {
+                "company_research": getattr(interview_prep, 'company_research_data', None),
+                "strategic_news": getattr(interview_prep, 'strategic_news_data', None),
+                "values_alignment": getattr(interview_prep, 'values_alignment_data', None),
+                "readiness_score": getattr(interview_prep, 'readiness_score_data', None),
+                "competitive_intelligence": getattr(interview_prep, 'competitive_intelligence_data', None),
+                "interview_strategy": getattr(interview_prep, 'interview_strategy_data', None),
+            }
+        except Exception as cache_error:
+            print(f"Warning: Could not get cached data fields: {cache_error}")
+            cached_data = {}
+
+        return {
+            "success": True,
+            "interview_prep_id": interview_prep.id,
+            "prep_data": interview_prep.prep_data,
+            "created_at": created_at_str,
+            "cached_data": cached_data
         }
-    }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in get_interview_prep: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get interview prep: {str(e)}"
+        )
 
 
 @router.delete("/{interview_prep_id}")
