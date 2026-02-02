@@ -222,6 +222,7 @@ async def get_interview_prep(
     """
     Get existing interview prep for a tailored resume.
     Returns 404 if no prep exists yet.
+    Includes cached AI-generated data if available.
     """
 
     result = await db.execute(
@@ -242,7 +243,16 @@ async def get_interview_prep(
         "success": True,
         "interview_prep_id": interview_prep.id,
         "prep_data": interview_prep.prep_data,
-        "created_at": interview_prep.created_at.isoformat()
+        "created_at": interview_prep.created_at.isoformat(),
+        # Include cached AI-generated data
+        "cached_data": {
+            "company_research": interview_prep.company_research_data,
+            "strategic_news": interview_prep.strategic_news_data,
+            "values_alignment": interview_prep.values_alignment_data,
+            "readiness_score": interview_prep.readiness_score_data,
+            "competitive_intelligence": interview_prep.competitive_intelligence_data,
+            "interview_strategy": interview_prep.interview_strategy_data,
+        }
     }
 
 
@@ -273,6 +283,464 @@ async def delete_interview_prep(
         "success": True,
         "message": "Interview prep deleted successfully"
     }
+
+
+class CachedDataUpdate(BaseModel):
+    """Request body for updating cached AI-generated data"""
+    company_research: Optional[Dict] = None
+    strategic_news: Optional[Dict] = None
+    values_alignment: Optional[Dict] = None
+    interview_questions: Optional[Dict] = None
+    company_values: Optional[Dict] = None
+
+
+@router.patch("/{interview_prep_id}/cache")
+async def update_cached_data(
+    interview_prep_id: int,
+    data: CachedDataUpdate,
+    x_user_id: str = Header(None, alias="X-User-ID"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Save AI-generated data to the database for permanent caching.
+    This prevents regeneration on subsequent page loads.
+    """
+    if not x_user_id:
+        raise HTTPException(status_code=401, detail="User ID required")
+
+    # Get interview prep with user validation
+    result = await db.execute(
+        select(InterviewPrep, TailoredResume)
+        .join(TailoredResume, InterviewPrep.tailored_resume_id == TailoredResume.id)
+        .where(
+            InterviewPrep.id == interview_prep_id,
+            InterviewPrep.is_deleted == False,
+            TailoredResume.session_user_id == x_user_id
+        )
+    )
+    row = result.first()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Interview prep not found or access denied")
+
+    interview_prep = row[0]
+
+    # Update cached fields if provided
+    if data.company_research is not None:
+        interview_prep.company_research_data = data.company_research
+    if data.strategic_news is not None:
+        interview_prep.strategic_news_data = data.strategic_news
+    if data.values_alignment is not None:
+        interview_prep.values_alignment_data = data.values_alignment
+    if data.interview_questions is not None:
+        # Store in competitive_intelligence_data (repurposed) or add new column
+        interview_prep.competitive_intelligence_data = data.interview_questions
+    if data.company_values is not None:
+        # Store in interview_strategy_data (repurposed) or add new column
+        interview_prep.interview_strategy_data = data.company_values
+
+    await db.commit()
+
+    return {
+        "success": True,
+        "message": "Cached data saved successfully"
+    }
+
+
+# =====================================================
+# Enhanced Data GET Endpoints (Cached Persistence)
+# These endpoints return cached AI-generated data.
+# If data doesn't exist, they generate and cache it.
+# =====================================================
+
+@router.get("/{prep_id}/readiness-score")
+async def get_readiness_score(
+    prep_id: int,
+    x_user_id: str = Header(None, alias="X-User-ID"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get cached readiness score for interview prep.
+    Returns cached data if available, otherwise generates and caches it.
+    """
+    result = await db.execute(
+        select(InterviewPrep).where(
+            InterviewPrep.id == prep_id,
+            InterviewPrep.is_deleted == False
+        )
+    )
+    interview_prep = result.scalar_one_or_none()
+
+    if not interview_prep:
+        raise HTTPException(status_code=404, detail="Interview prep not found")
+
+    # Return cached data if available
+    if interview_prep.readiness_score_data:
+        return {
+            "success": True,
+            "data": interview_prep.readiness_score_data,
+            "cached": True
+        }
+
+    # Generate and cache readiness score
+    try:
+        service = InterviewIntelligenceService()
+        readiness_data = await service.calculate_interview_readiness(
+            prep_data=interview_prep.prep_data,
+            sections_completed=[]  # Default empty - user hasn't marked any sections
+        )
+
+        # Cache the result
+        interview_prep.readiness_score_data = readiness_data
+        interview_prep.updated_at = datetime.utcnow()
+        await db.commit()
+
+        return {
+            "success": True,
+            "data": readiness_data,
+            "cached": False
+        }
+    except Exception as e:
+        print(f"Failed to generate readiness score: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate readiness score: {str(e)}")
+
+
+@router.get("/{prep_id}/values-alignment")
+async def get_values_alignment(
+    prep_id: int,
+    x_user_id: str = Header(None, alias="X-User-ID"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get cached values alignment data for interview prep.
+    """
+    result = await db.execute(
+        select(InterviewPrep).where(
+            InterviewPrep.id == prep_id,
+            InterviewPrep.is_deleted == False
+        )
+    )
+    interview_prep = result.scalar_one_or_none()
+
+    if not interview_prep:
+        raise HTTPException(status_code=404, detail="Interview prep not found")
+
+    if interview_prep.values_alignment_data:
+        return {
+            "success": True,
+            "data": interview_prep.values_alignment_data,
+            "cached": True
+        }
+
+    # Generate and cache
+    try:
+        service = InterviewIntelligenceService()
+        prep_data = interview_prep.prep_data or {}
+        company_data = prep_data.get('company_profile', {})
+        role_analysis = prep_data.get('role_analysis', {})
+
+        # Build stated_values in the format the service expects
+        stated_values = []
+        for value in company_data.get('stated_values', []):
+            if isinstance(value, dict):
+                stated_values.append(value)
+            else:
+                stated_values.append({"value": str(value), "description": ""})
+
+        # Build candidate background from prep data
+        candidate_background = json.dumps({
+            "skills": role_analysis.get('must_have_skills', []),
+            "experience": role_analysis.get('key_responsibilities', [])
+        })
+
+        alignment_data = await service.generate_values_alignment_scorecard(
+            stated_values=stated_values,
+            candidate_background=candidate_background,
+            job_description=json.dumps(role_analysis),
+            company_name=company_data.get('company_name', 'Unknown')
+        )
+
+        interview_prep.values_alignment_data = alignment_data
+        interview_prep.updated_at = datetime.utcnow()
+        await db.commit()
+
+        return {
+            "success": True,
+            "data": alignment_data,
+            "cached": False
+        }
+    except Exception as e:
+        print(f"Failed to generate values alignment: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate values alignment: {str(e)}")
+
+
+@router.get("/{prep_id}/company-research")
+async def get_company_research_for_prep(
+    prep_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get cached company research data for interview prep.
+    """
+    result = await db.execute(
+        select(InterviewPrep).where(
+            InterviewPrep.id == prep_id,
+            InterviewPrep.is_deleted == False
+        )
+    )
+    interview_prep = result.scalar_one_or_none()
+
+    if not interview_prep:
+        raise HTTPException(status_code=404, detail="Interview prep not found")
+
+    if interview_prep.company_research_data:
+        return {
+            "success": True,
+            "data": interview_prep.company_research_data,
+            "cached": True
+        }
+
+    # Return prep_data company_profile as fallback
+    prep_data = interview_prep.prep_data or {}
+    company_profile = prep_data.get('company_profile', {})
+
+    return {
+        "success": True,
+        "data": company_profile,
+        "cached": True
+    }
+
+
+@router.get("/{prep_id}/strategic-news")
+async def get_strategic_news(
+    prep_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get cached strategic news data for interview prep.
+    """
+    result = await db.execute(
+        select(InterviewPrep).where(
+            InterviewPrep.id == prep_id,
+            InterviewPrep.is_deleted == False
+        )
+    )
+    interview_prep = result.scalar_one_or_none()
+
+    if not interview_prep:
+        raise HTTPException(status_code=404, detail="Interview prep not found")
+
+    if interview_prep.strategic_news_data:
+        return {
+            "success": True,
+            "data": interview_prep.strategic_news_data,
+            "cached": True
+        }
+
+    # Generate and cache
+    try:
+        prep_data = interview_prep.prep_data or {}
+        company_data = prep_data.get('company_profile', {})
+        company_name = company_data.get('company_name', 'Unknown')
+
+        service = NewsAggregatorService()
+        news_data = await service.get_company_news(company_name=company_name, max_articles=10)
+
+        interview_prep.strategic_news_data = news_data
+        interview_prep.updated_at = datetime.utcnow()
+        await db.commit()
+
+        return {
+            "success": True,
+            "data": news_data,
+            "cached": False
+        }
+    except Exception as e:
+        print(f"Failed to fetch strategic news: {str(e)}")
+        return {
+            "success": True,
+            "data": [],
+            "cached": False,
+            "error": str(e)
+        }
+
+
+@router.get("/{prep_id}/competitive-intelligence")
+async def get_competitive_intelligence(
+    prep_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get cached competitive intelligence data for interview prep.
+    Returns prep_data strategy_news section as competitive context.
+    """
+    result = await db.execute(
+        select(InterviewPrep).where(
+            InterviewPrep.id == prep_id,
+            InterviewPrep.is_deleted == False
+        )
+    )
+    interview_prep = result.scalar_one_or_none()
+
+    if not interview_prep:
+        raise HTTPException(status_code=404, detail="Interview prep not found")
+
+    if interview_prep.competitive_intelligence_data:
+        return {
+            "success": True,
+            "data": interview_prep.competitive_intelligence_data,
+            "cached": True
+        }
+
+    # Extract competitive context from prep_data
+    prep_data = interview_prep.prep_data or {}
+    company_data = prep_data.get('company_profile', {})
+    strategy_news = prep_data.get('strategy_news', {})
+
+    intel_data = {
+        "company_name": company_data.get('company_name', 'Unknown'),
+        "industry": company_data.get('industry', 'Technology'),
+        "strategic_initiatives": strategy_news.get('strategic_initiatives', []),
+        "technology_focus": strategy_news.get('technology_focus', []),
+        "recent_events": strategy_news.get('recent_events', []),
+        "market_position": company_data.get('size', 'Unknown')
+    }
+
+    # Cache for future requests
+    interview_prep.competitive_intelligence_data = intel_data
+    interview_prep.updated_at = datetime.utcnow()
+    await db.commit()
+
+    return {
+        "success": True,
+        "data": intel_data,
+        "cached": False
+    }
+
+
+@router.get("/{prep_id}/interview-strategy")
+async def get_interview_strategy(
+    prep_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get cached interview strategy data for interview prep.
+    Derives strategy from preparation_checklist and role_analysis.
+    """
+    result = await db.execute(
+        select(InterviewPrep).where(
+            InterviewPrep.id == prep_id,
+            InterviewPrep.is_deleted == False
+        )
+    )
+    interview_prep = result.scalar_one_or_none()
+
+    if not interview_prep:
+        raise HTTPException(status_code=404, detail="Interview prep not found")
+
+    if interview_prep.interview_strategy_data:
+        return {
+            "success": True,
+            "data": interview_prep.interview_strategy_data,
+            "cached": True
+        }
+
+    # Extract strategy from prep_data
+    prep_data = interview_prep.prep_data or {}
+    prep_checklist = prep_data.get('preparation_checklist', {})
+    role_analysis = prep_data.get('role_analysis', {})
+    questions_to_ask = prep_data.get('questions_to_ask', {})
+
+    strategy_data = {
+        "research_tasks": prep_checklist.get('research_tasks', []),
+        "day_of_checklist": prep_checklist.get('day_of_checklist', []),
+        "key_responsibilities": role_analysis.get('key_responsibilities', []),
+        "must_have_skills": role_analysis.get('must_have_skills', []),
+        "nice_to_have_skills": role_analysis.get('nice_to_have_skills', []),
+        "questions_by_category": questions_to_ask,
+        "preparation_focus": [
+            "Research the company's recent news and strategic initiatives",
+            "Prepare STAR stories for behavioral questions",
+            "Review technical concepts mentioned in job description",
+            "Prepare thoughtful questions to ask the interviewer"
+        ]
+    }
+
+    # Cache for future requests
+    interview_prep.interview_strategy_data = strategy_data
+    interview_prep.updated_at = datetime.utcnow()
+    await db.commit()
+
+    return {
+        "success": True,
+        "data": strategy_data,
+        "cached": False
+    }
+
+
+@router.get("/{prep_id}/executive-insights")
+async def get_executive_insights(
+    prep_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get cached executive insights data for interview prep.
+    Derives insights from company_profile and values_culture.
+    """
+    result = await db.execute(
+        select(InterviewPrep).where(
+            InterviewPrep.id == prep_id,
+            InterviewPrep.is_deleted == False
+        )
+    )
+    interview_prep = result.scalar_one_or_none()
+
+    if not interview_prep:
+        raise HTTPException(status_code=404, detail="Interview prep not found")
+
+    if interview_prep.executive_insights_data:
+        return {
+            "success": True,
+            "data": interview_prep.executive_insights_data,
+            "cached": True
+        }
+
+    # Extract executive insights from prep_data
+    prep_data = interview_prep.prep_data or {}
+    company_data = prep_data.get('company_profile', {})
+    values_culture = prep_data.get('values_culture', {})
+    strategy_news = prep_data.get('strategy_news', {})
+
+    insights_data = {
+        "company_overview": company_data.get('overview', ''),
+        "company_size": company_data.get('size', 'Unknown'),
+        "industry": company_data.get('industry', 'Technology'),
+        "stated_values": values_culture.get('stated_values', []),
+        "culture_indicators": values_culture.get('practical_implications', []),
+        "strategic_priorities": strategy_news.get('strategic_initiatives', []),
+        "technology_investments": strategy_news.get('technology_focus', []),
+        "leadership_focus": [
+            "Understanding company mission and values",
+            "Aligning your experience with strategic priorities",
+            "Demonstrating cultural fit through specific examples"
+        ]
+    }
+
+    # Cache for future requests
+    interview_prep.executive_insights_data = insights_data
+    interview_prep.updated_at = datetime.utcnow()
+    await db.commit()
+
+    return {
+        "success": True,
+        "data": insights_data,
+        "cached": False
+    }
+
+
+# =====================================================
+# End Enhanced Data GET Endpoints
+# =====================================================
 
 
 class STARStoryRequest(BaseModel):
@@ -1514,50 +1982,6 @@ async def get_practice_responses(
         )
 
 
-@router.get("/{interview_prep_id}/practice-history")
-async def get_practice_history(
-    interview_prep_id: int,
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Get practice history for an interview prep (alias for practice-responses).
-    Returns: List of practice history items with question text, category, response, and STAR story
-    """
-    try:
-        result = await db.execute(
-            select(PracticeQuestionResponse).where(
-                and_(
-                    PracticeQuestionResponse.interview_prep_id == interview_prep_id,
-                    PracticeQuestionResponse.is_deleted == False
-                )
-            ).order_by(PracticeQuestionResponse.last_practiced_at.desc())
-        )
-        responses = result.scalars().all()
-
-        return [
-            {
-                "id": r.id,
-                "question_text": r.question_text,
-                "question_category": r.question_category,
-                "response_text": r.written_answer,
-                "star_story": r.star_story,
-                "times_practiced": r.times_practiced,
-                "last_practiced_at": r.last_practiced_at.isoformat() if r.last_practiced_at else None,
-                "practice_duration_seconds": r.practice_duration_seconds
-            }
-            for r in responses
-        ]
-
-    except Exception as e:
-        print(f"Failed to get practice history: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get practice history: {str(e)}"
-        )
-
-
 class GenerateBehavioralTechnicalQuestionsRequest(BaseModel):
     interview_prep_id: int
 
@@ -1702,683 +2126,6 @@ Requirements:
         raise HTTPException(
             status_code=500,
             detail=f"Failed to generate questions: {str(e)}"
-        )
-
-
-# ============================================================================
-# MOBILE APP GET ENDPOINTS - Interview Intelligence Features
-# These GET endpoints are called by the mobile app with prep_id in the URL
-# ============================================================================
-
-
-@router.get("/{prep_id}/readiness-score")
-async def get_readiness_score(
-    prep_id: int,
-    x_user_id: str = Header(None, alias="X-User-ID"),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Get interview readiness score for a specific interview prep.
-    Mobile app calls this with the prep_id in the URL.
-
-    Returns:
-    - confidence_level: 0-100
-    - preparation_level: "Well Prepared", "Needs Work", etc.
-    - strengths: List of strengths
-    - areas_for_improvement: List of areas to improve
-    - recommendations: List of recommendations
-    """
-    try:
-        # Fetch interview prep with user validation
-        result = await db.execute(
-            select(InterviewPrep, TailoredResume)
-            .join(TailoredResume, InterviewPrep.tailored_resume_id == TailoredResume.id)
-            .where(
-                and_(
-                    InterviewPrep.id == prep_id,
-                    InterviewPrep.is_deleted == False,
-                    TailoredResume.is_deleted == False
-                )
-            )
-        )
-        result_row = result.first()
-
-        if not result_row:
-            raise HTTPException(status_code=404, detail="Interview prep not found")
-
-        interview_prep, tailored_resume = result_row
-        prep_data = interview_prep.prep_data
-
-        # Calculate readiness based on prep data completeness
-        service = InterviewIntelligenceService()
-
-        # Determine which sections are complete based on prep_data
-        sections_completed = []
-        if prep_data.get('company_profile'):
-            sections_completed.append('company_profile')
-        if prep_data.get('role_analysis'):
-            sections_completed.append('role_analysis')
-        if prep_data.get('values_and_culture'):
-            sections_completed.append('values_culture')
-        if prep_data.get('strategy_and_news'):
-            sections_completed.append('strategy_news')
-        if prep_data.get('interview_preparation'):
-            sections_completed.append('interview_prep_checklist')
-        if prep_data.get('questions_to_ask_interviewer'):
-            sections_completed.append('questions_to_ask')
-        if prep_data.get('candidate_positioning'):
-            sections_completed.append('practice_questions')
-
-        readiness = await service.calculate_interview_readiness(
-            prep_data=prep_data,
-            sections_completed=sections_completed
-        )
-
-        # Transform to match mobile app expected format
-        confidence_level = int(readiness.get('readiness_score', 7) * 10)  # Convert 0-10 to 0-100
-
-        return {
-            "success": True,
-            "data": {
-                "confidence_level": confidence_level,
-                "preparation_level": readiness.get('status', 'In Progress'),
-                "strengths": [
-                    f"Completed {len(sections_completed)} of 7 prep sections",
-                    f"Progress: {readiness.get('progress_percentage', 0)}%",
-                    f"Time invested: ~{readiness.get('time_invested_minutes', 0)} minutes"
-                ],
-                "areas_for_improvement": readiness.get('critical_gaps', []),
-                "recommendations": [action.get('action', '') for action in readiness.get('next_actions', [])]
-            }
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Failed to get readiness score: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get readiness score: {str(e)}"
-        )
-
-
-@router.get("/{prep_id}/values-alignment")
-async def get_values_alignment(
-    prep_id: int,
-    x_user_id: str = Header(None, alias="X-User-ID"),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Get values alignment analysis for a specific interview prep.
-
-    Returns:
-    - alignment_score: 0-100
-    - matched_values: List of matched values with evidence
-    - value_gaps: List of values to develop
-    - cultural_fit_insights: Text insights
-    """
-    try:
-        # Fetch interview prep with user validation
-        result = await db.execute(
-            select(InterviewPrep, TailoredResume, Job)
-            .join(TailoredResume, InterviewPrep.tailored_resume_id == TailoredResume.id)
-            .join(Job, TailoredResume.job_id == Job.id)
-            .where(
-                and_(
-                    InterviewPrep.id == prep_id,
-                    InterviewPrep.is_deleted == False,
-                    TailoredResume.is_deleted == False
-                )
-            )
-        )
-        result_row = result.first()
-
-        if not result_row:
-            raise HTTPException(status_code=404, detail="Interview prep not found")
-
-        interview_prep, tailored_resume, job = result_row
-        prep_data = interview_prep.prep_data
-
-        # Get values from prep data
-        values_and_culture = prep_data.get('values_and_culture', {})
-        stated_values = values_and_culture.get('stated_values', [])
-
-        # Get candidate background from tailored resume
-        candidate_background = tailored_resume.tailored_summary or tailored_resume.summary or ""
-
-        # Build job description
-        job_description = f"{job.title} at {job.company}\n{job.description or ''}"
-
-        # Generate values alignment
-        service = InterviewIntelligenceService()
-        alignment = await service.generate_values_alignment_scorecard(
-            stated_values=stated_values,
-            candidate_background=candidate_background,
-            job_description=job_description,
-            company_name=job.company
-        )
-
-        # Transform to match mobile app expected format
-        value_matches = []
-        value_gaps = []
-
-        for vm in alignment.get('value_matches', []):
-            match_pct = vm.get('match_percentage', 70)
-            value_item = {
-                "value": vm.get('value', ''),
-                "company_context": vm.get('how_to_discuss', ''),
-                "candidate_evidence": vm.get('your_evidence', '')
-            }
-            if match_pct >= 60:
-                value_matches.append(value_item)
-            else:
-                value_gaps.append({
-                    **value_item,
-                    "suggestion": vm.get('star_story_prompt', '')
-                })
-
-        return {
-            "success": True,
-            "data": {
-                "alignment_score": int(alignment.get('overall_culture_fit', 7.5) * 10),
-                "matched_values": value_matches,
-                "value_gaps": value_gaps,
-                "cultural_fit_insights": f"Based on your background, you align well with {job.company}'s values. " +
-                    f"Top strengths: {', '.join(alignment.get('top_strengths', []))}"
-            }
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Failed to get values alignment: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get values alignment: {str(e)}"
-        )
-
-
-@router.get("/{prep_id}/company-research")
-async def get_company_research_for_prep(
-    prep_id: int,
-    x_user_id: str = Header(None, alias="X-User-ID"),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Get company research for a specific interview prep.
-
-    Returns:
-    - company_overview: Summary text
-    - recent_news: List of news items
-    - key_products_services: List of products/services
-    - competitors: List of competitors
-    - financial_health: Financial status info
-    - employee_sentiment: Employee review summary
-    """
-    try:
-        # Fetch interview prep with job and company research
-        result = await db.execute(
-            select(InterviewPrep, TailoredResume, Job, CompanyResearch)
-            .join(TailoredResume, InterviewPrep.tailored_resume_id == TailoredResume.id)
-            .join(Job, TailoredResume.job_id == Job.id)
-            .outerjoin(CompanyResearch, CompanyResearch.job_id == Job.id)
-            .where(
-                and_(
-                    InterviewPrep.id == prep_id,
-                    InterviewPrep.is_deleted == False,
-                    TailoredResume.is_deleted == False
-                )
-            )
-        )
-        result_row = result.first()
-
-        if not result_row:
-            raise HTTPException(status_code=404, detail="Interview prep not found")
-
-        interview_prep, tailored_resume, job, company_research = result_row
-        prep_data = interview_prep.prep_data
-
-        # Extract company profile from prep data
-        company_profile = prep_data.get('company_profile', {})
-        strategy_and_news = prep_data.get('strategy_and_news', {})
-
-        # Build company research response
-        recent_news = []
-        for event in strategy_and_news.get('recent_events', [])[:5]:
-            recent_news.append({
-                "headline": event.get('title') or event.get('headline', ''),
-                "date": event.get('date', ''),
-                "summary": event.get('summary', ''),
-                "source": event.get('source', '')
-            })
-
-        # Get competitor info if available
-        competitors = []
-        if company_research and company_research.initiatives:
-            try:
-                initiatives = json.loads(company_research.initiatives) if isinstance(company_research.initiatives, str) else company_research.initiatives
-                # Look for competitor mentions in initiatives
-                for initiative in initiatives[:3]:
-                    competitors.append({
-                        "name": initiative.get('name', 'Competitor'),
-                        "context": initiative.get('description', '')
-                    })
-            except:
-                pass
-
-        return {
-            "success": True,
-            "data": {
-                "company_overview": company_profile.get('overview_paragraph', f"{job.company} is a company in the {company_profile.get('industry', 'technology')} industry."),
-                "recent_news": recent_news,
-                "key_products_services": [tech.get('technology') or tech.get('name', '') for tech in strategy_and_news.get('technology_focus', [])],
-                "competitors": competitors,
-                "financial_health": {
-                    "status": "stable",
-                    "summary": f"{job.company} appears to be in stable financial health based on available information."
-                },
-                "employee_sentiment": {
-                    "sentiment": "positive",
-                    "rating": 4.0,
-                    "summary": f"Employee sentiment for {job.company} appears positive based on company culture research."
-                }
-            }
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Failed to get company research: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get company research: {str(e)}"
-        )
-
-
-@router.get("/{prep_id}/strategic-news")
-async def get_strategic_news(
-    prep_id: int,
-    x_user_id: str = Header(None, alias="X-User-ID"),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Get strategic news items for a specific interview prep.
-
-    Returns list of news items with:
-    - headline, date, summary, source, url
-    - relevance_score, talking_points
-    """
-    try:
-        # Fetch interview prep
-        result = await db.execute(
-            select(InterviewPrep, TailoredResume, Job)
-            .join(TailoredResume, InterviewPrep.tailored_resume_id == TailoredResume.id)
-            .join(Job, TailoredResume.job_id == Job.id)
-            .where(
-                and_(
-                    InterviewPrep.id == prep_id,
-                    InterviewPrep.is_deleted == False,
-                    TailoredResume.is_deleted == False
-                )
-            )
-        )
-        result_row = result.first()
-
-        if not result_row:
-            raise HTTPException(status_code=404, detail="Interview prep not found")
-
-        interview_prep, tailored_resume, job = result_row
-        prep_data = interview_prep.prep_data
-
-        # Extract news from prep data
-        strategy_and_news = prep_data.get('strategy_and_news', {})
-        recent_events = strategy_and_news.get('recent_events', [])
-        strategic_themes = strategy_and_news.get('strategic_themes', [])
-
-        # Build strategic news list
-        news_items = []
-
-        for i, event in enumerate(recent_events[:10]):
-            news_items.append({
-                "headline": event.get('title') or event.get('headline', f'Company Update {i+1}'),
-                "date": event.get('date', ''),
-                "summary": event.get('summary', ''),
-                "source": event.get('source', ''),
-                "url": event.get('url') or event.get('source_url', ''),
-                "relevance_score": 8 - (i * 0.5),  # Decreasing relevance
-                "talking_points": [
-                    f"This shows {job.company}'s commitment to {event.get('summary', 'innovation')[:50]}...",
-                    f"I'd love to contribute to initiatives like this."
-                ],
-                "impact_summary": event.get('impact_summary', f"This development may impact the {job.title} role.")
-            })
-
-        # Add strategic themes as additional items
-        for theme in strategic_themes[:5]:
-            news_items.append({
-                "headline": theme.get('theme') or theme.get('name', 'Strategic Initiative'),
-                "date": "",
-                "summary": theme.get('rationale') or theme.get('description', ''),
-                "source": "Company Strategy",
-                "url": "",
-                "relevance_score": 7.5,
-                "talking_points": [
-                    f"This aligns with my experience in {theme.get('theme', 'this area')}",
-                    "I can contribute to this strategic direction."
-                ],
-                "impact_summary": f"Strategic focus area for {job.company}"
-            })
-
-        return {
-            "success": True,
-            "data": news_items
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Failed to get strategic news: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get strategic news: {str(e)}"
-        )
-
-
-@router.get("/{prep_id}/competitive-intelligence")
-async def get_competitive_intelligence(
-    prep_id: int,
-    x_user_id: str = Header(None, alias="X-User-ID"),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Get competitive intelligence for a specific interview prep.
-
-    Returns:
-    - market_position: Text description
-    - competitive_advantages: List of advantages
-    - challenges: List of challenges
-    - interview_angles: List of angles to use in interview
-    """
-    try:
-        # Fetch interview prep
-        result = await db.execute(
-            select(InterviewPrep, TailoredResume, Job)
-            .join(TailoredResume, InterviewPrep.tailored_resume_id == TailoredResume.id)
-            .join(Job, TailoredResume.job_id == Job.id)
-            .where(
-                and_(
-                    InterviewPrep.id == prep_id,
-                    InterviewPrep.is_deleted == False,
-                    TailoredResume.is_deleted == False
-                )
-            )
-        )
-        result_row = result.first()
-
-        if not result_row:
-            raise HTTPException(status_code=404, detail="Interview prep not found")
-
-        interview_prep, tailored_resume, job = result_row
-        prep_data = interview_prep.prep_data
-
-        # Extract data from prep
-        company_profile = prep_data.get('company_profile', {})
-        role_analysis = prep_data.get('role_analysis', {})
-        strategy_and_news = prep_data.get('strategy_and_news', {})
-
-        # Build competitive intelligence
-        technology_focus = strategy_and_news.get('technology_focus', [])
-
-        competitive_advantages = []
-        for tech in technology_focus[:5]:
-            competitive_advantages.append(
-                f"{tech.get('technology') or tech.get('name', 'Technology')}: {tech.get('description', '')}"
-            )
-
-        # Generate interview angles
-        interview_angles = [
-            f"Discuss how your experience aligns with {job.company}'s focus on {technology_focus[0].get('technology', 'innovation') if technology_focus else 'innovation'}",
-            f"Ask about growth opportunities in the {role_analysis.get('job_title', job.title)} role",
-            f"Show enthusiasm for {company_profile.get('industry', 'the industry')}'s evolution",
-            f"Reference their recent strategic initiatives to show you've done your research",
-            f"Connect your skills to their {role_analysis.get('seniority_level', 'senior')}-level expectations"
-        ]
-
-        return {
-            "success": True,
-            "data": {
-                "market_position": f"{job.company} is positioned as a {company_profile.get('size_estimate', 'leading')} player in the {company_profile.get('industry', 'technology')} industry.",
-                "competitive_advantages": competitive_advantages if competitive_advantages else [
-                    "Strong industry presence",
-                    "Focus on innovation",
-                    "Established market position"
-                ],
-                "challenges": [
-                    "Competitive talent market",
-                    "Rapid technology evolution",
-                    "Market dynamics"
-                ],
-                "interview_angles": interview_angles
-            }
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Failed to get competitive intelligence: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get competitive intelligence: {str(e)}"
-        )
-
-
-@router.get("/{prep_id}/interview-strategy")
-async def get_interview_strategy(
-    prep_id: int,
-    x_user_id: str = Header(None, alias="X-User-ID"),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Get interview strategy for a specific interview prep.
-
-    Returns:
-    - overall_approach: Text strategy
-    - key_messages: List of key messages
-    - questions_to_expect: List of likely questions
-    - questions_to_ask: List of questions to ask
-    - preparation_tips: List of tips
-    """
-    try:
-        # Fetch interview prep
-        result = await db.execute(
-            select(InterviewPrep, TailoredResume, Job)
-            .join(TailoredResume, InterviewPrep.tailored_resume_id == TailoredResume.id)
-            .join(Job, TailoredResume.job_id == Job.id)
-            .where(
-                and_(
-                    InterviewPrep.id == prep_id,
-                    InterviewPrep.is_deleted == False,
-                    TailoredResume.is_deleted == False
-                )
-            )
-        )
-        result_row = result.first()
-
-        if not result_row:
-            raise HTTPException(status_code=404, detail="Interview prep not found")
-
-        interview_prep, tailored_resume, job = result_row
-        prep_data = interview_prep.prep_data
-
-        # Extract data
-        role_analysis = prep_data.get('role_analysis', {})
-        interview_preparation = prep_data.get('interview_preparation', {})
-        candidate_positioning = prep_data.get('candidate_positioning', {})
-        questions_to_ask = prep_data.get('questions_to_ask_interviewer', {})
-
-        # Build questions to expect
-        questions_to_expect = []
-        for pq in interview_preparation.get('practice_questions_for_candidate', [])[:8]:
-            if isinstance(pq, str):
-                questions_to_expect.append(pq)
-            elif isinstance(pq, dict):
-                questions_to_expect.append(pq.get('question') or pq.get('text', ''))
-
-        # Flatten questions to ask
-        all_questions_to_ask = []
-        for category in ['product', 'team', 'culture', 'performance', 'strategy']:
-            for q in questions_to_ask.get(category, [])[:2]:
-                all_questions_to_ask.append(q)
-
-        return {
-            "success": True,
-            "data": {
-                "overall_approach": f"Position yourself as a strong candidate for the {role_analysis.get('job_title', job.title)} role by emphasizing your relevant experience and alignment with {job.company}'s values and strategic direction.",
-                "key_messages": candidate_positioning.get('resume_focus_areas', [
-                    "Highlight relevant technical skills",
-                    "Emphasize leadership experience",
-                    "Show culture fit"
-                ])[:5],
-                "questions_to_expect": questions_to_expect[:8],
-                "questions_to_ask": all_questions_to_ask[:8],
-                "preparation_tips": interview_preparation.get('research_tasks', [
-                    "Review the job description thoroughly",
-                    "Research company recent news",
-                    "Prepare STAR stories for behavioral questions",
-                    "Practice technical concepts relevant to the role"
-                ])[:6],
-                "day_of_checklist": interview_preparation.get('day_of_checklist', [
-                    "Review key talking points",
-                    "Check technology setup",
-                    "Prepare questions to ask",
-                    "Review company values"
-                ])[:5]
-            }
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Failed to get interview strategy: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get interview strategy: {str(e)}"
-        )
-
-
-@router.get("/{prep_id}/executive-insights")
-async def get_executive_insights(
-    prep_id: int,
-    x_user_id: str = Header(None, alias="X-User-ID"),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Get executive-level insights for a specific interview prep.
-
-    Returns:
-    - leadership_context: Leadership team context
-    - strategic_priorities: List of strategic priorities
-    - decision_making_style: Text description
-    - c_suite_talking_points: List of executive-level talking points
-    - strategic_initiatives: List of key initiatives
-    """
-    try:
-        # Fetch interview prep
-        result = await db.execute(
-            select(InterviewPrep, TailoredResume, Job)
-            .join(TailoredResume, InterviewPrep.tailored_resume_id == TailoredResume.id)
-            .join(Job, TailoredResume.job_id == Job.id)
-            .where(
-                and_(
-                    InterviewPrep.id == prep_id,
-                    InterviewPrep.is_deleted == False,
-                    TailoredResume.is_deleted == False
-                )
-            )
-        )
-        result_row = result.first()
-
-        if not result_row:
-            raise HTTPException(status_code=404, detail="Interview prep not found")
-
-        interview_prep, tailored_resume, job = result_row
-        prep_data = interview_prep.prep_data
-
-        # Extract data
-        company_profile = prep_data.get('company_profile', {})
-        strategy_and_news = prep_data.get('strategy_and_news', {})
-        values_and_culture = prep_data.get('values_and_culture', {})
-
-        # Build strategic priorities
-        strategic_priorities = []
-        for theme in strategy_and_news.get('strategic_themes', [])[:5]:
-            strategic_priorities.append(theme.get('theme') or theme.get('name', 'Strategic Initiative'))
-
-        # Build c-suite talking points
-        c_suite_talking_points = []
-        for theme in strategy_and_news.get('strategic_themes', [])[:3]:
-            c_suite_talking_points.append(
-                f"I'm excited about {job.company}'s focus on {theme.get('theme', 'innovation')} and how my experience can contribute."
-            )
-
-        # Add value-based talking points
-        for value in values_and_culture.get('stated_values', [])[:2]:
-            value_name = value.get('name') or value.get('title', 'excellence')
-            c_suite_talking_points.append(
-                f"Your commitment to {value_name} resonates with my approach to work."
-            )
-
-        # Build strategic initiatives
-        strategic_initiatives = []
-        for tech in strategy_and_news.get('technology_focus', [])[:5]:
-            strategic_initiatives.append(
-                f"{tech.get('technology') or tech.get('name', 'Initiative')}: {tech.get('relevance_to_role', tech.get('description', ''))}"
-            )
-
-        return {
-            "success": True,
-            "data": {
-                "leadership_context": f"{job.company}'s leadership team is focused on {company_profile.get('industry', 'industry')} excellence and strategic growth. The {job.title} role reports into this structure with clear expectations for impact.",
-                "strategic_priorities": strategic_priorities if strategic_priorities else [
-                    "Innovation and technology leadership",
-                    "Customer satisfaction",
-                    "Operational excellence"
-                ],
-                "decision_making_style": f"Based on {job.company}'s values and culture, they appear to value {values_and_culture.get('practical_implications', ['data-driven decision making', 'collaborative approaches'])[0] if values_and_culture.get('practical_implications') else 'thoughtful, data-driven decisions'}.",
-                "c_suite_talking_points": c_suite_talking_points if c_suite_talking_points else [
-                    f"I'm drawn to {job.company}'s vision and would be excited to contribute.",
-                    "My experience aligns well with your strategic direction.",
-                    "I'm eager to drive results in this role."
-                ],
-                "strategic_initiatives": strategic_initiatives if strategic_initiatives else [
-                    "Technology modernization",
-                    "Market expansion",
-                    "Talent development"
-                ]
-            }
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Failed to get executive insights: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get executive insights: {str(e)}"
         )
 
 
