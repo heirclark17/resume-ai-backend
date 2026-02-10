@@ -237,7 +237,8 @@ async def get_interview_prep(
             .where(
                 InterviewPrep.tailored_resume_id == tailored_resume_id,
                 InterviewPrep.is_deleted == False,
-                TailoredResume.session_user_id == x_user_id
+                TailoredResume.session_user_id == x_user_id,
+                TailoredResume.is_deleted == False
             )
         )
         row = result.first()
