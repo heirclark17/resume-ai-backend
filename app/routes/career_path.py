@@ -420,24 +420,88 @@ async def generate_career_plan_async(
 @router.post("/generate-tasks")
 async def generate_tasks_for_role(request: dict):
     """
-    Auto-generate typical tasks for a given job role using Perplexity AI
+    Auto-generate typical tasks for a given job role.
+
+    When experience_bullets are provided (from a parsed resume), uses OpenAI to
+    extract the user's actual top tasks from their resume content.
+    Otherwise falls back to Perplexity AI to generate generic tasks for the role.
 
     Request body:
     - role_title: str (e.g., "Software Engineer", "Product Manager")
     - industry: str (optional, e.g., "Technology", "Healthcare")
+    - experience_bullets: list[str] (optional, actual resume bullet points from current role)
 
     Returns:
-    - tasks: List[str] (3-5 typical tasks for the role)
+    - tasks: List[str] (3-5 tasks for the role)
+    - source: "resume" | "generated"
     """
-    from app.services.perplexity_client import PerplexityClient
-
     role_title = request.get("role_title", "").strip()
     industry = request.get("industry", "").strip()
+    experience_bullets = request.get("experience_bullets", [])
 
     if not role_title:
         raise HTTPException(status_code=400, detail="role_title is required")
 
+    # If we have resume bullets, extract tasks from the actual resume
+    if experience_bullets and len(experience_bullets) >= 2:
+        try:
+            import openai
+            from app.config import get_settings
+            settings = get_settings()
+
+            client = openai.OpenAI(api_key=settings.openai_api_key)
+
+            bullets_text = "\n".join(f"- {b}" for b in experience_bullets[:20])
+
+            response = client.chat.completions.create(
+                model="gpt-4.1-mini",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You extract the top 3-5 daily tasks/responsibilities from resume bullet points. "
+                            "Each task should be a concise phrase (4-10 words) describing what this person actually does day-to-day. "
+                            "Focus on recurring responsibilities, not one-time achievements. "
+                            "Return ONLY a numbered list, one task per line, no extra text."
+                        )
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Role: {role_title}\nIndustry: {industry or 'General'}\n\nResume bullets:\n{bullets_text}\n\nExtract the top 3-5 daily tasks:"
+                    }
+                ],
+                temperature=0.2,
+                max_tokens=300
+            )
+
+            answer = response.choices[0].message.content.strip()
+
+            tasks = []
+            for line in answer.split('\n'):
+                line = line.strip().lstrip('0123456789.-*)  ')
+                if line and 10 < len(line) < 120:
+                    tasks.append(line)
+
+            tasks = tasks[:5]
+
+            if tasks and len(tasks) >= 3:
+                return {
+                    "success": True,
+                    "role_title": role_title,
+                    "industry": industry or "General",
+                    "tasks": tasks,
+                    "source": "resume"
+                }
+            # If extraction didn't produce enough tasks, fall through to Perplexity
+        except Exception as e:
+            print(f"✗ Error extracting tasks from resume: {e}")
+            import traceback
+            traceback.print_exc()
+            # Fall through to Perplexity generation
+
+    # Fallback: generate generic tasks with Perplexity
     try:
+        from app.services.perplexity_client import PerplexityClient
         perplexity = PerplexityClient()
 
         industry_context = f" in the {industry} industry" if industry else ""
@@ -486,7 +550,8 @@ async def generate_tasks_for_role(request: dict):
             "success": True,
             "role_title": role_title,
             "industry": industry or "General",
-            "tasks": tasks
+            "tasks": tasks,
+            "source": "generated"
         }
 
     except Exception as e:
@@ -504,7 +569,7 @@ async def generate_tasks_for_role(request: dict):
                 "Complete assigned project work",
                 "Attend meetings and provide updates"
             ],
-            "fallback": True
+            "source": "fallback"
         }
 
 
