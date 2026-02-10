@@ -264,16 +264,17 @@ async def list_career_plans(
         plans = result.scalars().all()
 
         return [
-            CareerPlanListItem(
-                id=plan.id,
-                target_roles=[
+            {
+                "id": plan.id,
+                "target_roles": [
                     role["title"]
                     for role in plan.plan_json.get("target_roles", [])
                 ],
-                created_at=plan.created_at.isoformat(),
-                updated_at=plan.updated_at.isoformat(),
-                version=plan.version
-            )
+                "dream_role": plan.intake_json.get("target_role_interest", "") if plan.intake_json else "",
+                "created_at": plan.created_at.isoformat(),
+                "updated_at": plan.updated_at.isoformat(),
+                "version": plan.version
+            }
             for plan in plans
         ]
 
