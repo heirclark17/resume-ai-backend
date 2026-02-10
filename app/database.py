@@ -36,4 +36,11 @@ async def init_db():
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+        # Migrations for existing tables (new columns)
+        from sqlalchemy import text
+        await conn.execute(text(
+            "ALTER TABLE cover_letters ADD COLUMN IF NOT EXISTS base_resume_id INTEGER"
+        ))
+
     print("Database tables created")
