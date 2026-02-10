@@ -310,6 +310,55 @@ async def delete_resume(
         }
     }
 
+class UpdateParsedDataRequest(BaseModel):
+    candidate_name: str | None = None
+    candidate_email: str | None = None
+    candidate_phone: str | None = None
+    candidate_location: str | None = None
+    candidate_linkedin: str | None = None
+    summary: str | None = None
+    skills: list[str] | None = None
+    experience: list[dict] | None = None
+    education: str | None = None
+    certifications: str | None = None
+
+
+@router.put("/{resume_id}/parsed-data")
+async def update_parsed_data(
+    resume_id: int,
+    data: UpdateParsedDataRequest,
+    user_id: str = Depends(get_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update parsed resume fields after user correction"""
+    result = await db.execute(
+        select(BaseResume).where(BaseResume.id == resume_id)
+    )
+    resume = result.scalar_one_or_none()
+    if not resume or resume.is_deleted:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    if resume.session_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    update_data = data.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        if field == "skills" and value is not None:
+            setattr(resume, field, json.dumps(value))
+        elif field == "experience" and value is not None:
+            setattr(resume, field, json.dumps(value))
+        else:
+            setattr(resume, field, value)
+
+    await db.commit()
+    await db.refresh(resume)
+
+    return {
+        "success": True,
+        "resume_id": resume.id,
+        "message": "Parsed data updated",
+    }
+
+
 @router.post("/analyze")
 @limiter.limit("10/minute")  # Rate limit: 10 analyses per minute per IP
 async def analyze_resume(

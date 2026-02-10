@@ -1,15 +1,20 @@
 """
-Authentication Routes - Registration & 2FA Management
+Authentication Routes - Registration, 2FA Management & Session Migration
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
-from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, update
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 
 from app.database import get_db
 from app.models.user import User
+from app.models.resume import BaseResume, TailoredResume
+from app.models.star_story import StarStory
+from app.models.saved_comparison import SavedComparison, TailoredResumeEdit
+from app.models.career_plan import CareerPlan
 from app.middleware.auth import get_current_user
 from app.utils.two_factor_auth import get_two_factor_auth
 from app.utils.recaptcha import get_recaptcha_verifier
@@ -390,3 +395,76 @@ async def get_two_factor_status(
     except Exception as e:
         logger.error(f"2FA status check error for user {current_user.id}: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to check 2FA status")
+
+
+# Session Migration Models
+class MigrateSessionRequest(BaseModel):
+    old_user_id: str
+    new_user_id: str
+
+
+class MigrateSessionResponse(BaseModel):
+    success: bool
+    migrated_records: int
+    details: dict
+
+
+@router.post("/migrate-session", response_model=MigrateSessionResponse)
+async def migrate_session(
+    request: MigrateSessionRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Migrate data from anonymous localStorage user ID to Clerk user ID.
+    Updates session_user_id on all tables that use it.
+    Idempotent — returns 0 if no records to migrate.
+    """
+    try:
+        # Validate ID formats
+        if not request.old_user_id.startswith('user_'):
+            raise HTTPException(status_code=400, detail="old_user_id must start with 'user_'")
+        if not request.new_user_id.startswith('clerk_'):
+            raise HTTPException(status_code=400, detail="new_user_id must start with 'clerk_'")
+
+        logger.info(f"Migrating session: {request.old_user_id} -> {request.new_user_id}")
+
+        total = 0
+        details = {}
+
+        # Migrate each table
+        tables = [
+            ("base_resumes", BaseResume),
+            ("tailored_resumes", TailoredResume),
+            ("star_stories", StarStory),
+            ("saved_comparisons", SavedComparison),
+            ("tailored_resume_edits", TailoredResumeEdit),
+            ("career_plans", CareerPlan),
+        ]
+
+        for table_name, model in tables:
+            stmt = (
+                update(model)
+                .where(model.session_user_id == request.old_user_id)
+                .values(session_user_id=request.new_user_id)
+            )
+            result = await db.execute(stmt)
+            count = result.rowcount
+            details[table_name] = count
+            total += count
+
+        await db.commit()
+
+        logger.info(f"Migration complete: {total} records migrated across {len(tables)} tables")
+
+        return MigrateSessionResponse(
+            success=True,
+            migrated_records=total,
+            details=details,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Session migration error: {str(e)}")
+        await db.rollback()
+        raise HTTPException(status_code=500, detail="Migration failed")

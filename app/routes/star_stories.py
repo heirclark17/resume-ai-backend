@@ -602,6 +602,43 @@ Focus on practical, specific suggestions that will make the story more compellin
         )
 
 
+class MatchToQuestionsRequest(BaseModel):
+    questions: List[str]
+
+
+@router.post("/match-to-questions")
+async def match_to_questions(
+    request: MatchToQuestionsRequest,
+    x_user_id: str = Header(None, alias="X-User-ID"),
+    db: AsyncSession = Depends(get_db)
+):
+    """Match user's STAR stories to interview questions using AI."""
+    if not x_user_id:
+        raise HTTPException(status_code=400, detail="X-User-ID header is required")
+
+    try:
+        # Fetch all non-deleted stories for user
+        result = await db.execute(
+            select(StarStory)
+            .where(and_(StarStory.session_user_id == x_user_id, StarStory.is_deleted == False))
+            .order_by(StarStory.created_at.desc())
+        )
+        stories = result.scalars().all()
+
+        if not stories:
+            return {"success": True, "matches": []}
+
+        from app.services.star_matcher_service import match_stories_to_questions
+        story_dicts = [s.to_dict() for s in stories]
+        matches = await match_stories_to_questions(story_dicts, request.questions)
+
+        return {"success": True, "matches": matches}
+
+    except Exception as e:
+        print(f"Failed to match stories: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Matching failed: {str(e)}")
+
+
 class StoryVariationsRequest(BaseModel):
     target_role: Optional[str] = None
     target_company: Optional[str] = None
