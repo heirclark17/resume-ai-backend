@@ -548,6 +548,27 @@ async def process_career_plan_job(job_id: str, request: GenerateRequest):
       try:
           session_user_id = get_session_user_id()
 
+          # Step 0: Extract job posting details if URL provided
+          job_details = None
+          if getattr(request.intake, 'job_url', None):
+              try:
+                  job_store.update_job(
+                      job_id,
+                      status="extracting",
+                      progress=5,
+                      message="Extracting job posting details..."
+                  )
+                  from app.services.firecrawl_client import FirecrawlClient
+                  firecrawl = FirecrawlClient()
+                  job_details = await firecrawl.extract_job_details(request.intake.job_url)
+                  if job_details:
+                      print(f"  [Job {job_id}] ✓ Extracted job: {job_details.get('title', 'Unknown')} at {job_details.get('company', 'Unknown')}")
+                  else:
+                      print(f"  [Job {job_id}] ⚠ Job extraction returned empty, continuing without")
+              except Exception as e:
+                  print(f"  [Job {job_id}] ⚠ Job extraction failed (non-fatal): {e}")
+                  job_details = None
+
           # Step 1: Research with Perplexity (if not provided)
           research_data = None
 
@@ -562,7 +583,12 @@ async def process_career_plan_job(job_id: str, request: GenerateRequest):
           else:
               # Determine target roles for research
               target_roles = []
-              if request.intake.target_role_interest:
+              # If we extracted a job title from the URL, use it as the primary target
+              if job_details and job_details.get('title'):
+                  target_roles = [job_details['title']]
+                  if request.intake.target_role_interest and request.intake.target_role_interest != job_details['title']:
+                      target_roles.append(request.intake.target_role_interest)
+              elif request.intake.target_role_interest:
                   target_roles = [request.intake.target_role_interest]
               else:
                   # Use current role + industry as hint
@@ -609,7 +635,8 @@ async def process_career_plan_job(job_id: str, request: GenerateRequest):
           synthesis_service = CareerPathSynthesisService()
           synthesis_result = await synthesis_service.generate_career_plan(
               intake=request.intake,
-              research_data=research_data
+              research_data=research_data,
+              job_details=job_details
           )
 
           if not synthesis_result.get("success"):

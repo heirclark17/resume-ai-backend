@@ -29,6 +29,7 @@ class IntakeRequest(BaseModel):
     target_role_level: str = Field(..., description="entry-level/mid-level/senior/lead/executive")
     target_industries: List[str] = Field(default_factory=list, max_items=5, description="Industries interested in")
     specific_companies: List[str] = Field(default_factory=list, max_items=10, description="Specific companies to target")
+    job_url: Optional[str] = Field(None, max_length=2000, description="Optional job posting URL to tailor the plan to")
 
     # Timeline & Availability
     time_per_week: int = Field(..., ge=1, le=168, description="Hours per week available")
