@@ -677,6 +677,41 @@ async def process_career_plan_job(job_id: str, request: GenerateRequest):
           )
 
 
+@router.delete("/all")
+async def delete_all_career_plans(
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Soft delete all career plans for the current user
+    """
+
+    session_user_id = get_session_user_id()
+
+    try:
+        result = await db.execute(
+            update(CareerPlanModel)
+            .where(
+                CareerPlanModel.session_user_id == session_user_id,
+                CareerPlanModel.is_deleted == False
+            )
+            .values(
+                is_deleted=True,
+                deleted_at=datetime.utcnow(),
+                deleted_by=session_user_id
+            )
+        )
+        await db.commit()
+
+        return {"success": True, "message": f"All career plans deleted", "count": result.rowcount}
+
+    except Exception as e:
+        print(f"✗ Error deleting all plans: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete plans: {str(e)}"
+        )
+
+
 @router.delete("/{plan_id}")
 async def delete_career_plan(
     plan_id: int,
