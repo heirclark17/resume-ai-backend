@@ -334,6 +334,34 @@ Match this EXACT schema:
     ]
   }},
 
+  "skills_guidance": {{
+    "soft_skills": [
+      {{
+        "skill_name": "Name of a critical soft skill for the target role",
+        "why_needed": "Detailed explanation (100+ chars) of why this soft skill is critical for the target role, connecting it to specific responsibilities and team dynamics",
+        "how_to_improve": "Specific actionable steps (150+ chars) to develop this soft skill, including concrete exercises, courses, mentorship approaches, and practice opportunities the user can start immediately",
+        "importance": "critical|high|medium",
+        "estimated_time": "e.g., '3-6 months' or '1-2 years'",
+        "resources": ["Specific course or book title", "Another resource"],
+        "real_world_application": "Detailed description (100+ chars) of how this soft skill is used in day-to-day work in the target role, with specific scenarios and examples"
+      }}
+      // Minimum 3 soft skills, maximum 8. Include at least: communication, leadership, and one domain-specific soft skill.
+    ],
+    "hard_skills": [
+      {{
+        "skill_name": "Name of a critical technical/hard skill for the target role",
+        "why_needed": "Detailed explanation (100+ chars) of why this hard skill is essential, referencing industry standards, job requirements, and technical demands of the role",
+        "how_to_improve": "Specific actionable steps (150+ chars) to build this hard skill, including courses with exact names, hands-on projects to build, certifications to pursue, and tools to practice with",
+        "importance": "critical|high|medium",
+        "estimated_time": "e.g., '3-6 months' or '1-2 years'",
+        "resources": ["Specific course or platform", "Another resource"],
+        "real_world_application": "Detailed description (100+ chars) of how this hard skill is applied in actual work situations, including tools used, problems solved, and deliverables produced"
+      }}
+      // Minimum 3 hard skills, maximum 10. Prioritize skills mentioned in the target role requirements.
+    ],
+    "skill_development_strategy": "Comprehensive strategy (200+ chars minimum) for how the user should approach building all these skills in parallel. Include prioritization advice, time allocation recommendations, how to balance skill development with current responsibilities, and milestones to track progress. Reference the user's stated learning preferences and available time per week."
+  }},
+
   "certification_path": [
     Recommend relevant certifications for the target role.
     Sequence logically (foundation -> intermediate -> advanced).
@@ -773,7 +801,8 @@ Return the fixed JSON now:"""
                     }
                 ],
                 temperature=0.3,  # Lower temperature for precise repairs
-                max_tokens=16000  # Perplexity doesn't support response_format parameter
+                max_tokens=16000,
+                response_format={"type": "json_object"}
             )
 
             repaired_json = response.choices[0].message.content
