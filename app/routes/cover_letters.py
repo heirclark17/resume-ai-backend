@@ -23,6 +23,7 @@ class GenerateRequest(BaseModel):
     job_description: str
     tone: str = "professional"
     tailored_resume_id: Optional[int] = None
+    base_resume_id: Optional[int] = None
 
 
 class UpdateRequest(BaseModel):
@@ -54,15 +55,20 @@ async def generate_cover_letter(
         raise HTTPException(status_code=400, detail="Invalid tone")
 
     try:
+        from app.models.resume import TailoredResume, BaseResume
+
         # Fetch resume data if linked
         resume_context = None
+        resolved_base_resume_id = None
+
         if data.tailored_resume_id:
-            from app.models.resume import TailoredResume, BaseResume
+            # Path 1: From a tailored resume (existing behavior)
             tr_result = await db.execute(
                 select(TailoredResume).where(TailoredResume.id == data.tailored_resume_id)
             )
             tr = tr_result.scalar_one_or_none()
             if tr:
+                resolved_base_resume_id = tr.base_resume_id
                 br_result = await db.execute(
                     select(BaseResume).where(BaseResume.id == tr.base_resume_id)
                 )
@@ -74,6 +80,34 @@ async def generate_cover_letter(
                         "skills": tr.tailored_skills or br.skills,
                         "name": br.candidate_name,
                     }
+        elif data.base_resume_id:
+            # Path 2: From a base (uploaded) resume directly
+            resolved_base_resume_id = data.base_resume_id
+            br_result = await db.execute(
+                select(BaseResume).where(BaseResume.id == data.base_resume_id)
+            )
+            br = br_result.scalar_one_or_none()
+            if br:
+                resume_context = {
+                    "summary": br.summary or "",
+                    "experience": br.experience or "",
+                    "skills": br.skills or "",
+                    "name": br.candidate_name,
+                }
+
+        # Research company with Perplexity
+        company_research = None
+        try:
+            from app.services.perplexity_client import PerplexityClient
+            perplexity = PerplexityClient()
+            company_research = await perplexity.research_company(
+                company_name=data.company_name,
+                job_title=data.job_title
+            )
+            logger.info(f"Perplexity research completed for {data.company_name}")
+        except Exception as e:
+            logger.warning(f"Perplexity research failed for {data.company_name}: {e}")
+            company_research = None
 
         content = await generate_cover_letter_content(
             job_title=data.job_title,
@@ -81,11 +115,13 @@ async def generate_cover_letter(
             job_description=data.job_description,
             tone=data.tone,
             resume_context=resume_context,
+            company_research=company_research,
         )
 
         letter = CoverLetter(
             session_user_id=user_id,
             tailored_resume_id=data.tailored_resume_id,
+            base_resume_id=resolved_base_resume_id,
             job_title=data.job_title,
             company_name=data.company_name,
             job_description=data.job_description,

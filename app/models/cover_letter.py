@@ -9,6 +9,7 @@ class CoverLetter(Base):
     id = Column(Integer, primary_key=True, index=True)
     session_user_id = Column(String(255), nullable=False, index=True)
     tailored_resume_id = Column(Integer, nullable=True)
+    base_resume_id = Column(Integer, nullable=True)
     job_title = Column(String(500))
     company_name = Column(String(500))
     job_description = Column(Text, nullable=True)
@@ -22,6 +23,7 @@ class CoverLetter(Base):
         return {
             "id": self.id,
             "tailoredResumeId": self.tailored_resume_id,
+            "baseResumeId": self.base_resume_id,
             "jobTitle": self.job_title,
             "companyName": self.company_name,
             "tone": self.tone,
