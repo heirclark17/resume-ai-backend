@@ -9,7 +9,7 @@ Input Options:
 Output:
 - Professionally formatted Word document (.docx)
 - Company-specific research and customization
-- Saved to TAILORED_COVER_LETTERS\ directory
+- Saved to TAILORED_COVER_LETTERS directory
 """
 
 import os
@@ -50,13 +50,13 @@ except ImportError:
 # =============================================================================
 
 # User selects input method
-INPUT_METHOD = "url"  # Options: "url" or "document"
+INPUT_METHOD = "document"  # Options: "url" or "document"
 
 # Job URL (if INPUT_METHOD = "url")
 JOB_URL = "https://jpmc.fa.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1001/job/210559736"
 
 # Job Document Path (if INPUT_METHOD = "document")
-JOB_DOCUMENT_PATH = "C:/Users/derri/Downloads/job_description.pdf"
+JOB_DOCUMENT_PATH = "C:/Users/derri/sample_job_description.txt"
 
 # Customization Options
 TONE = "Professional"  # Options: Professional, Enthusiastic, Strategic, Technical
@@ -129,13 +129,13 @@ def detect_file_type(file_path):
     ext = os.path.splitext(file_path)[1].lower()
 
     if ext == '.pdf':
-        print(f"📄 Extracting PDF: {os.path.basename(file_path)}")
+        print(f"[PDF] Extracting: {os.path.basename(file_path)}")
         return extract_pdf(file_path)
     elif ext == '.docx':
-        print(f"📝 Extracting Word document: {os.path.basename(file_path)}")
+        print(f"[DOCX] Extracting Word document: {os.path.basename(file_path)}")
         return extract_docx(file_path)
     elif ext == '.txt':
-        print(f"📃 Reading text file: {os.path.basename(file_path)}")
+        print(f"[TXT] Reading text file: {os.path.basename(file_path)}")
         return extract_txt(file_path)
     else:
         raise ValueError(f"Unsupported file type: {ext}. Supported: .pdf, .docx, .txt")
@@ -150,7 +150,7 @@ def extract_job_from_url(url):
     if not PLAYWRIGHT_AVAILABLE:
         raise ImportError("Playwright not installed. Install: pip install playwright")
 
-    print(f"🌐 Fetching job from URL: {url}")
+    print(f"[WEB] Fetching job from URL: {url}")
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -188,30 +188,53 @@ def parse_job_description(text):
         "responsibilities": []
     }
 
+    # Split into lines for better parsing
+    lines = text.split('\n')
+    first_lines = [line.strip() for line in lines[:10] if line.strip()]
+
     # Extract company name (heuristic: often in first 200 chars or after "Company:" or "@")
     company_patterns = [
         r"(?:Company|Organization):\s*([A-Z][A-Za-z\s&.]+)",
-        r"^([A-Z][A-Za-z\s&.]+)\s*(?:is hiring|seeks|looking for)",
+        r"^([A-Z][A-Za-z\s&.]+Corporation)$",  # Company with Corporation
+        r"^([A-Z][A-Za-z\s&.]+Inc\.)$",  # Company with Inc.
+        r"^([A-Z][A-Za-z\s&.]+LLC)$",  # Company with LLC
+        r"^(Microsoft|Google|Amazon|Apple|Oracle|IBM|Meta|Tesla|JPMorgan|Goldman Sachs)$",  # Known companies
+        r"([A-Z][A-Za-z\s&.]+)\s*(?:is seeking|is hiring)",
         r"Join\s+([A-Z][A-Za-z\s&.]+)",
-        r"@\s*([A-Z][A-Za-z\s&.]+)"
     ]
-    for pattern in company_patterns:
-        match = re.search(pattern, text[:500])
-        if match:
-            job_data["company"] = match.group(1).strip()
+
+    for line in first_lines:
+        for pattern in company_patterns:
+            match = re.search(pattern, line)
+            if match:
+                job_data["company"] = match.group(1).strip()
+                break
+        if job_data["company"]:
             break
 
-    # Extract job title (heuristic: often in first few lines, capitalized)
+    # Extract job title (usually first line)
     title_patterns = [
         r"(?:Position|Title|Role):\s*([A-Z][A-Za-z\s\-/&]+)",
-        r"^([A-Z][A-Za-z\s\-/&]{10,60})$",  # Standalone line with title-like text
-        r"(?:hiring|seeking|for)\s+(?:a\s+)?([A-Z][A-Za-z\s\-/&]+)",
+        r"^([A-Z][A-Za-z\s\-/&]{15,80})$",  # Standalone line with title-like text (longer = likely a title)
     ]
-    for pattern in title_patterns:
-        match = re.search(pattern, text[:500], re.MULTILINE)
-        if match:
-            job_data["title"] = match.group(1).strip()
+
+    for line in first_lines:
+        # Skip if this is the company line
+        if line == job_data.get("company"):
+            continue
+        for pattern in title_patterns:
+            match = re.search(pattern, line)
+            if match:
+                job_data["title"] = match.group(1).strip()
+                break
+        if job_data["title"]:
             break
+
+    # If title still not found, assume first non-empty line is the title
+    if not job_data["title"] and first_lines:
+        potential_title = first_lines[0]
+        if potential_title != job_data.get("company") and len(potential_title) > 10:
+            job_data["title"] = potential_title
 
     # Extract location
     location_patterns = [
@@ -541,7 +564,7 @@ def create_cover_letter_document(job_data, company_research, content_paragraphs,
 
     # Save document
     doc.save(output_path)
-    print(f"✅ Cover letter saved: {output_path}")
+    print(f"[SUCCESS] Cover letter saved: {output_path}")
 
 
 # =============================================================================
@@ -557,18 +580,18 @@ def main():
 
     # Step 1: Get job description text
     if INPUT_METHOD == "url":
-        print("📌 Input Method: Job URL")
+        print("[INPUT] Method: Job URL")
         job_text = extract_job_from_url(JOB_URL)
     elif INPUT_METHOD == "document":
-        print("📌 Input Method: Uploaded Document")
+        print("[INPUT] Method: Uploaded Document")
         job_text = detect_file_type(JOB_DOCUMENT_PATH)
     else:
         raise ValueError(f"Invalid INPUT_METHOD: {INPUT_METHOD}. Must be 'url' or 'document'")
 
-    print(f"✅ Job description extracted ({len(job_text)} characters)\n")
+    print(f"[SUCCESS] Job description extracted ({len(job_text)} characters)\n")
 
     # Step 2: Parse job description
-    print("🔍 Parsing job details...")
+    print("[PARSE] Parsing job details...")
     job_data = parse_job_description(job_text)
 
     print(f"   Company: {job_data['company'] or 'Not detected'}")
@@ -579,22 +602,22 @@ def main():
 
     # If company/title not auto-detected, prompt for manual entry
     if not job_data["company"]:
-        print("⚠️  Company name not auto-detected.")
+        print("[WARNING] Company name not auto-detected.")
         job_data["company"] = input("Enter company name: ").strip()
 
     if not job_data["title"]:
-        print("⚠️  Job title not auto-detected.")
+        print("[WARNING] Job title not auto-detected.")
         job_data["title"] = input("Enter job title: ").strip()
 
     # Step 3: Research company
-    print(f"🔬 Researching {job_data['company']}...")
+    print(f"[RESEARCH] Researching {job_data['company']}...")
     company_research = research_company(job_data["company"])
     print(f"   Mission: {company_research['mission']}")
     print(f"   Industry: {company_research['industry']}")
     print(f"   Initiatives: {', '.join(company_research['initiatives'][:2])}\n")
 
     # Step 4: Generate cover letter content
-    print(f"✍️  Generating cover letter...")
+    print(f"[GENERATE] Creating cover letter...")
     print(f"   Tone: {TONE}")
     print(f"   Length: {LENGTH}")
     print(f"   Focus: {FOCUS}\n")
@@ -612,26 +635,30 @@ def main():
         content_paragraphs = [opening] + body_paras + [closing]
 
     # Step 5: Create Word document
-    print("📝 Creating Word document...")
+    print("[DOCX] Creating Word document...")
 
     # Create output directory if it doesn't exist
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    # Generate filename
-    company_short = job_data["company"].replace(" ", "")[:20]
-    title_short = job_data["title"].replace(" ", "_").replace("/", "_")[:30]
-    filename = f"CoverLetter_{company_short}_{title_short}.docx"
+    # Generate filename (sanitize by removing invalid characters)
+    company_clean = re.sub(r'[^\w\s-]', '', job_data["company"]).strip()
+    company_clean = re.sub(r'\s+', '', company_clean)[:20]  # Remove all whitespace
+
+    title_clean = re.sub(r'[^\w\s-]', '', job_data["title"]).strip()
+    title_clean = re.sub(r'\s+', '_', title_clean)[:30]  # Replace whitespace with underscore
+
+    filename = f"CoverLetter_{company_clean}_{title_clean}.docx"
     output_path = os.path.join(OUTPUT_DIR, filename)
 
     create_cover_letter_document(job_data, company_research, content_paragraphs, output_path)
 
     print("\n" + "="*70)
-    print("✅ COVER LETTER GENERATION COMPLETE!")
+    print("[SUCCESS] COVER LETTER GENERATION COMPLETE!")
     print("="*70)
-    print(f"\n📂 Output Location: {output_path}\n")
+    print(f"\n[OUTPUT] Location: {output_path}\n")
 
     # Display preview
-    print("📄 PREVIEW:\n")
+    print("[PREVIEW]\n")
     print("-" * 70)
     for i, para in enumerate(content_paragraphs, 1):
         print(f"\nParagraph {i}:")
