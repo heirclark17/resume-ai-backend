@@ -20,7 +20,8 @@ logger = get_logger()
 class GenerateRequest(BaseModel):
     job_title: str
     company_name: str
-    job_description: str
+    job_description: Optional[str] = None
+    job_url: Optional[str] = None
     tone: str = "professional"
     tailored_resume_id: Optional[int] = None
     base_resume_id: Optional[int] = None
@@ -45,6 +46,60 @@ async def list_cover_letters(
     return {"cover_letters": [l.to_dict() for l in letters]}
 
 
+def detect_company_from_url(url: str) -> Optional[str]:
+    """Detect company name from URL domain"""
+    url_lower = url.lower()
+    company_mapping = {
+        'jpmc': 'JPMorgan Chase',
+        'jpmorganchase': 'JPMorgan Chase',
+        'oracle': 'Oracle',
+        'microsoft': 'Microsoft',
+        'google': 'Google',
+        'amazon': 'Amazon',
+        'apple': 'Apple',
+        'meta': 'Meta',
+        'facebook': 'Meta',
+    }
+
+    for key, company in company_mapping.items():
+        if key in url_lower:
+            return company
+    return None
+
+
+async def extract_job_from_url(url: str) -> str:
+    """Extract job description from URL using Playwright"""
+    try:
+        from playwright.async_api import async_playwright
+
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            page = await browser.new_page()
+
+            try:
+                await page.goto(url, timeout=30000)
+                await page.wait_for_timeout(5000)  # Wait for JavaScript
+
+                # Try to wait for job description content
+                try:
+                    await page.wait_for_selector('article, .job-description, .description', timeout=5000)
+                except:
+                    pass
+
+                # Extract page text
+                text = await page.inner_text('body')
+                await browser.close()
+                return text
+
+            except Exception as e:
+                await browser.close()
+                raise Exception(f"Failed to extract from URL: {str(e)}")
+
+    except Exception as e:
+        logger.error(f"URL extraction error: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Failed to extract job from URL: {str(e)}")
+
+
 @router.post("/generate")
 async def generate_cover_letter(
     data: GenerateRequest,
@@ -54,7 +109,26 @@ async def generate_cover_letter(
     if data.tone not in ("professional", "enthusiastic", "conversational"):
         raise HTTPException(status_code=400, detail="Invalid tone")
 
+    # Validate that either job_description or job_url is provided
+    if not data.job_description and not data.job_url:
+        raise HTTPException(status_code=400, detail="Either job_description or job_url must be provided")
+
     try:
+        # Extract job description from URL if provided
+        job_description = data.job_description
+        if data.job_url:
+            logger.info(f"Extracting job from URL: {data.job_url}")
+            job_description = await extract_job_from_url(data.job_url)
+
+            # Auto-detect company from URL if company_name is generic or empty
+            if not data.company_name or data.company_name.lower() in ['company', 'target company']:
+                detected_company = detect_company_from_url(data.job_url)
+                if detected_company:
+                    data.company_name = detected_company
+                    logger.info(f"Detected company from URL: {detected_company}")
+
+        if not job_description:
+            raise HTTPException(status_code=400, detail="No job description could be extracted")
         from app.models.resume import TailoredResume, BaseResume
 
         # Fetch resume data if linked
@@ -112,7 +186,7 @@ async def generate_cover_letter(
         content = await generate_cover_letter_content(
             job_title=data.job_title,
             company_name=data.company_name,
-            job_description=data.job_description,
+            job_description=job_description,
             tone=data.tone,
             resume_context=resume_context,
             company_research=company_research,
@@ -124,7 +198,7 @@ async def generate_cover_letter(
             base_resume_id=resolved_base_resume_id,
             job_title=data.job_title,
             company_name=data.company_name,
-            job_description=data.job_description,
+            job_description=job_description,
             tone=data.tone,
             content=content,
         )
