@@ -100,6 +100,47 @@ async def extract_job_from_url(url: str) -> str:
         raise HTTPException(status_code=400, detail=f"Failed to extract job from URL: {str(e)}")
 
 
+@router.post("/extract-url")
+async def extract_from_url(
+    data: dict,
+    user_id: str = Depends(get_user_id),
+):
+    """Extract job details from URL"""
+    url = data.get('url')
+    if not url:
+        raise HTTPException(status_code=400, detail="URL is required")
+
+    try:
+        logger.info(f"Extracting job from URL: {url}")
+        job_description = await extract_job_from_url(url)
+
+        # Auto-detect company from URL
+        company_name = detect_company_from_url(url)
+
+        # Try to extract job title from page content (basic extraction)
+        job_title = None
+        lines = job_description.split('\n')
+        for line in lines[:20]:  # Check first 20 lines
+            line = line.strip()
+            if len(line) > 10 and len(line) < 100:
+                # Simple heuristic: lines that might be job titles
+                if any(keyword in line.lower() for keyword in ['manager', 'engineer', 'director', 'analyst', 'developer', 'specialist', 'coordinator']):
+                    job_title = line
+                    break
+
+        return {
+            "success": True,
+            "data": {
+                "job_title": job_title,
+                "company_name": company_name,
+                "job_description": job_description
+            }
+        }
+    except Exception as e:
+        logger.error(f"URL extraction error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to extract from URL: {str(e)}")
+
+
 @router.post("/generate")
 async def generate_cover_letter(
     data: GenerateRequest,
