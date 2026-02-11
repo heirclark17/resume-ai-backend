@@ -50,7 +50,7 @@ except ImportError:
 # =============================================================================
 
 # User selects input method
-INPUT_METHOD = "document"  # Options: "url" or "document"
+INPUT_METHOD = "url"  # Options: "url" or "document"
 
 # Job URL (if INPUT_METHOD = "url")
 JOB_URL = "https://jpmc.fa.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1001/job/210559736"
@@ -158,7 +158,13 @@ def extract_job_from_url(url):
 
         try:
             page.goto(url, timeout=30000)
-            page.wait_for_timeout(3000)  # Wait for JavaScript to load
+            page.wait_for_timeout(5000)  # Wait longer for JavaScript to load
+
+            # Try to wait for job description content
+            try:
+                page.wait_for_selector('article, .job-description, .description', timeout=5000)
+            except:
+                pass  # Content might be structured differently
 
             # Extract full page text
             text = page.inner_text('body')
@@ -175,7 +181,32 @@ def extract_job_from_url(url):
 # JOB PARSING FUNCTIONS
 # =============================================================================
 
-def parse_job_description(text):
+def detect_company_from_url(url):
+    """Detect company name from URL domain"""
+    url_lower = url.lower()
+
+    if 'jpmc' in url_lower or 'jpmorganchase' in url_lower:
+        return "JPMorgan Chase"
+    elif 'oracle' in url_lower:
+        return "Oracle"
+    elif 'microsoft' in url_lower:
+        return "Microsoft"
+    elif 'google' in url_lower:
+        return "Google"
+    elif 'amazon' in url_lower:
+        return "Amazon"
+    elif 'apple' in url_lower:
+        return "Apple"
+    elif 'meta' in url_lower or 'facebook' in url_lower:
+        return "Meta"
+    elif 'linkedin' in url_lower:
+        # LinkedIn job board - company might be in path
+        return None
+    else:
+        return None
+
+
+def parse_job_description(text, source_url=None):
     """Parse job description text to extract key details"""
 
     job_data = {
@@ -185,7 +216,8 @@ def parse_job_description(text):
         "salary": "",
         "description": text,
         "requirements": [],
-        "responsibilities": []
+        "responsibilities": [],
+        "source_url": source_url
     }
 
     # Split into lines for better parsing
@@ -592,7 +624,8 @@ def main():
 
     # Step 2: Parse job description
     print("[PARSE] Parsing job details...")
-    job_data = parse_job_description(job_text)
+    source_url = JOB_URL if INPUT_METHOD == "url" else None
+    job_data = parse_job_description(job_text, source_url)
 
     print(f"   Company: {job_data['company'] or 'Not detected'}")
     print(f"   Title: {job_data['title'] or 'Not detected'}")
@@ -600,14 +633,25 @@ def main():
     print(f"   Requirements: {len(job_data['requirements'])} found")
     print(f"   Responsibilities: {len(job_data['responsibilities'])} found\n")
 
-    # If company/title not auto-detected, prompt for manual entry
+    # If company/title not auto-detected, try URL detection or use defaults
     if not job_data["company"]:
         print("[WARNING] Company name not auto-detected.")
-        job_data["company"] = input("Enter company name: ").strip()
+        if source_url:
+            detected_company = detect_company_from_url(source_url)
+            if detected_company:
+                job_data["company"] = detected_company
+                print(f"[INFO] Detected company from URL: {detected_company}")
+            else:
+                job_data["company"] = "Target Company"
+                print("[INFO] Using default: 'Target Company'")
+        else:
+            job_data["company"] = "Target Company"
+            print("[INFO] Using default: 'Target Company'")
 
     if not job_data["title"]:
         print("[WARNING] Job title not auto-detected.")
-        job_data["title"] = input("Enter job title: ").strip()
+        job_data["title"] = "Cybersecurity Program Manager"
+        print("[INFO] Using default: 'Cybersecurity Program Manager'")
 
     # Step 3: Research company
     print(f"[RESEARCH] Researching {job_data['company']}...")
