@@ -31,10 +31,18 @@ async def get_db() -> AsyncSession:
 async def init_db():
     """Create all database tables and run migrations"""
     # Import models to register them with Base
-    from app.models import resume, job, company, user, interview_prep, star_story, analysis_cache, career_plan, application
+    from app.models import resume, job, company, user, interview_prep, star_story, analysis_cache
+    from app.models import application, cover_letter, resume_version, follow_up_reminder, career_plan, saved_comparison
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+        # Migrations for existing tables (new columns)
+        from sqlalchemy import text
+        await conn.execute(text(
+            "ALTER TABLE cover_letters ADD COLUMN IF NOT EXISTS base_resume_id INTEGER"
+        ))
+
     print("Database tables created")
 
     # Run migrations for existing tables

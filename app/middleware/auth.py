@@ -97,8 +97,8 @@ async def get_user_id(
             detail="User ID required. Please refresh the page."
         )
 
-    # Validate format (should start with 'user_')
-    if not x_user_id.startswith('user_'):
+    # Validate format (should start with 'user_' or 'clerk_')
+    if not (x_user_id.startswith('user_') or x_user_id.startswith('clerk_')):
         raise HTTPException(
             status_code=400,
             detail="Invalid user ID format"

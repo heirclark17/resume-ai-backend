@@ -47,7 +47,8 @@ class CareerPathSynthesisService:
     async def generate_career_plan(
         self,
         intake: IntakeRequest,
-        research_data: Dict[str, Any]
+        research_data: Dict[str, Any],
+        job_details: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Generate complete career plan with strict schema adherence
@@ -68,7 +69,7 @@ class CareerPathSynthesisService:
             return await self._generate_mock_plan(intake)
 
         # Build synthesis prompt
-        prompt = self._build_synthesis_prompt(intake, research_data)
+        prompt = self._build_synthesis_prompt(intake, research_data, job_details=job_details)
 
         try:
             # Call OpenAI with JSON mode for guaranteed valid JSON
@@ -220,10 +221,40 @@ class CareerPathSynthesisService:
 
         return text.strip()
 
+    def _build_job_posting_section(self, job_details: Optional[Dict[str, Any]]) -> str:
+        """Build the job posting section for the prompt if job_details are available"""
+        if not job_details:
+            return ""
+
+        skills = job_details.get('skills_required', [])
+        skills_str = ', '.join(skills) if skills else 'Not specified'
+        description = job_details.get('description', '')
+        if len(description) > 3000:
+            description = description[:3000] + '...'
+
+        return f"""# TARGET JOB POSTING (TAILOR THE PLAN TO THIS SPECIFIC JOB)
+- Company: {job_details.get('company', 'Unknown')}
+- Job Title: {job_details.get('title', 'Unknown')}
+- Location: {job_details.get('location', 'Not specified')}
+- Salary: {job_details.get('salary', 'Not specified')}
+- Experience Level: {job_details.get('experience_level', 'Not specified')}
+- Required Skills: {skills_str}
+- Job Description: {description}
+
+IMPORTANT: Since the user is targeting THIS specific job:
+1. Make the PRIMARY target role match this job title
+2. Analyze skills gaps against THIS job's requirements
+3. Prioritize certs/training that THIS job lists or implies
+4. Tailor resume assets for THIS role at THIS company
+5. Timeline should focus on becoming qualified for THIS position
+
+"""
+
     def _build_synthesis_prompt(
         self,
         intake: IntakeRequest,
-        research_data: Dict[str, Any]
+        research_data: Dict[str, Any],
+        job_details: Optional[Dict[str, Any]] = None
     ) -> str:
         """
         Build comprehensive prompt for OpenAI synthesis
@@ -255,7 +286,7 @@ class CareerPathSynthesisService:
 - Timeline: {intake.timeline}
 - Format Preference: {intake.in_person_vs_remote}
 
-# WEB-GROUNDED RESEARCH DATA (USE THESE VERIFIED FACTS)
+{self._build_job_posting_section(job_details)}# WEB-GROUNDED RESEARCH DATA (USE THESE VERIFIED FACTS)
 ## Certifications Found ({len(certs)} options):
 {json.dumps(certs[:5], indent=2) if certs else "None found"}
 
@@ -332,6 +363,34 @@ Match this EXACT schema:
         "estimated_time": "X weeks/months"
       }}
     ]
+  }},
+
+  "skills_guidance": {{
+    "soft_skills": [
+      {{
+        "skill_name": "Name of a critical soft skill for the target role",
+        "why_needed": "Detailed explanation (100+ chars) of why this soft skill is critical for the target role, connecting it to specific responsibilities and team dynamics",
+        "how_to_improve": "Specific actionable steps (150+ chars) to develop this soft skill, including concrete exercises, courses, mentorship approaches, and practice opportunities the user can start immediately",
+        "importance": "critical|high|medium",
+        "estimated_time": "e.g., '3-6 months' or '1-2 years'",
+        "resources": ["Specific course or book title", "Another resource"],
+        "real_world_application": "Detailed description (100+ chars) of how this soft skill is used in day-to-day work in the target role, with specific scenarios and examples"
+      }}
+      // Minimum 3 soft skills, maximum 8. Include at least: communication, leadership, and one domain-specific soft skill.
+    ],
+    "hard_skills": [
+      {{
+        "skill_name": "Name of a critical technical/hard skill for the target role",
+        "why_needed": "Detailed explanation (100+ chars) of why this hard skill is essential, referencing industry standards, job requirements, and technical demands of the role",
+        "how_to_improve": "Specific actionable steps (150+ chars) to build this hard skill, including courses with exact names, hands-on projects to build, certifications to pursue, and tools to practice with",
+        "importance": "critical|high|medium",
+        "estimated_time": "e.g., '3-6 months' or '1-2 years'",
+        "resources": ["Specific course or platform", "Another resource"],
+        "real_world_application": "Detailed description (100+ chars) of how this hard skill is applied in actual work situations, including tools used, problems solved, and deliverables produced"
+      }}
+      // Minimum 3 hard skills, maximum 10. Prioritize skills mentioned in the target role requirements.
+    ],
+    "skill_development_strategy": "Comprehensive strategy (200+ chars minimum) for how the user should approach building all these skills in parallel. Include prioritization advice, time allocation recommendations, how to balance skill development with current responsibilities, and milestones to track progress. Reference the user's stated learning preferences and available time per week."
   }},
 
   "certification_path": [
@@ -773,7 +832,8 @@ Return the fixed JSON now:"""
                     }
                 ],
                 temperature=0.3,  # Lower temperature for precise repairs
-                max_tokens=16000  # Perplexity doesn't support response_format parameter
+                max_tokens=16000,
+                response_format={"type": "json_object"}
             )
 
             repaired_json = response.choices[0].message.content

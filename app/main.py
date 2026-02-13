@@ -5,7 +5,7 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from app.config import get_settings
 from app.database import init_db
-from app.routes import resumes, tailoring, auth, admin, interview_prep, star_stories, resume_analysis, certifications, saved_comparisons, jobs, career_path, applications
+from app.routes import resumes, tailoring, auth, admin, interview_prep, star_stories, resume_analysis, certifications, saved_comparisons, jobs, career_path, applications, cover_letters, resume_versions, reminders
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.middleware.waf import WAFMiddleware
 from app.utils.logger import logger
@@ -86,6 +86,9 @@ app.include_router(certifications.router, prefix="/api/certifications", tags=["C
 app.include_router(saved_comparisons.router, prefix="/api/saved-comparisons", tags=["Saved Comparisons"])
 app.include_router(career_path.router)  # Prefix already in router definition
 app.include_router(applications.router, prefix="/api/applications", tags=["Applications"])
+app.include_router(cover_letters.router, prefix="/api/cover-letters", tags=["Cover Letters"])
+app.include_router(resume_versions.router, prefix="/api/resumes", tags=["Resume Versions"])
+app.include_router(reminders.router, prefix="/api/reminders", tags=["Reminders"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 
 # Railway deployment - use railway.json startCommand instead

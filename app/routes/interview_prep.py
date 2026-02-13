@@ -71,17 +71,16 @@ async def generate_interview_prep(
             detail="Company research not found. Please generate a tailored resume first."
         )
 
-    # Check if interview prep already exists
+    # Check if interview prep already exists (including soft-deleted)
     result = await db.execute(
         select(InterviewPrep).where(
-            InterviewPrep.tailored_resume_id == tailored_resume_id,
-            InterviewPrep.is_deleted == False
+            InterviewPrep.tailored_resume_id == tailored_resume_id
         )
     )
     existing_prep = result.scalar_one_or_none()
 
-    if existing_prep:
-        # Return existing prep
+    if existing_prep and not existing_prep.is_deleted:
+        # Return existing active prep
         print(f"✓ Returning existing interview prep for tailored resume {tailored_resume_id}")
         return {
             "success": True,
@@ -129,16 +128,25 @@ Requirements:
             job_title=job.title
         )
 
-        # Save to database
-        interview_prep = InterviewPrep(
-            tailored_resume_id=tailored_resume_id,
-            prep_data=prep_data,
-            created_at=datetime.utcnow()
-        )
-
-        db.add(interview_prep)
-        await db.commit()
-        await db.refresh(interview_prep)
+        # Save to database — reactivate soft-deleted row if one exists
+        if existing_prep and existing_prep.is_deleted:
+            existing_prep.prep_data = prep_data
+            existing_prep.is_deleted = False
+            existing_prep.deleted_at = None
+            existing_prep.created_at = datetime.utcnow()
+            existing_prep.updated_at = datetime.utcnow()
+            await db.commit()
+            await db.refresh(existing_prep)
+            interview_prep = existing_prep
+        else:
+            interview_prep = InterviewPrep(
+                tailored_resume_id=tailored_resume_id,
+                prep_data=prep_data,
+                created_at=datetime.utcnow()
+            )
+            db.add(interview_prep)
+            await db.commit()
+            await db.refresh(interview_prep)
 
         print(f"✓ Interview prep generated and saved with ID {interview_prep.id}")
 
@@ -237,7 +245,8 @@ async def get_interview_prep(
             .where(
                 InterviewPrep.tailored_resume_id == tailored_resume_id,
                 InterviewPrep.is_deleted == False,
-                TailoredResume.session_user_id == x_user_id
+                TailoredResume.session_user_id == x_user_id,
+                TailoredResume.is_deleted == False
             )
         )
         row = result.first()

@@ -264,16 +264,17 @@ async def list_career_plans(
         plans = result.scalars().all()
 
         return [
-            CareerPlanListItem(
-                id=plan.id,
-                target_roles=[
+            {
+                "id": plan.id,
+                "target_roles": [
                     role["title"]
                     for role in plan.plan_json.get("target_roles", [])
                 ],
-                created_at=plan.created_at.isoformat(),
-                updated_at=plan.updated_at.isoformat(),
-                version=plan.version
-            )
+                "dream_role": plan.intake_json.get("target_role_interest", "") if plan.intake_json else "",
+                "created_at": plan.created_at.isoformat(),
+                "updated_at": plan.updated_at.isoformat(),
+                "version": plan.version
+            }
             for plan in plans
         ]
 
@@ -419,24 +420,88 @@ async def generate_career_plan_async(
 @router.post("/generate-tasks")
 async def generate_tasks_for_role(request: dict):
     """
-    Auto-generate typical tasks for a given job role using Perplexity AI
+    Auto-generate typical tasks for a given job role.
+
+    When experience_bullets are provided (from a parsed resume), uses OpenAI to
+    extract the user's actual top tasks from their resume content.
+    Otherwise falls back to Perplexity AI to generate generic tasks for the role.
 
     Request body:
     - role_title: str (e.g., "Software Engineer", "Product Manager")
     - industry: str (optional, e.g., "Technology", "Healthcare")
+    - experience_bullets: list[str] (optional, actual resume bullet points from current role)
 
     Returns:
-    - tasks: List[str] (3-5 typical tasks for the role)
+    - tasks: List[str] (3-5 tasks for the role)
+    - source: "resume" | "generated"
     """
-    from app.services.perplexity_client import PerplexityClient
-
     role_title = request.get("role_title", "").strip()
     industry = request.get("industry", "").strip()
+    experience_bullets = request.get("experience_bullets", [])
 
     if not role_title:
         raise HTTPException(status_code=400, detail="role_title is required")
 
+    # If we have resume bullets, extract tasks from the actual resume
+    if experience_bullets and len(experience_bullets) >= 2:
+        try:
+            import openai
+            from app.config import get_settings
+            settings = get_settings()
+
+            client = openai.OpenAI(api_key=settings.openai_api_key)
+
+            bullets_text = "\n".join(f"- {b}" for b in experience_bullets[:20])
+
+            response = client.chat.completions.create(
+                model="gpt-4.1-mini",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You extract the top 3-5 daily tasks/responsibilities from resume bullet points. "
+                            "Each task should be a concise phrase (4-10 words) describing what this person actually does day-to-day. "
+                            "Focus on recurring responsibilities, not one-time achievements. "
+                            "Return ONLY a numbered list, one task per line, no extra text."
+                        )
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Role: {role_title}\nIndustry: {industry or 'General'}\n\nResume bullets:\n{bullets_text}\n\nExtract the top 3-5 daily tasks:"
+                    }
+                ],
+                temperature=0.2,
+                max_tokens=300
+            )
+
+            answer = response.choices[0].message.content.strip()
+
+            tasks = []
+            for line in answer.split('\n'):
+                line = line.strip().lstrip('0123456789.-*)  ')
+                if line and 10 < len(line) < 120:
+                    tasks.append(line)
+
+            tasks = tasks[:5]
+
+            if tasks and len(tasks) >= 3:
+                return {
+                    "success": True,
+                    "role_title": role_title,
+                    "industry": industry or "General",
+                    "tasks": tasks,
+                    "source": "resume"
+                }
+            # If extraction didn't produce enough tasks, fall through to Perplexity
+        except Exception as e:
+            print(f"✗ Error extracting tasks from resume: {e}")
+            import traceback
+            traceback.print_exc()
+            # Fall through to Perplexity generation
+
+    # Fallback: generate generic tasks with Perplexity
     try:
+        from app.services.perplexity_client import PerplexityClient
         perplexity = PerplexityClient()
 
         industry_context = f" in the {industry} industry" if industry else ""
@@ -485,7 +550,8 @@ async def generate_tasks_for_role(request: dict):
             "success": True,
             "role_title": role_title,
             "industry": industry or "General",
-            "tasks": tasks
+            "tasks": tasks,
+            "source": "generated"
         }
 
     except Exception as e:
@@ -503,7 +569,7 @@ async def generate_tasks_for_role(request: dict):
                 "Complete assigned project work",
                 "Attend meetings and provide updates"
             ],
-            "fallback": True
+            "source": "fallback"
         }
 
 
@@ -547,6 +613,27 @@ async def process_career_plan_job(job_id: str, request: GenerateRequest):
       try:
           session_user_id = get_session_user_id()
 
+          # Step 0: Extract job posting details if URL provided
+          job_details = None
+          if getattr(request.intake, 'job_url', None):
+              try:
+                  job_store.update_job(
+                      job_id,
+                      status="extracting",
+                      progress=5,
+                      message="Extracting job posting details..."
+                  )
+                  from app.services.firecrawl_client import FirecrawlClient
+                  firecrawl = FirecrawlClient()
+                  job_details = await firecrawl.extract_job_details(request.intake.job_url)
+                  if job_details:
+                      print(f"  [Job {job_id}] ✓ Extracted job: {job_details.get('title', 'Unknown')} at {job_details.get('company', 'Unknown')}")
+                  else:
+                      print(f"  [Job {job_id}] ⚠ Job extraction returned empty, continuing without")
+              except Exception as e:
+                  print(f"  [Job {job_id}] ⚠ Job extraction failed (non-fatal): {e}")
+                  job_details = None
+
           # Step 1: Research with Perplexity (if not provided)
           research_data = None
 
@@ -561,7 +648,12 @@ async def process_career_plan_job(job_id: str, request: GenerateRequest):
           else:
               # Determine target roles for research
               target_roles = []
-              if request.intake.target_role_interest:
+              # If we extracted a job title from the URL, use it as the primary target
+              if job_details and job_details.get('title'):
+                  target_roles = [job_details['title']]
+                  if request.intake.target_role_interest and request.intake.target_role_interest != job_details['title']:
+                      target_roles.append(request.intake.target_role_interest)
+              elif request.intake.target_role_interest:
                   target_roles = [request.intake.target_role_interest]
               else:
                   # Use current role + industry as hint
@@ -608,7 +700,8 @@ async def process_career_plan_job(job_id: str, request: GenerateRequest):
           synthesis_service = CareerPathSynthesisService()
           synthesis_result = await synthesis_service.generate_career_plan(
               intake=request.intake,
-              research_data=research_data
+              research_data=research_data,
+              job_details=job_details
           )
 
           if not synthesis_result.get("success"):
@@ -674,6 +767,41 @@ async def process_career_plan_job(job_id: str, request: GenerateRequest):
               message="Job failed",
               error=str(e)
           )
+
+
+@router.delete("/all")
+async def delete_all_career_plans(
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Soft delete all career plans for the current user
+    """
+
+    session_user_id = get_session_user_id()
+
+    try:
+        result = await db.execute(
+            update(CareerPlanModel)
+            .where(
+                CareerPlanModel.session_user_id == session_user_id,
+                CareerPlanModel.is_deleted == False
+            )
+            .values(
+                is_deleted=True,
+                deleted_at=datetime.utcnow(),
+                deleted_by=session_user_id
+            )
+        )
+        await db.commit()
+
+        return {"success": True, "message": f"All career plans deleted", "count": result.rowcount}
+
+    except Exception as e:
+        print(f"✗ Error deleting all plans: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete plans: {str(e)}"
+        )
 
 
 @router.delete("/{plan_id}")
