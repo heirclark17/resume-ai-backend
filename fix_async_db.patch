@@ -1,0 +1,68 @@
+--- a/app/routes/career_path.py
++++ b/app/routes/career_path.py
+@@ -8,7 +8,7 @@ from typing import List
+ from datetime import datetime
+ import os
+
+-from app.database import get_db
++from app.database import get_db, AsyncSessionLocal
+ from app.models.career_plan import CareerPlan as CareerPlanModel
+ from app.schemas.career_plan import (
+     IntakeRequest,
+@@ -367,11 +367,10 @@ async def refresh_events(
+
+ @router.post("/generate-async")
+ async def generate_career_plan_async(
+     request: GenerateRequest,
+-    background_tasks: BackgroundTasks,
+-    db: AsyncSession = Depends(get_db)
++    background_tasks: BackgroundTasks
+ ):
+     """
+     ASYNC: Start career plan generation and return job_id immediately
+@@ -394,7 +393,7 @@ async def generate_career_plan_async(
+         background_tasks.add_task(
+             process_career_plan_job,
+             job_id,
+-            request,
+-            db
++            request
+         )
+
+@@ -436,13 +435,16 @@ async def get_job_status(job_id: str):
+     return job
+
+
+-async def process_career_plan_job(job_id: str, request: GenerateRequest, db: AsyncSession):
++async def process_career_plan_job(job_id: str, request: GenerateRequest):
+     """
+     Background task: Run Perplexity research + OpenAI synthesis
+
+     Updates job status throughout process:
+     - pending (0%)
+     - researching (10-50%)
+     - synthesizing (50-90%)
+     - completed (100%)
+     - failed (error)
++
++    Creates its own database session (request-scoped sessions don't work)
+     """
+
+-    try:
++    async with AsyncSessionLocal() as db:
++      try:
+         session_user_id = get_session_user_id()
+
+@@ -571,11 +573,11 @@ async def process_career_plan_job(job_id: str, request: GenerateRequest, db: As
+             plan_id=career_plan.id
+         )
+
+-    except Exception as e:
++      except Exception as e:
+         print(f"✗ [Job {job_id}] Error: {e}")
+         import traceback
+         traceback.print_exc()
+
+         job_store.update_job(
+             job_id,
+             status="failed",

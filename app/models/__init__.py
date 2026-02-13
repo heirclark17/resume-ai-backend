@@ -8,6 +8,7 @@ from app.models.star_story import StarStory
 from app.models.saved_comparison import SavedComparison, TailoredResumeEdit
 from app.models.practice_question_response import PracticeQuestionResponse
 from app.models.analysis_cache import AnalysisCache
+from app.models.application import Application
 
 __all__ = [
     "User",
@@ -21,4 +22,5 @@ __all__ = [
     "TailoredResumeEdit",
     "PracticeQuestionResponse",
     "AnalysisCache",
+    "Application",
 ]

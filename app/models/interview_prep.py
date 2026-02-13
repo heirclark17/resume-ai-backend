@@ -12,6 +12,16 @@ class InterviewPrep(Base):
     # Complete interview prep data (JSON structure matching the schema)
     prep_data = Column(JSON, nullable=False)
 
+    # Enhanced AI-generated data (cached for persistence)
+    readiness_score_data = Column(JSON, nullable=True)
+    values_alignment_data = Column(JSON, nullable=True)
+    company_research_data = Column(JSON, nullable=True)
+    strategic_news_data = Column(JSON, nullable=True)
+    competitive_intelligence_data = Column(JSON, nullable=True)
+    interview_strategy_data = Column(JSON, nullable=True)
+    executive_insights_data = Column(JSON, nullable=True)
+    certification_recommendations_data = Column(JSON, nullable=True)
+
     # Metadata
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
