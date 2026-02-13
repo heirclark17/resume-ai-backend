@@ -18,6 +18,8 @@
 ## API Architecture
 - Singleton at `services/api.ts` - `import { api } from '../services/api'`
 - Railway backend: `https://heirclarkinstacartbackend-production.up.railway.app`
+- Backend source: `HeirclarkHealthAppNew/backend/server-complete.js` (JavaScript, NOT TypeScript)
+- Railway deploys from: `heirclark17/HeirclarkHealthAppNew` repo (backend in `/backend` subdirectory)
 - JWT auth via Bearer token stored in AsyncStorage
 - Pattern: backend-first reads, fire-and-forget writes (don't block UI)
 
@@ -53,3 +55,15 @@ try {
 - `EditMealModal` exists but is never rendered anywhere
 - Onboarding has no program selection step
 - NotificationContext was already wired to API
+
+## Meal Plan & Recipe System (Fixed Feb 12, 2026)
+- **Issue**: AI meal plan generation failed silently when no goals set
+- **Fix**: Added goals validation with Alert dialog in `handleAIGenerate()` and `handleGenerate()`
+- **UX**: Users now get "Goals Required" alert with "Set Goals" button → navigates to `/goals` tab
+- **Recipe Auto-Fetch**: Already implemented via useEffect in MealCard.tsx (lines 80-116)
+  - Triggers automatically when "View Recipe" button clicked
+  - Fetches from `/api/v1/ai/recipe-details` endpoint
+  - Caches result in component state
+- **Backend**: Meal plans generate with minimal structure (no ingredients initially)
+  - max_tokens: 3500 (reduced from 8000 to prevent truncation)
+  - Ingredients/instructions fetched on-demand when user clicks "View Recipe"
