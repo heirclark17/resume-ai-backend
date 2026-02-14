@@ -10,10 +10,13 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, nullable=False, index=True)
-    username = Column(String, unique=True, nullable=False, index=True)
+    username = Column(String, unique=True, nullable=True, index=True)  # Make nullable for Supabase users
 
-    # Simple API key authentication (no passwords for now)
-    api_key = Column(String, unique=True, nullable=False, index=True)
+    # Supabase authentication
+    supabase_id = Column(String, unique=True, nullable=True, index=True)  # Supabase user ID
+
+    # Simple API key authentication (legacy, optional for Supabase users)
+    api_key = Column(String, unique=True, nullable=True, index=True)
 
     # User metadata
     is_active = Column(Boolean, default=True)

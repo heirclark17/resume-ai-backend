@@ -5,7 +5,7 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from app.config import get_settings
 from app.database import init_db
-from app.routes import resumes, tailoring, auth, admin, interview_prep, star_stories, resume_analysis, certifications, saved_comparisons, jobs, career_path, applications, cover_letters, resume_versions, reminders
+from app.routes import resumes, tailoring, auth, admin, interview_prep, star_stories, resume_analysis, certifications, saved_comparisons, jobs, career_path, applications, cover_letters, resume_versions, reminders, auth_test
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.middleware.waf import WAFMiddleware
 from app.utils.logger import logger
@@ -76,6 +76,7 @@ async def log_requests(request, call_next):
 
 # Register routes
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(auth_test.router, prefix="/api/auth", tags=["Authentication Test"])  # JWT test endpoints
 app.include_router(resumes.router, prefix="/api/resumes", tags=["Resumes"])
 app.include_router(jobs.router, prefix="/api/jobs", tags=["Jobs"])
 app.include_router(tailoring.router, prefix="/api/tailor", tags=["Tailoring"])
