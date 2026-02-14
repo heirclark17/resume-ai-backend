@@ -4,7 +4,7 @@ from sqlalchemy import select
 from app.database import get_db
 from app.models.resume import BaseResume
 from app.models.user import User
-from app.middleware.auth import get_current_user, get_current_user_optional, get_user_id
+from app.middleware.auth import get_current_user, get_current_user_optional, get_user_id, get_current_user_unified
 from app.services.resume_parser import ResumeParser
 from app.utils.file_handler import FileHandler
 from app.utils.logger import logger
@@ -42,14 +42,16 @@ class AnalyzeResumeRequest(BaseModel):
 async def upload_resume(
     request: Request,
     file: UploadFile = File(...),
-    user_id: str = Depends(get_user_id),
+    auth_result: tuple = Depends(get_current_user_unified),
     db: AsyncSession = Depends(get_db)
 ):
-    """Upload and parse resume (requires session user ID)
+    """Upload and parse resume (requires authentication)
 
     Rate limited to 5 uploads per minute per IP address to prevent abuse.
-    Resumes are isolated by session user ID.
+    Resumes are isolated by user ID (supports JWT, API key, or session auth).
     """
+    # Extract user and user_id from unified auth
+    user, user_id = auth_result
 
     try:
         logger.info("=== UPLOAD START ===")
@@ -153,11 +155,14 @@ async def upload_resume(
 
 @router.get("/list")
 async def list_resumes(
-    user_id: str = Depends(get_user_id),
+    auth_result: tuple = Depends(get_current_user_unified),
     db: AsyncSession = Depends(get_db)
 ):
-    """List resumes (requires session user ID, excludes deleted resumes)"""
-    # Filter by session user ID for data isolation
+    """List resumes (requires authentication, excludes deleted resumes)"""
+    # Extract user and user_id from unified auth
+    user, user_id = auth_result
+
+    # Filter by user ID for data isolation
     query = select(BaseResume).where(
         BaseResume.is_deleted == False,
         BaseResume.session_user_id == user_id
@@ -183,10 +188,12 @@ async def list_resumes(
 @router.get("/{resume_id}")
 async def get_resume(
     resume_id: int,
-    user_id: str = Depends(get_user_id),
+    auth_result: tuple = Depends(get_current_user_unified),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get resume details (requires session user ID, excludes deleted resumes)"""
+    """Get resume details (requires authentication, excludes deleted resumes)"""
+    # Extract user and user_id from unified auth
+    user, user_id = auth_result
     result = await db.execute(select(BaseResume).where(BaseResume.id == resume_id))
     resume = result.scalar_one_or_none()
 
@@ -220,10 +227,12 @@ async def get_resume(
 @router.post("/{resume_id}/delete")
 async def delete_resume(
     resume_id: int,
-    user_id: str = Depends(get_user_id),
+    auth_result: tuple = Depends(get_current_user_unified),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete resume and all associated tailored resumes and files (requires ownership)"""
+    # Extract user and user_id from unified auth
+    user, user_id = auth_result
     from app.models.resume import TailoredResume
 
     result = await db.execute(select(BaseResume).where(BaseResume.id == resume_id))
@@ -327,10 +336,12 @@ class UpdateParsedDataRequest(BaseModel):
 async def update_parsed_data(
     resume_id: int,
     data: UpdateParsedDataRequest,
-    user_id: str = Depends(get_user_id),
+    auth_result: tuple = Depends(get_current_user_unified),
     db: AsyncSession = Depends(get_db),
 ):
     """Update parsed resume fields after user correction"""
+    # Extract user and user_id from unified auth
+    user, user_id = auth_result
     result = await db.execute(
         select(BaseResume).where(BaseResume.id == resume_id)
     )
@@ -364,7 +375,7 @@ async def update_parsed_data(
 async def analyze_resume(
     request: Request,
     analyze_request: AnalyzeResumeRequest,
-    user_id: str = Depends(get_user_id),
+    auth_result: tuple = Depends(get_current_user_unified),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -373,6 +384,9 @@ async def analyze_resume(
     This endpoint provides AI-powered analysis of resume quality, keyword optimization,
     and actionable suggestions for improvement.
     """
+    # Extract user and user_id from unified auth
+    user, user_id = auth_result
+
     try:
         # Fetch the resume
         result = await db.execute(
