@@ -93,9 +93,11 @@ try {
   - `components/goals/SuccessScreen.tsx` - Checks goal wizard program selection
 
 ## Day Planner Scheduling (Fixed Feb 16, 2026)
-- **Timeline Display**: Changed from 6 AM start to 12 AM (midnight) start
+- **Timeline Display**: Changed from 6 AM start to wake time start
+  - First changed from 6 AM to 12 AM (midnight)
+  - Then updated to start at user's wake time from preferences
   - Updated 4 files: TimeSlotGrid, TimeBlockCard, CurrentTimeIndicator, DailyTimelineView
-  - Removed all 6 AM offsets from position calculations
+  - All positioning now relative to wake time with wraparound for late-night blocks
 - **Meal Scheduling Issues**: Fixed meals scheduling at wrong times (dinner at 6:15 AM, breakfast at 8 PM)
   - Root cause #1: Fasting window block added even on cheat/flex days
   - Root cause #2: findAvailableSlot didn't respect IF eating window boundaries
@@ -112,13 +114,25 @@ try {
   - Returns structured JSON with TimeBlock format, reasoning, and warnings
   - Fallback pattern: Try AI first, fall back to algorithmic on error
   - Made `generateDailyTimeline` async to support AI calls
+  - Optimized for speed: temperature 0.7→0.3, max_tokens 2000→800 (2-3x faster)
 - **Buffer Block Removal** (Feb 16, 2026):
   - User requested no visible buffer blocks: "i dont need the buffer times scheduled"
   - Updated AI prompt instruction #10: "DO NOT create separate 'buffer' blocks - just leave gaps"
   - Disabled `addBufferTimes()` call in schedulingEngine.ts algorithmic fallback
   - Both AI and algorithmic scheduling now leave natural gaps without visible buffers
+- **Block Filtering** (Feb 16, 2026):
+  - Removed workout and meal_prep blocks from calendar display
+  - Only show: sleep, meal_eating, calendar_event, and fasting blocks
+  - Keeps calendar cleaner and focused on key activities
+- **Single-Day Regeneration** (Feb 16, 2026):
+  - Initial generation creates entire week (7 days) with AI
+  - Refresh button now regenerates only the selected day
+  - Added `regenerateSingleDay(date)` action to DayPlannerContext
+  - Preserves other days in weekly plan, only updates selected day
+  - No meals during fasting hours enforced by both AI and algorithmic scheduling
 - **Key Files**:
   - `services/aiSchedulingService.ts` - AI scheduling with GPT-4.1-mini
-  - `services/schedulingEngine.ts` - Algorithmic fallback with buffer removal
-  - `contexts/DayPlannerContext.tsx` - AI integration with fallback pattern
-  - `components/planner/timeline/` - Timeline display components (4 files)
+  - `services/schedulingEngine.ts` - Algorithmic fallback with buffer removal and eating window enforcement
+  - `contexts/DayPlannerContext.tsx` - AI integration, weekly generation, single-day regeneration
+  - `components/planner/timeline/` - Timeline display components with wake time positioning
+  - `app/(tabs)/planner.tsx` - Refresh button calls regenerateSingleDay
