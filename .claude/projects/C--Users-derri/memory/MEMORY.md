@@ -136,3 +136,43 @@ try {
   - `contexts/DayPlannerContext.tsx` - AI integration, weekly generation, single-day regeneration
   - `components/planner/timeline/` - Timeline display components with wake time positioning
   - `app/(tabs)/planner.tsx` - Refresh button calls regenerateSingleDay
+
+## Saved Meals Page Enhancements (Feb 17, 2026)
+- **Image Caching**: Replaced React Native Image with expo-image
+  - Meal photos now persist in memory and disk cache
+  - No constant reloading when scrolling or navigating
+  - cachePolicy="memory-disk" for optimal performance
+  - 200ms fade-in transition on first load
+- **View Recipe Feature**: Added instant recipe viewing with no loading
+  - Recipe button next to meal type badge on every meal card
+  - Full-screen modal with ingredients, instructions, nutrients
+  - All data stored in database when meal is saved (no AI fetching)
+  - Liquid glass modal design with BlurView
+  - Ingredients and instructions already in saved_meals table
+  - Key files: `app/(tabs)/saved-meals.tsx`
+
+## AI Workout Program Engine (COMPLETE - Feb 16, 2026)
+- **Status**: ALL 7 PHASES COMPLETE
+- **Architecture**:
+  - multiWeekPlan holds full program, weeklyPlan is derived view of current week
+  - TrainingDay.calendarDate is THE single source of truth for dates
+  - Fallback pattern: Try AI first, fall back to algorithmic if fails
+  - Backend persists full multi-week plan as JSONB
+- **Key Files**:
+  - `services/programGenerator.ts` - AI generation with GPT-4.1-mini + JSON response format
+  - `services/perplexityResearch.ts` - Perplexity sonar research for optimal programming
+  - `services/equipmentSwapper.ts` - Day-level equipment switching
+  - `services/weightTrackingStorage.ts` - Progressive overload tracking
+  - `contexts/TrainingContext.tsx` - Multi-week state, backend sync, overload auto-logging
+  - `app/(tabs)/programs.tsx` - Week X of Y, date display, equipment switch button
+  - `components/training/WorkoutCard.tsx` - Overload trend badges (green/yellow/red)
+  - `components/training/ExerciseAlternativesModal.tsx` - Grouped by equipment type
+  - `backend/server-complete.js` - multi_week_plan JSONB, week index sync
+- **Phases Completed**:
+  - Phase 1: Program generator rewrite (JSON response, real exercises, alternatives) ✅
+  - Phase 2: Perplexity research layer (sonar model, training context) ✅
+  - Phase 3: Programs.tsx UI (Week X/Y header, calendar dates, status badges) ✅
+  - Phase 4: Calendar integration (date-aware workout blocks, bidirectional nav) ✅
+  - Phase 5: Progressive overload (trend badges, auto-logging, weight pre-population) ✅
+  - Phase 6: Equipment switching (grouped modal, day-level swap button) ✅
+  - Phase 7: Backend schema (multi_week_plan JSONB, PATCH week index, full sync) ✅
