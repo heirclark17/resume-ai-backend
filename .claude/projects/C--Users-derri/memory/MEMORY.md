@@ -70,6 +70,21 @@ try {
   - max_tokens: 3500 (reduced from 8000 to prevent truncation)
   - Ingredients/instructions fetched on-demand when user clicks "View Recipe"
 
+## Meal Plan Image Generation (Fixed Feb 19, 2026)
+- **Issue**: Food images regenerated with AI every time user changed days
+  - Root cause: Images generated in background AFTER meal plan displayed
+  - If user switched days before background completed → meals had no imageUrl
+  - MealCard useEffect triggered DALL-E regeneration for meals without imageUrl
+- **Fix**: Implemented Option 1 - Upfront batch image generation
+  - Generate ALL 21-28 DALL-E images BEFORE showing meal plan
+  - Show loading progress: "Generating food photos... X/Y"
+  - Only setState once with complete plan (includes all images)
+  - Cache and sync complete plan (with images) in one operation
+- **Flow**: AI generates plan → Generate all images → Show complete UI → User browses days (no regeneration)
+- **Key Files**:
+  - `contexts/MealPlanContext.tsx` - generateAIMealPlan() moved image gen before setState
+  - `components/mealPlan/MealCard.tsx` - Added logging for pre-generated vs fallback images
+
 ## Training Plan Program Selection (Fixed Feb 14, 2026)
 - **Issue**: "Start Your Training Plan" button on SuccessScreen didn't generate AI workout plan
   - Root cause: Validation checked `trainingState.selectedProgram` which was always null
@@ -152,17 +167,19 @@ try {
   - Key files: `app/(tabs)/saved-meals.tsx`
 
 ## DaySelector Redesign (Feb 19, 2026)
-- **Issue**: Calendar strip lacked premium iOS 26 Liquid Glass aesthetic
-- **Redesign**: Complete visual overhaul with frosted glass effects
-  - Card size increased: 72px→96px width, 120px→136px min height
-  - Gap increased: 12px→14px for better breathing room
-  - True frosted glass: BlurView with dynamic intensity (60→100 on selection)
-  - Typography enhanced: Day numbers 24px→32px (SF Pro Rounded), better letter-spacing
-  - Premium cheat badge: Nested BlurView, larger pizza icon (8px→11px)
-  - Selection state: Color overlay system with intensified frosting
-  - Shadows: Soft layered shadows (3px offset, 12px radius) with selection glow
-  - Visual hierarchy: Clear day name → day number → meal summary flow
-  - Apple Calendar-inspired: Spacious, elegant, polished aesthetic
+- **Issue**: Calendar strip needed premium iOS 26 Liquid Glass aesthetic with refined minimalism
+- **Evolution**: Two iterations of visual refinement
+  - **First iteration**: 72px→96px width, basic frosted glass
+  - **Second iteration** (latest): 96px→**108px** width, refined minimalist aesthetic
+- **Final Design** (Refined Minimalist with Sculptural Depth):
+  - **Card dimensions**: 108x148px with 16px gap (breathing room)
+  - **Sculptural shadows**: Softer, diffuse shadows (opacity 0.08, radius 16px)
+  - **Typography hierarchy**: Day numbers **42px** (SF Pro Rounded), letter-spacing 2.0
+  - **Frosted glass**: Enhanced blur intensity (70 for unselected, 100 for selected)
+  - **Selection state**: Subtle 1.03 scale, stronger color overlays (0.40 cheat, 0.32 regular)
+  - **Cheat badge**: Premium pill design (12px radius, larger icon 12px)
+  - **Motion**: Better press feedback (0.7 activeOpacity)
+  - **Design philosophy**: Clean lines, generous padding, confident typography, subtle interactions
 - **Key Files**:
   - `components/mealPlan/DaySelector.tsx` - Calendar strip UI
 
