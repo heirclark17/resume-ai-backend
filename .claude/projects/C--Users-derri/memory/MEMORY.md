@@ -151,6 +151,36 @@ try {
   - Ingredients and instructions already in saved_meals table
   - Key files: `app/(tabs)/saved-meals.tsx`
 
+## DaySelector Redesign (Feb 19, 2026)
+- **Issue**: Calendar strip lacked premium iOS 26 Liquid Glass aesthetic
+- **Redesign**: Complete visual overhaul with frosted glass effects
+  - Card size increased: 72px→96px width, 120px→136px min height
+  - Gap increased: 12px→14px for better breathing room
+  - True frosted glass: BlurView with dynamic intensity (60→100 on selection)
+  - Typography enhanced: Day numbers 24px→32px (SF Pro Rounded), better letter-spacing
+  - Premium cheat badge: Nested BlurView, larger pizza icon (8px→11px)
+  - Selection state: Color overlay system with intensified frosting
+  - Shadows: Soft layered shadows (3px offset, 12px radius) with selection glow
+  - Visual hierarchy: Clear day name → day number → meal summary flow
+  - Apple Calendar-inspired: Spacious, elegant, polished aesthetic
+- **Key Files**:
+  - `components/mealPlan/DaySelector.tsx` - Calendar strip UI
+
+## Grocery List Duplicate Ingredients Fix (Feb 18, 2026)
+- **Issue**: Same ingredients appearing multiple times in grocery list instead of aggregating
+- **Root Causes**:
+  - AI returning ingredient name variations: "chicken breast" vs "boneless chicken breast"
+  - AI returning category variations: "Protein" vs "Proteins" vs "Meat"
+  - Descriptive words preventing aggregation: "fresh tomatoes" vs "tomatoes"
+- **Fix**: Enhanced normalization in `utils/groceryListGenerator.ts`
+  - Added parentheses removal: "(boneless)" → ""
+  - Added more descriptors: shredded, cubed, ground, lean
+  - Added category normalization: "Proteins"/"Meat" → "Protein", "Vegetables"/"Fruits" → "Produce"
+  - Enhanced punctuation removal (periods, commas)
+- **Result**: Same ingredients now aggregate with combined totals for accurate Instacart ordering
+- **Debugging**: Comprehensive logs show raw ingredients, normalization process, and final categorization
+- **Key Files**: `utils/groceryListGenerator.ts` - All aggregation and deduplication logic
+
 ## AI Workout Program Engine (COMPLETE - Feb 16, 2026)
 - **Status**: ALL 7 PHASES COMPLETE
 - **Architecture**:
