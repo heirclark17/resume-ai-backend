@@ -112,11 +112,18 @@ CRITICAL INSTRUCTIONS:
    - Note the specific terminology, frameworks, and technologies mentioned
    - Understand what type of role this is (technical, managerial, strategic, etc.)
 
-2. **REFRAME JOB TITLES**
-   - Change each original job title to better reflect the TARGET role
-   - If applying for "Cybersecurity Program Manager", reframe past titles like:
-     * "Project Manager" → "Cybersecurity Implementation Project Manager"
-     * "Operations Manager" → "Security Operations Program Manager"
+2. **REFRAME JOB TITLES (CRITICAL - READ CAREFULLY)**
+   - Each reframed title MUST be UNIQUE and DIFFERENT from the others
+   - Do NOT make every title sound like the target job title
+   - Instead, keep the ESSENCE of what the user actually did at each role, but reframe it through the lens of the target job's industry/domain
+   - The titles should tell a CAREER PROGRESSION STORY that naturally leads to the target role
+   - Examples when applying for "Senior Cybersecurity Program Manager":
+     * "Customer Service Manager" → "Client Operations & Risk Compliance Lead"
+     * "IT Project Coordinator" → "Technical Program Coordinator, Infrastructure Security"
+     * "Operations Analyst" → "Security Operations Analyst"
+     * "Team Lead" → "Cross-Functional Delivery Lead, Technology Programs"
+   - Notice how each title is DIFFERENT and reflects the user's ACTUAL responsibilities, just reframed to connect to the target narrative
+   - NEVER use the exact target job title for any past role
    - Keep company names and dates exactly as they are
    - Format: "[Reframed Title] – [Original Company]"
 
