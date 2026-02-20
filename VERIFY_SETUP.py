@@ -26,9 +26,9 @@ for var in required_vars:
             display = f"{value[:8]}...{value[-4:]}" if len(value) > 12 else "****"
         else:
             display = value
-        print(f"  ✓ {var}: {display}")
+        print(f"  [OK] {var}: {display}")
     else:
-        print(f"  ✗ {var}: NOT SET")
+        print(f"  [ERROR] {var}: NOT SET")
         missing_vars.append(var)
 
 if missing_vars:
@@ -43,20 +43,20 @@ print("2. Testing AWS S3 connection...")
 try:
     from app.services.s3_service import _get_s3_client
     client = _get_s3_client()
-    print("  ✓ S3 client initialized successfully")
+    print("  [OK] S3 client initialized successfully")
 
     # Test bucket access
     bucket = os.getenv("AWS_S3_BUCKET")
     try:
         client.head_bucket(Bucket=bucket)
-        print(f"  ✓ Bucket '{bucket}' is accessible")
+        print(f"  [OK] Bucket '{bucket}' is accessible")
     except Exception as e:
-        print(f"  ✗ Cannot access bucket '{bucket}': {e}")
+        print(f"  [ERROR] Cannot access bucket '{bucket}': {e}")
         print("  → Check IAM permissions and bucket name")
         sys.exit(1)
 
 except Exception as e:
-    print(f"  ✗ Failed to initialize S3 client: {e}")
+    print(f"  [ERROR] Failed to initialize S3 client: {e}")
     print("  → Check AWS credentials are correct")
     sys.exit(1)
 
@@ -67,12 +67,12 @@ try:
     import psycopg2
     db_url = os.getenv("DATABASE_URL")
     if not db_url:
-        print("  ✗ DATABASE_URL not set")
+        print("  [ERROR] DATABASE_URL not set")
         sys.exit(1)
 
     conn = psycopg2.connect(db_url)
     cursor = conn.cursor()
-    print("  ✓ Database connection successful")
+    print("  [OK] Database connection successful")
 
     # Check if video_recording_url column exists
     cursor.execute("""
@@ -84,9 +84,9 @@ try:
     """)
 
     if cursor.fetchone()[0]:
-        print("  ✓ video_recording_url column exists in star_stories table")
+        print("  [OK] video_recording_url column exists in star_stories table")
     else:
-        print("  ✗ video_recording_url column NOT FOUND")
+        print("  [ERROR] video_recording_url column NOT FOUND")
         print("  → Run migration: railway run python run_video_recording_migration.py")
         sys.exit(1)
 
@@ -112,20 +112,20 @@ try:
     )
 
     if "upload_url" in result and "s3_key" in result:
-        print("  ✓ Presigned upload URL generated successfully")
-        print(f"  ✓ S3 key format: {result['s3_key']}")
+        print("  [OK] Presigned upload URL generated successfully")
+        print(f"  [OK] S3 key format: {result['s3_key']}")
     else:
-        print("  ✗ Invalid response from generate_presigned_upload_url")
+        print("  [ERROR] Invalid response from generate_presigned_upload_url")
         sys.exit(1)
 
 except Exception as e:
-    print(f"  ✗ Failed to generate presigned URL: {e}")
+    print(f"  [ERROR] Failed to generate presigned URL: {e}")
     sys.exit(1)
 
 # All checks passed
 print()
 print("=" * 70)
-print("✓ ALL CHECKS PASSED - VIDEO RECORDING FEATURE READY!")
+print("[OK] ALL CHECKS PASSED - VIDEO RECORDING FEATURE READY!")
 print("=" * 70)
 print()
 print("Next steps:")

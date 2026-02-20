@@ -1,58 +1,80 @@
-#!/usr/bin/env python3
-import os
-import sys
+#!/usr/bin/env python
+"""Run database migration directly using provided connection string"""
 import psycopg2
+import sys
+
+# Database connection string
+DATABASE_URL = "postgresql://postgres:SUCByvKQvPeSxnLxystaiyRvEMpRvDUn@switchyard.proxy.rlwy.net:54571/railway"
 
 print("=" * 70)
-print("Running Practice Questions Migration")
+print("RUNNING VIDEO RECORDING DATABASE MIGRATION")
 print("=" * 70)
+print()
 
-database_url = os.getenv('DATABASE_URL')
-if not database_url:
-    print("\nERROR: DATABASE_URL not found")
+try:
+    # Connect to database
+    print("1. Connecting to Railway PostgreSQL database...")
+    conn = psycopg2.connect(DATABASE_URL)
+    cursor = conn.cursor()
+    print("   [OK] Connected successfully")
+    print()
+
+    # Run migration: Add column
+    print("2. Adding video_recording_url column to star_stories table...")
+    cursor.execute("""
+        ALTER TABLE star_stories ADD COLUMN IF NOT EXISTS video_recording_url TEXT;
+    """)
+    conn.commit()
+    print("   [OK] Column added (or already exists)")
+    print()
+
+    # Create index
+    print("3. Creating index for faster lookups...")
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_star_stories_video_recording_url
+        ON star_stories(video_recording_url)
+        WHERE video_recording_url IS NOT NULL;
+    """)
+    conn.commit()
+    print("   [OK] Index created (or already exists)")
+    print()
+
+    # Verify column exists
+    print("4. Verifying migration...")
+    cursor.execute("""
+        SELECT column_name, data_type, is_nullable
+        FROM information_schema.columns
+        WHERE table_name = 'star_stories'
+        AND column_name = 'video_recording_url';
+    """)
+
+    result = cursor.fetchone()
+    if result:
+        column_name, data_type, is_nullable = result
+        print(f"   [OK] Column verified:")
+        print(f"     - Name: {column_name}")
+        print(f"     - Type: {data_type}")
+        print(f"     - Nullable: {is_nullable}")
+    else:
+        print("   [ERROR] Column not found!")
+        sys.exit(1)
+
+    # Close connection
+    cursor.close()
+    conn.close()
+
+    print()
+    print("=" * 70)
+    print("[SUCCESS] MIGRATION COMPLETED SUCCESSFULLY!")
+    print("=" * 70)
+    print()
+    print("Next steps:")
+    print("1. Test at https://talorme.com")
+    print("2. Go to: Interview Prep > Behavioral/Technical Questions")
+    print("3. Expand a question and click 'Record Practice'")
+    print("4. Test recording, playback, and delete functions")
+    print()
+
+except Exception as e:
+    print(f"[ERROR] Migration failed: {e}")
     sys.exit(1)
-
-print("\n[OK] Found DATABASE_URL")
-
-print("\nReading migration SQL...")
-with open('migrations/add_practice_question_responses.sql', 'r') as f:
-    migration_sql = f.read()
-print(f"[OK] Loaded migration file ({len(migration_sql)} bytes)")
-
-print("\nConnecting to database...")
-conn = psycopg2.connect(database_url)
-conn.autocommit = True
-print("[OK] Connected successfully")
-
-print("\nExecuting migration statements...")
-cursor = conn.cursor()
-
-statements = migration_sql.split(';')
-success_count = 0
-skip_count = 0
-
-for i, stmt in enumerate(statements, 1):
-    stmt = stmt.strip()
-    if not stmt or stmt.startswith('--'):
-        continue
-    
-    try:
-        cursor.execute(stmt)
-        success_count += 1
-        print(f"  [OK] Statement {i}: Success")
-    except Exception as e:
-        if 'already exists' in str(e).lower():
-            skip_count += 1
-            print(f"  [SKIP] Statement {i}: Already exists")
-        else:
-            print(f"  [ERROR] Statement {i}: {e}")
-
-cursor.close()
-conn.close()
-
-print("\n" + "=" * 70)
-print("MIGRATION COMPLETE!")
-print(f"  Successful: {success_count}, Skipped: {skip_count}")
-print("=" * 70)
-print("\nThe practice_question_responses table is ready!")
-print("Users can now generate AI practice questions and save recordings.")
