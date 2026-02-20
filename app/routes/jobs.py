@@ -10,6 +10,7 @@ from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from app.services.firecrawl_client import FirecrawlClient
+from app.services.perplexity_client import PerplexityClient
 from app.utils.url_validator import URLValidator
 from app.database import get_db
 from app.models.job import Job
@@ -68,15 +69,54 @@ async def extract_job_details(
             extracted_data = await firecrawl.extract_job_details(validated_url)
 
             print(f"✓ Job extracted: {extracted_data.get('company', 'N/A')} - {extracted_data.get('title', 'N/A')}")
+
+            # Enhance salary data with Perplexity real-time research
+            job_title = extracted_data.get('title', '')
+            location = extracted_data.get('location', '')
+            extracted_salary = extracted_data.get('salary', '')
+
+            salary_data = {
+                "salary_range": extracted_salary or "Not specified",
+                "market_insights": None,
+                "sources": []
+            }
+
+            if job_title:
+                print(f"Researching salary data with Perplexity for {job_title}...")
+                try:
+                    perplexity = PerplexityClient()
+                    perplexity_salary = perplexity.research_salary_insights(
+                        job_title=job_title,
+                        location=location if location else None
+                    )
+
+                    # Use Perplexity data if available, otherwise keep extracted
+                    if perplexity_salary and not perplexity_salary.get('error'):
+                        salary_data = {
+                            "salary_range": perplexity_salary.get('salary_range', extracted_salary or "Not specified"),
+                            "median_salary": perplexity_salary.get('median_salary'),
+                            "market_insights": perplexity_salary.get('market_insights'),
+                            "sources": perplexity_salary.get('sources', []),
+                            "last_updated": perplexity_salary.get('last_updated')
+                        }
+                        print(f"✓ Perplexity salary: {salary_data['salary_range']}")
+                    else:
+                        print(f"⚠ Perplexity salary unavailable, using extracted: {extracted_salary}")
+
+                except Exception as e:
+                    print(f"⚠ Perplexity salary research failed: {e}")
+                    # Keep extracted salary as fallback
+
             print(f"=== EXTRACTION SUCCESS ===")
 
             return {
                 "success": True,
                 "company": extracted_data.get('company', ''),
-                "job_title": extracted_data.get('title', ''),
+                "job_title": job_title,
                 "description": extracted_data.get('description', ''),
-                "location": extracted_data.get('location', ''),
-                "salary": extracted_data.get('salary', '')
+                "location": location,
+                "salary": salary_data['salary_range'],
+                "salary_data": salary_data  # Full salary insights for modal display
             }
 
         except Exception as e:
