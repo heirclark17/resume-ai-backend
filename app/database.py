@@ -86,4 +86,17 @@ async def run_migrations():
                 # Column might already exist or table doesn't exist yet
                 pass
 
+        # Add question_key column to practice_question_responses
+        try:
+            if is_postgres:
+                await conn.execute(text("ALTER TABLE practice_question_responses ADD COLUMN IF NOT EXISTS question_key VARCHAR(200)"))
+            else:
+                result = await conn.execute(text("PRAGMA table_info(practice_question_responses)"))
+                existing_cols = [row[1] for row in result.fetchall()]
+                if 'question_key' not in existing_cols:
+                    await conn.execute(text("ALTER TABLE practice_question_responses ADD COLUMN question_key VARCHAR(200)"))
+            print("  Migration: ensured column question_key exists on practice_question_responses")
+        except Exception as e:
+            pass
+
     print("Migrations completed")
