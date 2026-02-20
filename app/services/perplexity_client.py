@@ -322,3 +322,107 @@ Format your response with clear section headers and bullet points. Include speci
         except Exception as e:
             print(f"Perplexity API error: {str(e)}")
             return {"error": str(e)}
+
+    def research_salary_insights(
+        self,
+        job_title: str,
+        location: str = None,
+        experience_level: str = None,
+        skills: list = None
+    ) -> dict:
+        """
+        Research real-time salary data for a specific job title and location.
+
+        Args:
+            job_title: The job title to research (e.g., "Senior Software Engineer")
+            location: Location for salary research (e.g., "San Francisco, CA", "Remote")
+            experience_level: Experience level (e.g., "Senior", "Mid-level", "Entry-level")
+            skills: List of key skills that may affect salary
+
+        Returns:
+            {
+                "salary_range": str,  # e.g., "$120,000 - $180,000"
+                "median_salary": str,  # e.g., "$150,000"
+                "percentile_25": str,  # 25th percentile
+                "percentile_75": str,  # 75th percentile
+                "market_insights": str,  # Growth trends, demand, etc.
+                "sources": list,  # Citations from web sources
+                "last_updated": str  # When the data was retrieved
+            }
+        """
+
+        # Build comprehensive prompt
+        location_str = f" in {location}" if location else ""
+        experience_str = f" at the {experience_level} level" if experience_level else ""
+        skills_str = f" with skills in {', '.join(skills[:5])}" if skills else ""
+
+        prompt = f"""Research current salary data for {job_title}{location_str}{experience_str}{skills_str}.
+
+Please provide:
+1. Current salary range (minimum to maximum)
+2. Median/average salary
+3. 25th percentile salary (lower quartile)
+4. 75th percentile salary (upper quartile)
+5. Market insights including:
+   - Current demand and hiring trends
+   - Year-over-year salary growth
+   - Industry-specific factors affecting compensation
+   - Remote vs in-office salary differences (if applicable)
+6. Data sources and when they were published
+
+Focus on data from 2024-2025. Include citations from sources like Glassdoor, Levels.fyi, Bureau of Labor Statistics, Payscale, LinkedIn Salary, or company-specific data."""
+
+        try:
+            response = self.client.chat.completions.create(
+                model="sonar",  # Sonar model has real-time web access
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a compensation research analyst with access to real-time salary data from multiple sources. Provide accurate, web-grounded salary insights with proper citations."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                temperature=0.2,  # Low temperature for factual accuracy
+                max_tokens=2000,
+                return_citations=True  # Get source URLs
+            )
+
+            raw_content = response.choices[0].message.content
+            citations = getattr(response, 'citations', []) if hasattr(response, 'citations') else []
+
+            # Parse the response to extract structured data
+            import re
+            from datetime import datetime
+
+            # Extract salary range
+            salary_range_match = re.search(r'\$[\d,]+\s*[-–]\s*\$[\d,]+', raw_content)
+            salary_range = salary_range_match.group(0) if salary_range_match else "Data not available"
+
+            # Extract median/average
+            median_match = re.search(r'(?:median|average)[:\s]+\$[\d,]+', raw_content, re.IGNORECASE)
+            median_salary = median_match.group(0).split('$')[-1] if median_match else "Data not available"
+            if median_salary != "Data not available":
+                median_salary = f"${median_salary}"
+
+            return {
+                "salary_range": salary_range,
+                "median_salary": median_salary,
+                "market_insights": raw_content,
+                "sources": citations,
+                "last_updated": datetime.now().isoformat(),
+                "raw_response": raw_content
+            }
+
+        except Exception as e:
+            print(f"Perplexity salary research error: {str(e)}")
+            return {
+                "error": str(e),
+                "salary_range": "Data unavailable",
+                "median_salary": "Data unavailable",
+                "market_insights": f"Unable to retrieve salary data: {str(e)}",
+                "sources": [],
+                "last_updated": None
+            }

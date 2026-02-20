@@ -250,6 +250,27 @@ IMPORTANT: Since the user is targeting THIS specific job:
 
 """
 
+    def _format_salary_insights(self, salary_insights: Dict[str, Any]) -> str:
+        """Format Perplexity salary insights for inclusion in prompt"""
+        if not salary_insights:
+            return "No real-time salary data available. Use industry knowledge for estimates."
+
+        formatted = []
+        for role, data in salary_insights.items():
+            if isinstance(data, dict) and "salary_range" in data:
+                formatted.append(f"- {role}: {data['salary_range']}")
+                if data.get("market_insights"):
+                    # Extract first 200 chars of insights
+                    insights = data["market_insights"][:200]
+                    formatted.append(f"  Market: {insights}...")
+
+        if not formatted:
+            return "Salary research completed but no data extracted. Use industry knowledge."
+
+        result = "\n".join(formatted)
+        result += "\n\n**IMPORTANT**: Use the exact salary ranges above for target_roles. These are web-grounded, real-time data from Perplexity."
+        return result
+
     def _build_synthesis_prompt(
         self,
         intake: IntakeRequest,
@@ -299,6 +320,9 @@ IMPORTANT: Since the user is targeting THIS specific job:
 ## Source Citations ({len(sources)} sources):
 {json.dumps(sources[:10], indent=2) if sources else "None"}
 
+## Salary Data (Real-time Perplexity Research):
+{self._format_salary_insights(research_data.get("salary_insights", {}))}
+
 # YOUR TASK
 
 Generate a complete career plan JSON object based on:
@@ -319,7 +343,7 @@ Match this EXACT schema:
       "title": "Specific Job Title",
       "why_aligned": "How user's background maps to this role based on typical requirements",
       "growth_outlook": "Industry growth trends and demand, e.g., '23% growth 2024-2034 per BLS, strong demand in market'",
-      "salary_range": "Typical salary range, e.g., '$95,000 - $135,000 for {intake.location} market'",
+      "salary_range": "USE THE EXACT PERPLEXITY SALARY DATA PROVIDED ABOVE. If not available, provide typical range like '$95,000 - $135,000 for {intake.location} market'",
       "typical_requirements": ["Key skill for this role", "Another important skill", "Relevant certification or qualification"],
       "bridge_roles": [
         {{

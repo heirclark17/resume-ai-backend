@@ -24,6 +24,7 @@ from app.schemas.career_plan import (
 from app.services.career_path_research_service import CareerPathResearchService
 from app.services.career_path_synthesis_service import CareerPathSynthesisService
 from app.services.job_store import job_store
+from app.services.perplexity_client import PerplexityClient
 
 
 router = APIRouter(prefix="/api/career-path", tags=["career-path"])
@@ -140,6 +141,31 @@ async def generate_career_plan(
                 format_preference=request.intake.in_person_vs_remote
             )
             research_data = research_result
+
+        # Step 1.5: Research salary data with Perplexity for each target role
+        print(f"  Researching salary data with Perplexity...")
+        perplexity = PerplexityClient()
+        salary_insights = {}
+
+        for role in target_roles[:3]:  # Research salary for up to 3 target roles
+            try:
+                salary_data = perplexity.research_salary_insights(
+                    job_title=role,
+                    location=request.intake.location,
+                    experience_level=f"{request.intake.years_experience} years" if request.intake.years_experience else None
+                )
+                salary_insights[role] = salary_data
+                print(f"  ✓ Salary research for {role}: {salary_data.get('salary_range', 'N/A')}")
+            except Exception as e:
+                print(f"  ⚠ Salary research failed for {role}: {e}")
+                salary_insights[role] = {
+                    "salary_range": "Competitive",
+                    "market_insights": "Data unavailable",
+                    "sources": []
+                }
+
+        # Add salary insights to research_data
+        research_data["salary_insights"] = salary_insights
 
         # Step 2: Synthesize plan with OpenAI
         print(f"  Synthesizing plan with OpenAI...")
@@ -689,6 +715,30 @@ async def process_career_plan_job(job_id: str, request: GenerateRequest):
 
           # Step 2: Synthesize plan with OpenAI
           print(f"  [Job {job_id}] Synthesizing plan with OpenAI GPT-4.1-mini...")
+
+          # Research salary data with Perplexity
+          print(f"  [Job {job_id}] Researching salary data with Perplexity...")
+          perplexity = PerplexityClient()
+          salary_insights = {}
+
+          for role in target_roles[:3]:
+              try:
+                  salary_data = perplexity.research_salary_insights(
+                      job_title=role,
+                      location=request.intake.location,
+                      experience_level=f"{request.intake.years_experience} years" if request.intake.years_experience else None
+                  )
+                  salary_insights[role] = salary_data
+                  print(f"  [Job {job_id}] ✓ Salary: {role} - {salary_data.get('salary_range', 'N/A')}")
+              except Exception as e:
+                  print(f"  [Job {job_id}] ⚠ Salary research failed for {role}: {e}")
+                  salary_insights[role] = {
+                      "salary_range": "Competitive",
+                      "market_insights": "Data unavailable",
+                      "sources": []
+                  }
+
+          research_data["salary_insights"] = salary_insights
 
           job_store.update_job(
               job_id,
