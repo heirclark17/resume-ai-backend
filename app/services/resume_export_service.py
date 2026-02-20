@@ -174,6 +174,43 @@ class ResumeExportService:
             elif isinstance(education, str):
                 doc.add_paragraph(education)
 
+        # Add Certifications
+        if resume_data.get('certifications'):
+            certs_heading = doc.add_paragraph()
+            certs_heading_run = certs_heading.add_run('CERTIFICATIONS & TRAINING')
+            certs_heading_run.font.size = Pt(12)
+            certs_heading_run.font.bold = True
+            certs_heading_run.font.color.rgb = RGBColor(0, 51, 102)
+
+            certifications = resume_data['certifications']
+            if isinstance(certifications, list):
+                for cert in certifications:
+                    if cert and cert.strip():
+                        doc.add_paragraph(cert.strip(), style='List Bullet')
+            elif isinstance(certifications, str):
+                # Split by newlines or common separators
+                cert_lines = [c.strip() for c in certifications.replace('\r\n', '\n').split('\n') if c.strip()]
+                if len(cert_lines) > 1:
+                    for cert in cert_lines:
+                        doc.add_paragraph(cert, style='List Bullet')
+                else:
+                    doc.add_paragraph(certifications)
+
+        # Add Alignment Statement
+        if resume_data.get('alignment_statement'):
+            doc.add_paragraph()  # Spacer
+            align_heading = doc.add_paragraph()
+            align_heading_run = align_heading.add_run('ALIGNMENT STATEMENT')
+            align_heading_run.font.size = Pt(10)
+            align_heading_run.font.bold = True
+            align_heading_run.font.color.rgb = RGBColor(0, 51, 102)
+
+            align_para = doc.add_paragraph(resume_data['alignment_statement'])
+            align_para.style = 'Normal'
+            for run in align_para.runs:
+                run.font.size = Pt(10)
+                run.font.italic = True
+
         # Save to BytesIO
         file_buffer = io.BytesIO()
         doc.save(file_buffer)
@@ -305,6 +342,36 @@ class ResumeExportService:
                     elements.append(Paragraph(edu_text, body_style))
             elif isinstance(education, str):
                 elements.append(Paragraph(education, body_style))
+
+        # Add Certifications
+        if resume_data.get('certifications'):
+            elements.append(Paragraph('CERTIFICATIONS &amp; TRAINING', heading_style))
+
+            certifications = resume_data['certifications']
+            if isinstance(certifications, list):
+                for cert in certifications:
+                    if cert and cert.strip():
+                        elements.append(Paragraph(f"• {cert.strip()}", body_style))
+            elif isinstance(certifications, str):
+                cert_lines = [c.strip() for c in certifications.replace('\r\n', '\n').split('\n') if c.strip()]
+                if len(cert_lines) > 1:
+                    for cert in cert_lines:
+                        elements.append(Paragraph(f"• {cert}", body_style))
+                else:
+                    elements.append(Paragraph(certifications, body_style))
+
+            elements.append(Spacer(1, 12))
+
+        # Add Alignment Statement
+        if resume_data.get('alignment_statement'):
+            align_style = ParagraphStyle(
+                'AlignStatement',
+                parent=body_style,
+                fontSize=10,
+                fontName='Helvetica-Oblique',
+            )
+            elements.append(Paragraph('ALIGNMENT STATEMENT', heading_style))
+            elements.append(Paragraph(resume_data['alignment_statement'], align_style))
 
         # Build PDF
         doc.build(elements)
