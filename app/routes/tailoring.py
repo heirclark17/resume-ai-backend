@@ -386,6 +386,20 @@ async def get_tailored_resume(
     if tailored.session_user_id != user_id:
         raise HTTPException(status_code=403, detail="Access denied: You don't own this tailored resume")
 
+    # Fetch associated job record for company/title
+    job_data = {}
+    if tailored.job_id:
+        job_result = await db.execute(
+            select(Job).where(Job.id == tailored.job_id)
+        )
+        job = job_result.scalar_one_or_none()
+        if job:
+            job_data = {
+                "company": job.company,
+                "title": job.title,
+                "url": job.url,
+            }
+
     return {
         "id": tailored.id,
         "base_resume_id": tailored.base_resume_id,
@@ -396,7 +410,8 @@ async def get_tailored_resume(
         "alignment_statement": tailored.alignment_statement,
         "docx_path": tailored.docx_path,
         "quality_score": tailored.quality_score,
-        "created_at": tailored.created_at.isoformat()
+        "created_at": tailored.created_at.isoformat(),
+        **job_data,
     }
 
 
