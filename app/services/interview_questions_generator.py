@@ -14,7 +14,58 @@ from openai import OpenAI
 from app.config import get_settings
 from app.services.perplexity_client import PerplexityClient
 import json
+import re
 import os
+
+
+def repair_json(raw: str) -> dict:
+    """Attempt to repair malformed JSON from LLM responses.
+
+    Handles:
+    - Markdown fences (```json ... ```)
+    - Truncated output (missing closing brackets/braces)
+    - Trailing commas before } or ]
+    """
+    text = raw.strip()
+
+    # Strip markdown fences
+    if text.startswith("```"):
+        text = re.sub(r'^```(?:json)?\s*', '', text)
+        text = re.sub(r'\s*```$', '', text)
+        text = text.strip()
+
+    # Try parsing as-is first
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # Remove trailing commas before } or ]
+    cleaned = re.sub(r',\s*([}\]])', r'\1', text)
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+
+    # Handle truncated JSON by closing open brackets/braces
+    truncated = cleaned
+    # Remove any trailing incomplete string (unmatched quote)
+    if truncated.count('"') % 2 != 0:
+        last_quote = truncated.rfind('"')
+        truncated = truncated[:last_quote + 1]
+
+    # Count open/close brackets
+    open_braces = truncated.count('{') - truncated.count('}')
+    open_brackets = truncated.count('[') - truncated.count(']')
+
+    # Strip trailing comma before we close
+    truncated = truncated.rstrip().rstrip(',')
+
+    # Close any open structures
+    truncated += ']' * max(0, open_brackets)
+    truncated += '}' * max(0, open_braces)
+
+    return json.loads(truncated)
 
 settings = get_settings()
 
@@ -300,7 +351,7 @@ REQUIREMENTS:
         try:
             response = self.client.chat.completions.create(
                 model="gpt-4.1-mini",
-                max_tokens=4000,
+                max_tokens=6000,
                 temperature=0.7,
                 response_format={"type": "json_object"},
                 messages=[
@@ -309,8 +360,39 @@ REQUIREMENTS:
                 ]
             )
 
-            result = json.loads(response.choices[0].message.content)
+            raw_content = response.choices[0].message.content
+            try:
+                result = json.loads(raw_content)
+            except json.JSONDecodeError:
+                print("Behavioral questions JSON malformed, attempting repair...")
+                result = repair_json(raw_content)
+                print("JSON repair successful")
+
             return result
+
+        except json.JSONDecodeError as e:
+            # Repair failed - retry once with lower temperature
+            print(f"Behavioral questions JSON repair failed, retrying: {e}")
+            try:
+                response = self.client.chat.completions.create(
+                    model="gpt-4.1-mini",
+                    max_tokens=6000,
+                    temperature=0.3,
+                    response_format={"type": "json_object"},
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ]
+                )
+                raw_content = response.choices[0].message.content
+                try:
+                    result = json.loads(raw_content)
+                except json.JSONDecodeError:
+                    result = repair_json(raw_content)
+                return result
+            except Exception as retry_err:
+                print(f"Behavioral question retry also failed: {retry_err}")
+                raise ValueError(f"Failed to generate behavioral questions after retry: {retry_err}")
 
         except Exception as e:
             print(f"Behavioral question generation failed: {e}")
@@ -478,7 +560,7 @@ REQUIREMENTS:
         try:
             response = self.client.chat.completions.create(
                 model="gpt-4.1-mini",
-                max_tokens=4500,
+                max_tokens=8000,
                 temperature=0.7,
                 response_format={"type": "json_object"},
                 messages=[
@@ -487,8 +569,39 @@ REQUIREMENTS:
                 ]
             )
 
-            result = json.loads(response.choices[0].message.content)
+            raw_content = response.choices[0].message.content
+            try:
+                result = json.loads(raw_content)
+            except json.JSONDecodeError:
+                print("Technical questions JSON malformed, attempting repair...")
+                result = repair_json(raw_content)
+                print("JSON repair successful")
+
             return result
+
+        except json.JSONDecodeError as e:
+            # Repair failed too - retry once with lower temperature
+            print(f"Technical questions JSON repair failed, retrying with lower temperature: {e}")
+            try:
+                response = self.client.chat.completions.create(
+                    model="gpt-4.1-mini",
+                    max_tokens=8000,
+                    temperature=0.3,
+                    response_format={"type": "json_object"},
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ]
+                )
+                raw_content = response.choices[0].message.content
+                try:
+                    result = json.loads(raw_content)
+                except json.JSONDecodeError:
+                    result = repair_json(raw_content)
+                return result
+            except Exception as retry_err:
+                print(f"Technical question retry also failed: {retry_err}")
+                raise ValueError(f"Failed to generate technical questions after retry: {retry_err}")
 
         except Exception as e:
             print(f"Technical question generation failed: {e}")
