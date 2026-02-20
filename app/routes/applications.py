@@ -3,12 +3,16 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from sqlalchemy.orm import joinedload
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
+import json
 
 from app.database import get_db
 from app.models.application import Application
+from app.models.resume import TailoredResume
+from app.models.job import Job
 from app.middleware.auth import get_user_id
 from app.utils.logger import get_logger
 
@@ -65,7 +69,45 @@ async def list_applications(
     query = query.order_by(Application.updated_at.desc())
     result = await db.execute(query)
     apps = result.scalars().all()
-    return {"applications": [a.to_dict() for a in apps]}
+
+    # Enrich applications with job salary data
+    enriched_apps = []
+    for app in apps:
+        app_dict = app.to_dict()
+
+        # If application has a tailored resume, fetch job salary data
+        if app.tailored_resume_id:
+            try:
+                # Fetch tailored resume
+                resume_result = await db.execute(
+                    select(TailoredResume).where(TailoredResume.id == app.tailored_resume_id)
+                )
+                tailored_resume = resume_result.scalar_one_or_none()
+
+                # If resume has a job, fetch salary insights
+                if tailored_resume and tailored_resume.job_id:
+                    job_result = await db.execute(
+                        select(Job).where(Job.id == tailored_resume.job_id)
+                    )
+                    job = job_result.scalar_one_or_none()
+
+                    if job:
+                        # Add salary insights to application data
+                        app_dict["salaryInsights"] = {
+                            "salary_range": job.salary,
+                            "median_salary": job.median_salary,
+                            "market_insights": job.salary_insights,
+                            "sources": json.loads(job.salary_sources) if job.salary_sources else [],
+                            "last_updated": job.salary_last_updated.isoformat() if job.salary_last_updated else None
+                        }
+            except Exception as e:
+                logger.error(f"Error fetching salary data for application {app.id}: {e}")
+                # Continue without salary insights if there's an error
+                pass
+
+        enriched_apps.append(app_dict)
+
+    return {"applications": enriched_apps}
 
 
 @router.get("/stats")
