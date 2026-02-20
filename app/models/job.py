@@ -17,6 +17,9 @@ class Job(Base):
     requires_clearance = Column(Boolean, default=False)
     verified_at = Column(DateTime, default=datetime.utcnow)
 
+    # User ownership - ties saved jobs to a specific user session
+    session_user_id = Column(String, nullable=True, index=True)
+
     # Description from job posting
     description = Column(Text)
     requirements = Column(Text)

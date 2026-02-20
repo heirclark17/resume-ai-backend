@@ -1,13 +1,19 @@
 """
 Job Details API Routes
 
-Endpoints for extracting job information from URLs
+Endpoints for extracting job information from URLs and managing saved jobs
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
+from typing import Optional, List
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, desc
 from app.services.firecrawl_client import FirecrawlClient
 from app.utils.url_validator import URLValidator
+from app.database import get_db
+from app.models.job import Job
+from app.middleware.auth import get_user_id
 
 router = APIRouter()
 
@@ -19,6 +25,15 @@ limiter = Limiter(key_func=get_remote_address)
 
 class ExtractJobRequest(BaseModel):
     job_url: str
+
+
+class SaveJobRequest(BaseModel):
+    url: str
+    company: str
+    title: str
+    location: Optional[str] = None
+    salary: Optional[str] = None
+    description: Optional[str] = None
 
 
 @router.post("/extract")
@@ -97,3 +112,115 @@ async def extract_job_details(
             "location": '',
             "salary": ''
         }
+
+
+# ─── Saved Jobs CRUD ───────────────────────────────────────────────
+
+@router.get("/saved")
+async def get_saved_jobs(
+    user_id: str = Depends(get_user_id),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get all saved jobs for the current user, newest first"""
+    result = await db.execute(
+        select(Job)
+        .where(Job.session_user_id == user_id)
+        .where(Job.is_active == True)
+        .order_by(desc(Job.created_at))
+    )
+    jobs = result.scalars().all()
+
+    return {
+        "success": True,
+        "jobs": [
+            {
+                "id": job.id,
+                "url": job.url,
+                "company": job.company,
+                "title": job.title,
+                "location": job.location or "",
+                "salary": job.salary or "",
+                "created_at": job.created_at.isoformat() if job.created_at else None,
+            }
+            for job in jobs
+        ]
+    }
+
+
+@router.post("/save")
+async def save_job(
+    req: SaveJobRequest,
+    user_id: str = Depends(get_user_id),
+    db: AsyncSession = Depends(get_db)
+):
+    """Save a job URL for later reuse. Upserts by URL."""
+    # Check if job with this URL already exists
+    result = await db.execute(
+        select(Job).where(Job.url == req.url)
+    )
+    existing = result.scalar_one_or_none()
+
+    if existing:
+        # Update ownership if not already owned by this user
+        existing.session_user_id = user_id
+        existing.company = req.company or existing.company
+        existing.title = req.title or existing.title
+        existing.location = req.location or existing.location
+        existing.salary = req.salary or existing.salary
+        existing.description = req.description or existing.description
+        existing.is_active = True
+        db.add(existing)
+        await db.commit()
+        await db.refresh(existing)
+        job = existing
+    else:
+        job = Job(
+            url=req.url,
+            company=req.company,
+            title=req.title,
+            location=req.location or "",
+            salary=req.salary or "",
+            description=req.description or "",
+            session_user_id=user_id,
+            is_active=True,
+        )
+        db.add(job)
+        await db.commit()
+        await db.refresh(job)
+
+    return {
+        "success": True,
+        "job": {
+            "id": job.id,
+            "url": job.url,
+            "company": job.company,
+            "title": job.title,
+            "location": job.location or "",
+            "salary": job.salary or "",
+            "created_at": job.created_at.isoformat() if job.created_at else None,
+        }
+    }
+
+
+@router.delete("/saved/{job_id}")
+async def delete_saved_job(
+    job_id: int,
+    user_id: str = Depends(get_user_id),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete a saved job (soft delete by setting is_active=False)"""
+    result = await db.execute(
+        select(Job)
+        .where(Job.id == job_id)
+        .where(Job.session_user_id == user_id)
+    )
+    job = result.scalar_one_or_none()
+
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    job.is_active = False
+    db.add(job)
+    await db.commit()
+
+    return {"success": True}

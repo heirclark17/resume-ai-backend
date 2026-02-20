@@ -189,11 +189,17 @@ async def tailor_resume(
                 description=tailor_request.job_description or "",
                 location=extracted_job_data.get('location', '') if extracted_job_data else '',
                 salary=extracted_job_data.get('salary', '') if extracted_job_data else '',
-                is_active=True
+                is_active=True,
+                session_user_id=user_id,
             )
             db.add(job)
             await db.commit()
             await db.refresh(job)
+        elif not job.session_user_id:
+            # Backfill ownership on existing jobs
+            job.session_user_id = user_id
+            db.add(job)
+            await db.commit()
 
         print(f"Job record: {job.company} - {job.title}")
 

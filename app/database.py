@@ -99,4 +99,17 @@ async def run_migrations():
         except Exception as e:
             pass
 
+        # Add session_user_id column to jobs table
+        try:
+            if is_postgres:
+                await conn.execute(text("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS session_user_id VARCHAR"))
+            else:
+                result = await conn.execute(text("PRAGMA table_info(jobs)"))
+                existing_cols = [row[1] for row in result.fetchall()]
+                if 'session_user_id' not in existing_cols:
+                    await conn.execute(text("ALTER TABLE jobs ADD COLUMN session_user_id VARCHAR"))
+            print("  Migration: ensured column session_user_id exists on jobs")
+        except Exception as e:
+            pass
+
     print("Migrations completed")
