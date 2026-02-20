@@ -87,6 +87,13 @@ async def recommend_certifications(
             experience_level=experience_level
         )
 
+        # Cache result to interview_prep for persistence
+        try:
+            interview_prep.certification_recommendations_data = {"certifications": recommendations}
+            await db.commit()
+        except Exception as cache_err:
+            print(f"Warning: Failed to cache certification recommendations: {cache_err}")
+
         return {
             "success": True,
             "certifications": recommendations

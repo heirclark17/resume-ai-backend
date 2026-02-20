@@ -22,6 +22,13 @@ class InterviewPrep(Base):
     executive_insights_data = Column(JSON, nullable=True)
     certification_recommendations_data = Column(JSON, nullable=True)
 
+    # Behavioral/Technical questions & Common questions (AI-generated, cached)
+    behavioral_technical_questions_data = Column(JSON, nullable=True)
+    common_questions_data = Column(JSON, nullable=True)
+
+    # User interaction state (checklist, notes, custom questions, interview date, etc.)
+    user_data = Column(JSON, nullable=True)
+
     # Metadata
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

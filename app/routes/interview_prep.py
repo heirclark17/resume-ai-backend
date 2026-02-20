@@ -272,6 +272,10 @@ async def get_interview_prep(
                 "readiness_score": getattr(interview_prep, 'readiness_score_data', None),
                 "competitive_intelligence": getattr(interview_prep, 'competitive_intelligence_data', None),
                 "interview_strategy": getattr(interview_prep, 'interview_strategy_data', None),
+                "behavioral_technical_questions": getattr(interview_prep, 'behavioral_technical_questions_data', None),
+                "common_questions": getattr(interview_prep, 'common_questions_data', None),
+                "certification_recommendations": getattr(interview_prep, 'certification_recommendations_data', None),
+                "user_data": getattr(interview_prep, 'user_data', None),
             }
         except Exception as cache_error:
             print(f"Warning: Could not get cached data fields: {cache_error}")
@@ -332,6 +336,10 @@ class CachedDataUpdate(BaseModel):
     values_alignment: Optional[Dict] = None
     interview_questions: Optional[Dict] = None
     company_values: Optional[Dict] = None
+    behavioral_technical_questions: Optional[Dict] = None
+    common_questions: Optional[Dict] = None
+    certification_recommendations: Optional[Dict] = None
+    user_data: Optional[Dict] = None
 
 
 @router.patch("/{interview_prep_id}/cache")
@@ -378,6 +386,17 @@ async def update_cached_data(
     if data.company_values is not None:
         # Store in interview_strategy_data (repurposed) or add new column
         interview_prep.interview_strategy_data = data.company_values
+    if data.behavioral_technical_questions is not None:
+        interview_prep.behavioral_technical_questions_data = data.behavioral_technical_questions
+    if data.common_questions is not None:
+        interview_prep.common_questions_data = data.common_questions
+    if data.certification_recommendations is not None:
+        interview_prep.certification_recommendations_data = data.certification_recommendations
+    if data.user_data is not None:
+        # Merge user_data so partial updates work (don't overwrite entire blob)
+        existing = interview_prep.user_data or {}
+        existing.update(data.user_data)
+        interview_prep.user_data = existing
 
     await db.commit()
 
