@@ -203,6 +203,37 @@ async def tailor_resume(
 
         print(f"Job record: {job.company} - {job.title}")
 
+        # Step 3b: Research salary data with Perplexity (if not already cached)
+        print("Step 3b: Researching salary data with Perplexity...")
+        if not job.median_salary or not job.salary_last_updated:
+            try:
+                perplexity_salary = perplexity.research_salary_insights(
+                    job_title=job.title,
+                    location=job.location if job.location else None
+                )
+
+                if perplexity_salary and not perplexity_salary.get('error'):
+                    # Store Perplexity salary data in job record
+                    job.median_salary = perplexity_salary.get('median_salary', 'Data unavailable')
+                    job.salary_insights = perplexity_salary.get('market_insights', '')
+                    job.salary_sources = json.dumps(perplexity_salary.get('sources', []))
+                    job.salary_last_updated = datetime.utcnow()
+
+                    # Use Perplexity range if available, otherwise keep Firecrawl salary
+                    if perplexity_salary.get('salary_range') and perplexity_salary['salary_range'] != "Data not available":
+                        job.salary = perplexity_salary['salary_range']
+
+                    db.add(job)
+                    await db.commit()
+                    await db.refresh(job)
+                    print(f"✓ Perplexity salary data saved: {job.median_salary}")
+                else:
+                    print(f"⚠ Perplexity salary research unavailable")
+            except Exception as e:
+                print(f"⚠ Perplexity salary research failed: {e}")
+        else:
+            print(f"✓ Using cached salary data from {job.salary_last_updated}")
+
         # Step 4: Research company with Perplexity
         print("Step 4: Researching company with Perplexity...")
         perplexity = PerplexityClient()
