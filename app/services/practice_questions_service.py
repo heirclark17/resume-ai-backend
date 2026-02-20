@@ -137,7 +137,7 @@ Example format:
             Dictionary with Situation, Task, Action, Result
         """
 
-        prompt = f"""You are an expert interview coach. Generate a compelling STAR story to answer this interview question.
+        prompt = f"""You are an elite interview coach who has helped hundreds of candidates land roles at top companies. Generate an EXTREMELY DETAILED and compelling STAR story to answer this interview question. This story should be detailed enough to fill a 3-5 minute verbal answer in an actual interview.
 
 INTERVIEW QUESTION:
 {question}
@@ -151,40 +151,62 @@ JOB APPLYING FOR:
 JOB DESCRIPTION:
 {job_description}
 
-Generate a STAR story that:
-1. SITUATION: Sets the context (specific, relatable scenario from candidate's background)
-2. TASK: Defines the challenge or goal (aligned with job requirements)
-3. ACTION: Details specific steps taken (demonstrates required skills)
-4. RESULT: Quantifies the outcome (measurable impact with numbers/percentages)
+Generate a STAR story with the following depth and detail:
 
-REQUIREMENTS:
-- Use first-person perspective ("I...")
-- Make it specific and detailed, not generic
-- Include measurable outcomes (percentages, numbers, timeframes)
-- Align with the job's core responsibilities
-- Keep each section 2-3 sentences max
-- Sound natural and conversational
+1. SITUATION (15% of story - 4-6 sentences):
+   - Set the specific scene: company type, team size, your role at the time
+   - Describe the business context and why it mattered (revenue impact, customer impact, compliance risk, etc.)
+   - Include specific numbers: team size, budget, timeline, scale of the problem
+   - Paint a vivid picture so the interviewer can visualize the challenge
+   - Mention any constraints or complicating factors (tight deadline, limited resources, competing priorities)
+
+2. TASK (10% of story - 3-4 sentences):
+   - Define YOUR specific responsibility (not the team's, YOURS)
+   - Explain what success looked like with concrete criteria
+   - Mention the stakes: what would happen if this failed?
+   - Connect the task directly to skills relevant to the job you're applying for
+
+3. ACTION (60% of story - THIS IS THE MOST IMPORTANT SECTION - 10-15 sentences minimum):
+   - Break down EVERY specific step YOU personally took, in chronological order
+   - Name specific tools, frameworks, methodologies, and technologies you used
+   - Describe how you influenced or led others (stakeholder meetings, presentations, 1:1 coaching)
+   - Include at least one moment of problem-solving when something went wrong or an obstacle arose
+   - Detail your decision-making process: what options did you consider? Why did you choose this approach?
+   - Mention cross-functional collaboration: who did you work with and how?
+   - Include specific examples of communication: "I presented to the VP of Engineering...", "I created a weekly dashboard for the executive team..."
+   - Show leadership behaviors even if you weren't a formal leader
+   - Include technical depth where appropriate (specific configurations, architectures, processes)
+   - Describe how you tracked progress and adjusted your approach
+
+4. RESULT (15% of story - 4-6 sentences):
+   - Lead with the PRIMARY quantifiable outcome (percentage improvement, dollar savings, time reduction)
+   - Include at least 3 different metrics or outcomes
+   - Mention both immediate results AND longer-term impact
+   - Include recognition received (awards, promotions, being asked to repeat the initiative)
+   - Connect the results back to business value (revenue, customer satisfaction, risk reduction)
+   - End with what you learned or how this experience prepared you for THIS role
+
+CRITICAL REQUIREMENTS:
+- Use first-person perspective ("I...") throughout
+- Be EXTREMELY specific - no generic or vague language
+- Every claim must have a number, percentage, timeframe, or concrete example
+- The ACTION section must be the longest and most detailed section by far
+- Sound natural and conversational, as if telling a compelling story in person
+- Align the story with the skills and responsibilities in the job description
+- The total story should be detailed enough for a 3-5 minute verbal answer
 
 Return ONLY a valid JSON object with keys: situation, task, action, result. No markdown, no additional text.
-
-Example format:
-{{
-  "situation": "When I joined the cybersecurity team at my previous company, we were facing a 45% increase in phishing attacks targeting employees, and our current training program had only 60% completion rates.",
-  "task": "I was tasked with redesigning our security awareness program to increase engagement and reduce successful phishing attempts by at least 30% within six months.",
-  "action": "I implemented a gamified training platform with monthly simulated phishing campaigns, created role-specific micro-learning modules, and established a security champions program across all departments. I also built a real-time dashboard to track metrics and identify high-risk teams.",
-  "result": "Within 4 months, we reduced successful phishing click rates from 18% to 4%, achieved 95% training completion, and our security champions program expanded to 50 employees. The CISO presented our program as a model to the board, and we received budget approval to expand it company-wide."
-}}
 """
 
         try:
             response = client.chat.completions.create(
-                model="gpt-4",
+                model="gpt-4.1-mini",
                 messages=[
-                    {"role": "system", "content": "You are an expert interview coach who creates compelling STAR stories. Return only valid JSON."},
+                    {"role": "system", "content": "You are an elite interview coach who creates exceptionally detailed STAR stories. Your stories are so well-crafted that candidates who use them consistently receive offers. You always return valid JSON only, no markdown."},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.7,
-                max_tokens=1000
+                max_tokens=4000
             )
 
             content = response.choices[0].message.content.strip()
@@ -241,8 +263,8 @@ Example format:
     def _get_fallback_star_story(self) -> Dict[str, str]:
         """Fallback STAR story if AI generation fails"""
         return {
-            "situation": "I noticed our team was struggling with [specific challenge] which was impacting [key metric].",
-            "task": "I was responsible for [specific goal or objective] to improve [outcome].",
-            "action": "I took the following steps: [specific action 1], [specific action 2], and [specific action 3].",
-            "result": "As a result, we achieved [quantifiable outcome with numbers/percentages] within [timeframe]."
+            "situation": "Unable to generate a detailed STAR story at this time. Please click 'Regenerate' to try again, or use the 'Edit' button to write your own story using the STAR framework.",
+            "task": "Think about: What was YOUR specific responsibility? What did success look like? What were the stakes?",
+            "action": "This should be the longest section (60% of your story). Detail every step you took, tools you used, people you collaborated with, and obstacles you overcame.",
+            "result": "End with 3+ quantifiable outcomes: percentage improvements, dollar savings, time reductions, and any recognition received."
         }
