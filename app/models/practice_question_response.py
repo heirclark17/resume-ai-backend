@@ -15,6 +15,7 @@ class PracticeQuestionResponse(Base):
     # Question details
     question_text = Column(Text, nullable=False)
     question_category = Column(String(100), nullable=True)  # behavioral, technical, situational, etc.
+    question_key = Column(String(200), nullable=True)  # e.g. behavioral_3, technical_7 for reliable lookup
 
     # AI-generated STAR story for this question
     star_story = Column(JSON, nullable=True)  # {situation, task, action, result}

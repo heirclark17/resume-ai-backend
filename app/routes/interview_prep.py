@@ -1997,6 +1997,7 @@ async def get_practice_responses(
                         "id": r.id,
                         "question_text": r.question_text,
                         "question_category": r.question_category,
+                        "question_key": r.question_key,
                         "star_story": r.star_story,
                         "audio_recording_url": r.audio_recording_url,
                         "video_recording_url": r.video_recording_url,
@@ -2175,6 +2176,7 @@ class SaveStarStoryForQuestionRequest(BaseModel):
     question_text: str
     question_type: str  # "behavioral" or "technical"
     star_story: dict  # {situation, task, action, result}
+    question_key: Optional[str] = None  # e.g. behavioral_3, technical_7
 
 
 @router.post("/save-question-star-story")
@@ -2208,23 +2210,40 @@ async def save_star_story_for_question(
         if not result.first():
             raise HTTPException(status_code=404, detail="Interview prep not found")
 
-        # Check if response already exists for this question
-        unique_question_key = f"{request.question_type}_{request.question_id}"
+        # Build question_key for reliable lookup
+        unique_question_key = request.question_key or f"{request.question_type}_{request.question_id}"
+
+        # Try lookup by question_key first (most reliable), fallback to question_text
+        existing_response = None
         result = await db.execute(
             select(PracticeQuestionResponse).where(
                 and_(
                     PracticeQuestionResponse.interview_prep_id == request.interview_prep_id,
-                    PracticeQuestionResponse.question_text == request.question_text,
+                    PracticeQuestionResponse.question_key == unique_question_key,
                     PracticeQuestionResponse.is_deleted == False
                 )
             )
         )
         existing_response = result.scalar_one_or_none()
 
+        if not existing_response:
+            # Fallback: lookup by question_text
+            result = await db.execute(
+                select(PracticeQuestionResponse).where(
+                    and_(
+                        PracticeQuestionResponse.interview_prep_id == request.interview_prep_id,
+                        PracticeQuestionResponse.question_text == request.question_text,
+                        PracticeQuestionResponse.is_deleted == False
+                    )
+                )
+            )
+            existing_response = result.scalar_one_or_none()
+
         if existing_response:
             # Update existing response
             existing_response.star_story = request.star_story
             existing_response.question_category = request.question_type
+            existing_response.question_key = unique_question_key
             existing_response.updated_at = datetime.utcnow()
             existing_response.times_practiced = (existing_response.times_practiced or 0) + 1
             existing_response.last_practiced_at = datetime.utcnow()
@@ -2245,6 +2264,7 @@ async def save_star_story_for_question(
                 interview_prep_id=request.interview_prep_id,
                 question_text=request.question_text,
                 question_category=request.question_type,
+                question_key=unique_question_key,
                 star_story=request.star_story,
                 times_practiced=1,
                 last_practiced_at=datetime.utcnow()
