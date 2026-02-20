@@ -59,7 +59,7 @@ COMPLETE_VIDEO_SETUP.bat
 
 Quick checklist:
 1. **Create S3 bucket**:
-   - Name: `talorme-interview-recordings`
+   - Name: `talorme-recordings`
    - Region: `us-east-1`
    - Public access: BLOCKED (all 4 boxes checked)
 
@@ -74,7 +74,7 @@ Quick checklist:
 4. **Attach custom policy** (copy from guide):
    ```json
    Actions: s3:PutObject, s3:GetObject, s3:DeleteObject
-   Resource: arn:aws:s3:::talorme-interview-recordings/*
+   Resource: arn:aws:s3:::talorme-recordings/*
    ```
 
 5. **Create access keys** → **SAVE THEM!**
@@ -82,7 +82,7 @@ Quick checklist:
 6. **Add to Railway** (Variables tab):
    - `AWS_ACCESS_KEY_ID`: your access key
    - `AWS_SECRET_ACCESS_KEY`: your secret key
-   - `AWS_S3_BUCKET`: `talorme-interview-recordings`
+   - `AWS_S3_BUCKET`: `talorme-recordings`
    - `AWS_S3_REGION`: `us-east-1`
 
 7. Wait for Railway auto-redeploy (~2-3 minutes)
@@ -104,7 +104,7 @@ Quick checklist:
    - ✅ Video plays with play/pause/rewind/fast-forward
    - ✅ Delete button works
 9. Check AWS S3 Console:
-   - Bucket: `talorme-interview-recordings`
+   - Bucket: `talorme-recordings`
    - Should see file in `recordings/{user_id}/{question_context}/`
 
 ---

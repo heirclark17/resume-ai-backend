@@ -32,7 +32,7 @@ railway run python run_video_recording_migration.py
 **Open and follow**: `AWS_S3_SETUP.md`
 
 Quick checklist:
-- [ ] Create bucket: `talorme-interview-recordings` in `us-east-1`
+- [ ] Create bucket: `talorme-recordings` in `us-east-1`
 - [ ] Add CORS policy (copy from guide)
 - [ ] Create IAM user: `talorme-s3-recordings`
 - [ ] Attach custom S3 policy (copy from guide)
@@ -40,7 +40,7 @@ Quick checklist:
 - [ ] Add 4 env vars to Railway:
   - `AWS_ACCESS_KEY_ID`
   - `AWS_SECRET_ACCESS_KEY`
-  - `AWS_S3_BUCKET=talorme-interview-recordings`
+  - `AWS_S3_BUCKET=talorme-recordings`
   - `AWS_S3_REGION=us-east-1`
 
 ---

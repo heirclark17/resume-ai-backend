@@ -5,7 +5,7 @@
 1. Go to [AWS S3 Console](https://s3.console.aws.amazon.com/s3/home)
 2. Click **"Create bucket"**
 3. Configure bucket:
-   - **Bucket name**: `talorme-interview-recordings`
+   - **Bucket name**: `talorme-recordings`
    - **AWS Region**: `us-east-1` (US East N. Virginia)
    - **Object Ownership**: ACLs disabled (recommended)
    - **Block Public Access**: Keep all 4 checkboxes **CHECKED** (we use presigned URLs, not public access)
@@ -17,7 +17,7 @@
 
 ## Step 2: Configure CORS Policy
 
-1. Select the newly created bucket `talorme-interview-recordings`
+1. Select the newly created bucket `talorme-recordings`
 2. Go to **"Permissions"** tab
 3. Scroll down to **"Cross-origin resource sharing (CORS)"**
 4. Click **"Edit"**
@@ -93,7 +93,7 @@
                 "s3:GetObject",
                 "s3:DeleteObject"
             ],
-            "Resource": "arn:aws:s3:::talorme-interview-recordings/*"
+            "Resource": "arn:aws:s3:::talorme-recordings/*"
         }
     ]
 }
@@ -134,7 +134,7 @@
 |---------------|-------|---------|
 | `AWS_ACCESS_KEY_ID` | Your access key from Step 3d | `AKIAIOSFODNN7EXAMPLE` |
 | `AWS_SECRET_ACCESS_KEY` | Your secret key from Step 3d | `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY` |
-| `AWS_S3_BUCKET` | `talorme-interview-recordings` | `talorme-interview-recordings` |
+| `AWS_S3_BUCKET` | `talorme-recordings` | `talorme-recordings` |
 | `AWS_S3_REGION` | `us-east-1` | `us-east-1` |
 
 7. Click **"Save"** or the variables will auto-save
@@ -168,7 +168,7 @@ After Railway finishes redeploying (takes ~2-3 minutes):
 ### "Permission denied" error from S3
 - Verify the IAM policy has `s3:PutObject` permission
 - Verify the resource ARN includes `/*` at the end
-- Check bucket name matches exactly: `talorme-interview-recordings`
+- Check bucket name matches exactly: `talorme-recordings`
 
 ### CORS errors in browser console
 - Verify CORS policy in S3 bucket includes your domain
