@@ -113,19 +113,24 @@ CRITICAL INSTRUCTIONS:
    - Understand what type of role this is (technical, managerial, strategic, etc.)
 
 2. **REFRAME JOB TITLES (CRITICAL - READ CAREFULLY)**
-   - Each reframed title MUST be UNIQUE and DIFFERENT from the others
+   - For EACH experience entry, generate exactly 5 DIFFERENT title options in a "title_options" array
+   - Each of the 5 options must take a different creative angle on reframing the original title
+   - Set the "header" field to your TOP recommended option (option 1)
+   - Each reframed title across ALL experiences MUST be UNIQUE and DIFFERENT from each other
    - Do NOT make every title sound like the target job title
    - Instead, keep the ESSENCE of what the user actually did at each role, but reframe it through the lens of the target job's industry/domain
    - The titles should tell a CAREER PROGRESSION STORY that naturally leads to the target role
-   - Examples when applying for "Senior Cybersecurity Program Manager":
-     * "Customer Service Manager" → "Client Operations & Risk Compliance Lead"
-     * "IT Project Coordinator" → "Technical Program Coordinator, Infrastructure Security"
-     * "Operations Analyst" → "Security Operations Analyst"
-     * "Team Lead" → "Cross-Functional Delivery Lead, Technology Programs"
-   - Notice how each title is DIFFERENT and reflects the user's ACTUAL responsibilities, just reframed to connect to the target narrative
-   - NEVER use the exact target job title for any past role
+   - Examples of 5 options for "Customer Service Manager" when applying for "Senior Cybersecurity Program Manager":
+     * Option 1: "Client Operations & Risk Compliance Lead"
+     * Option 2: "Client Engagement & Security Operations Manager"
+     * Option 3: "Customer Success & Compliance Program Lead"
+     * Option 4: "Client-Facing Operations & Risk Management Lead"
+     * Option 5: "Service Delivery & Security Awareness Manager"
+   - Notice how each option is a DIFFERENT creative angle but ALL connect to the target narrative
+   - NEVER use the exact target job title for any option
    - Keep company names and dates exactly as they are
-   - Format: "[Reframed Title] – [Original Company]"
+   - Format for header: "[Reframed Title] – [Original Company]"
+   - Format for title_options: just the title text (no company/location/dates)
 
 3. **REWRITE ALL EXPERIENCE BULLETS TO MATCH JOB DESCRIPTION**
    - **ONLY include experience relevant to this specific job**
@@ -165,7 +170,14 @@ Return ONLY a valid JSON object with this structure:
   "summary": "tailored professional summary (3-4 sentences)",
   "experience": [
     {{
-      "header": "[Reframed Title] – [Company] | [Location] | [Dates]",
+      "header": "[Best Reframed Title] – [Company] | [Location] | [Dates]",
+      "title_options": [
+        "Title Option 1 (same as the title used in header, without company/location/dates)",
+        "Title Option 2 (different creative angle)",
+        "Title Option 3 (different creative angle)",
+        "Title Option 4 (different creative angle)",
+        "Title Option 5 (different creative angle)"
+      ],
       "bullets": [
         "Bullet rewritten to match job requirements with measurable outcome",
         "Another bullet emphasizing relevant skills from job description",
