@@ -37,6 +37,7 @@ class StarStoryUpdate(BaseModel):
     result: Optional[str] = None
     key_themes: Optional[List[str]] = None
     talking_points: Optional[List[str]] = None
+    video_recording_url: Optional[str] = None
 
 
 @router.post("/")
@@ -234,6 +235,8 @@ async def update_star_story(
             story.key_themes = story_update.key_themes
         if story_update.talking_points is not None:
             story.talking_points = story_update.talking_points
+        if story_update.video_recording_url is not None:
+            story.video_recording_url = story_update.video_recording_url
 
         story.updated_at = datetime.utcnow()
 

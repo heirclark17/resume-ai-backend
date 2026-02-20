@@ -38,6 +38,9 @@ class StarStory(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
+    # Recording
+    video_recording_url = Column(Text, nullable=True)
+
     # Soft delete
     is_deleted = Column(Boolean, default=False, nullable=False)
     deleted_at = Column(DateTime, nullable=True)
@@ -61,6 +64,7 @@ class StarStory(Base):
             "key_themes": self.key_themes or [],
             "talking_points": self.talking_points or [],
             "experience_indices": self.experience_indices or [],
+            "video_recording_url": self.video_recording_url,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

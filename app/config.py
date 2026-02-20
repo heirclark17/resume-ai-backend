@@ -12,6 +12,12 @@ class Settings(BaseSettings):
     # Test Mode - explicitly read from environment
     test_mode: bool = os.getenv("TEST_MODE", "false").lower() == "true"
 
+    # AWS S3 - Recording Storage
+    aws_access_key_id: str = os.getenv("AWS_ACCESS_KEY_ID", "")
+    aws_secret_access_key: str = os.getenv("AWS_SECRET_ACCESS_KEY", "")
+    aws_s3_bucket: str = os.getenv("AWS_S3_BUCKET", "")
+    aws_s3_region: str = os.getenv("AWS_S3_REGION", "us-east-1")
+
     # File Storage
     upload_dir: str = "./uploads"
     resumes_dir: str = "./resumes"
