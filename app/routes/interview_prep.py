@@ -18,6 +18,7 @@ from app.services.interview_intelligence_service import InterviewIntelligenceSer
 from app.services.practice_questions_service import PracticeQuestionsService
 from app.services.interview_questions_generator import InterviewQuestionsGenerator
 from app.models.practice_question_response import PracticeQuestionResponse
+from app.utils.logger import logger
 from datetime import datetime
 import json
 
@@ -181,45 +182,58 @@ async def list_interview_preps(
     if not x_user_id:
         raise HTTPException(status_code=400, detail="X-User-ID header is required")
 
-    # Fetch all interview preps for this user via TailoredResume relationship
-    result = await db.execute(
-        select(InterviewPrep, TailoredResume, Job)
-        .join(TailoredResume, InterviewPrep.tailored_resume_id == TailoredResume.id)
-        .join(Job, TailoredResume.job_id == Job.id)
-        .where(
-            and_(
-                TailoredResume.session_user_id == x_user_id,
-                InterviewPrep.is_deleted == False,
-                TailoredResume.is_deleted == False
+    try:
+        # Fetch all interview preps for this user via TailoredResume relationship
+        result = await db.execute(
+            select(InterviewPrep, TailoredResume, Job)
+            .join(TailoredResume, InterviewPrep.tailored_resume_id == TailoredResume.id)
+            .join(Job, TailoredResume.job_id == Job.id)
+            .where(
+                and_(
+                    TailoredResume.session_user_id == x_user_id,
+                    InterviewPrep.is_deleted == False,
+                    TailoredResume.is_deleted == False
+                )
             )
+            .order_by(InterviewPrep.created_at.desc())
         )
-        .order_by(InterviewPrep.created_at.desc())
-    )
 
-    rows = result.all()
+        rows = result.all()
 
-    prep_list = []
-    for interview_prep, tailored_resume, job in rows:
-        # Extract key info from prep_data
-        prep_data = interview_prep.prep_data
-        company_name = prep_data.get("company_profile", {}).get("name", job.company)
-        job_title = prep_data.get("role_analysis", {}).get("job_title", job.title)
+        prep_list = []
+        for interview_prep, tailored_resume, job in rows:
+            try:
+                # Extract key info from prep_data (handle missing or malformed data)
+                prep_data = interview_prep.prep_data if interview_prep.prep_data else {}
+                company_name = prep_data.get("company_profile", {}).get("name", job.company if job.company else "Unknown Company")
+                job_title = prep_data.get("role_analysis", {}).get("job_title", job.title if job.title else "Unknown Position")
 
-        prep_list.append({
-            "id": interview_prep.id,
-            "tailored_resume_id": tailored_resume.id,
-            "company_name": company_name,
-            "job_title": job_title,
-            "job_location": job.location,
-            "created_at": interview_prep.created_at.isoformat(),
-            "updated_at": interview_prep.updated_at.isoformat() if interview_prep.updated_at else None
-        })
+                prep_list.append({
+                    "id": interview_prep.id,
+                    "tailored_resume_id": tailored_resume.id,
+                    "company_name": company_name,
+                    "job_title": job_title,
+                    "job_location": job.location if job.location else None,
+                    "created_at": interview_prep.created_at.isoformat() if interview_prep.created_at else None,
+                    "updated_at": interview_prep.updated_at.isoformat() if interview_prep.updated_at else None
+                })
+            except Exception as row_error:
+                # Log the error but continue processing other rows
+                logger.error(f"Error processing interview prep {interview_prep.id}: {str(row_error)}")
+                continue
 
-    return {
-        "success": True,
-        "count": len(prep_list),
-        "interview_preps": prep_list
-    }
+        return {
+            "success": True,
+            "count": len(prep_list),
+            "interview_preps": prep_list
+        }
+
+    except Exception as e:
+        logger.error(f"Error fetching interview preps for user {x_user_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch interview preps: {str(e)}"
+        )
 
 
 @router.get("/{tailored_resume_id}")
