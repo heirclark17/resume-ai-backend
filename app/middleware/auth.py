@@ -6,9 +6,62 @@ from app.models.user import User
 from typing import Optional
 import jwt
 import os
+import httpx
+from functools import lru_cache
 
-# Get Supabase JWT secret from environment
+# Get Supabase configuration from environment
 SUPABASE_JWT_SECRET = os.getenv('SUPABASE_JWT_SECRET')
+SUPABASE_URL = os.getenv('SUPABASE_URL', '')
+
+# Cache for Supabase public key (ES256)
+_supabase_public_key_cache = None
+
+
+async def get_supabase_public_key():
+    """
+    Fetch Supabase public key for ES256 JWT verification
+    Caches the key to avoid repeated requests
+    """
+    global _supabase_public_key_cache
+
+    if _supabase_public_key_cache:
+        return _supabase_public_key_cache
+
+    try:
+        # Supabase JWKS endpoint (well-known standard location)
+        jwks_url = f"{SUPABASE_URL}/auth/v1/jwks"
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(jwks_url, timeout=5.0)
+            response.raise_for_status()
+            jwks = response.json()
+
+        # Extract the first key (Supabase typically has one ES256 key)
+        if 'keys' in jwks and len(jwks['keys']) > 0:
+            key_data = jwks['keys'][0]
+
+            # Convert JWKS to PEM format for PyJWT
+            from jwt.algorithms import RSAAlgorithm, ECAlgorithm
+
+            # Check key type (RS256 or ES256)
+            if key_data.get('kty') == 'RSA':
+                public_key = RSAAlgorithm.from_jwk(key_data)
+            elif key_data.get('kty') == 'EC':
+                public_key = ECAlgorithm.from_jwk(key_data)
+            else:
+                raise ValueError(f"Unsupported key type: {key_data.get('kty')}")
+
+            _supabase_public_key_cache = public_key
+            print(f"[Auth] Cached Supabase public key (type: {key_data.get('kty')})")
+            return public_key
+        else:
+            raise ValueError("No keys found in JWKS")
+
+    except Exception as e:
+        print(f"[Auth] Failed to fetch Supabase public key: {e}")
+        # Fall back to JWT secret if public key fetch fails
+        return SUPABASE_JWT_SECRET
+
 
 async def get_current_user(
     x_api_key: Optional[str] = Header(None),
@@ -140,18 +193,35 @@ async def get_current_user_from_jwt(
 
     token = parts[1]
 
-    if not SUPABASE_JWT_SECRET:
-        raise HTTPException(
-            status_code=500,
-            detail="Server misconfiguration: JWT secret not set"
-        )
-
     try:
-        # Decode and validate JWT
+        # First, decode header to check algorithm (don't verify yet)
+        unverified_header = jwt.get_unverified_header(token)
+        token_algorithm = unverified_header.get('alg', 'HS256')
+
+        print(f"[Auth] JWT algorithm: {token_algorithm}")
+
+        # Get appropriate key for verification
+        if token_algorithm == 'ES256':
+            # ES256 tokens - use public key from JWKS
+            verification_key = await get_supabase_public_key()
+            algorithms = ['ES256', 'RS256']  # Support both EC and RSA
+            print("[Auth] Using public key verification (ES256/RS256)")
+        else:
+            # HS256 tokens - use shared secret
+            if not SUPABASE_JWT_SECRET:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Server misconfiguration: JWT secret not set"
+                )
+            verification_key = SUPABASE_JWT_SECRET
+            algorithms = ['HS256']
+            print("[Auth] Using shared secret verification (HS256)")
+
+        # Decode and validate JWT with appropriate key and algorithm
         payload = jwt.decode(
             token,
-            SUPABASE_JWT_SECRET,
-            algorithms=['HS256'],
+            verification_key,
+            algorithms=algorithms,
             options={"verify_exp": True}  # Verify token hasn't expired
         )
 
