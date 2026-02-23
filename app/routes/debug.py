@@ -27,11 +27,14 @@ async def debug_env():
     """Debug endpoint to check environment configuration"""
     supabase_url = os.getenv('SUPABASE_URL', '')
     supabase_jwt_secret = os.getenv('SUPABASE_JWT_SECRET', '')
+    supabase_anon_key = os.getenv('SUPABASE_ANON_KEY', '')
 
     return {
         "supabase_url_configured": bool(supabase_url),
         "supabase_url_length": len(supabase_url),
         "supabase_url_starts_with_https": supabase_url.startswith('https://'),
         "supabase_jwt_secret_configured": bool(supabase_jwt_secret),
+        "supabase_anon_key_configured": bool(supabase_anon_key),
+        "supabase_anon_key_length": len(supabase_anon_key),
         "jwks_url": f"{supabase_url}/auth/v1/jwks" if supabase_url else "NOT_CONFIGURED",
     }
