@@ -3,6 +3,8 @@
 - **Auto-push**: Always push to remote after committing
 
 # Recent Completed Work
+- **Meal Plan Calendar Date Fix (Feb 23, 2026)** - Fixed calendar to always show current week starting from Sunday. Added updateDatesToCurrentWeek() helper that recalculates dates when loading from cache. Added automatic midnight reset useEffect that triggers at 12:00 AM to update dates when new day starts. Calendar now correctly shows Feb 22 (current Sunday) instead of Feb 14 (old week). Commits: ba80425
+- **Meal Plan Macro Cards (Feb 23, 2026)** - Added glass cards to visually segment calories and macros in day selector. Calories in rounded card above, macros in 3-column grid (P/C/F) below. Each macro in individual glass card with label and value. Dynamic backgrounds based on selection and theme. Improved data hierarchy and readability. Commit: 6e3ea84
 - **Programs Exercise Tap Behavior (Feb 23, 2026)** - Changed exercise tap to show instructions/form instead of alternatives. Users now see GIF demonstrations and step-by-step instructions when tapping exercises. Better UX for learning technique. Commit: 1553009
 - **Exercise Library Simplification (Feb 23, 2026)** - Removed all animations (FadeIn, FadeInDown, staggered delays) from exercise library page. Removed large body part icon from exercise cards. Kept small reference icons in badges. Instant rendering with cleaner UI. Commit: e7e1fc1
 - **Equipment Options Enhancement (Feb 23, 2026)** - Modified getAvailableEquipmentForDay() to always include bodyweight, machine, kettlebell, dumbbells, barbell options. Users can now swap to these equipment types via AI even if not in predefined alternatives. Commit: bb74fc5
