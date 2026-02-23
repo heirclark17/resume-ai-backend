@@ -3,6 +3,7 @@
 - **Auto-push**: Always push to remote after committing
 
 # Recent Completed Work
+- **Equipment Options Enhancement (Feb 23, 2026)** - Modified getAvailableEquipmentForDay() to always include bodyweight, machine, kettlebell, dumbbells, barbell options. Users can now swap to these equipment types via AI even if not in predefined alternatives. Commit: bb74fc5
 - **Nutrition Preferences Icon Size (Feb 23, 2026)** - Increased all icon sizes in nutrition preferences card from 24→32 (16→24 for AlertTriangle). Improved visibility and consistency. Commit: 4e7d28b
 - **Profile Picture Feature (Feb 23, 2026)** - Replaced User icon with LiquidGlassProfileImage component in PlanPreviewStep.tsx. Includes upload capability via expo-image-picker, conditional edit button (only shows when no photo), no remove button. Added user's first name to subtitle. Added showRemoveButton prop to component. Commits: a28739d, 9250b81, 67369d0
 - **Icon Dark Mode Fix (Feb 23, 2026)** - Fixed 15 icons in PlanPreviewStep.tsx with hardcoded #000000 colors → colors.text for proper light/dark mode adaptation
