@@ -12,6 +12,7 @@ from functools import lru_cache
 # Get Supabase configuration from environment
 SUPABASE_JWT_SECRET = os.getenv('SUPABASE_JWT_SECRET')
 SUPABASE_URL = os.getenv('SUPABASE_URL', '')
+SUPABASE_ANON_KEY = os.getenv('SUPABASE_ANON_KEY', '')
 
 # Cache for Supabase public key (ES256)
 _supabase_public_key_cache = None
@@ -29,14 +30,24 @@ async def get_supabase_public_key():
         return _supabase_public_key_cache
 
     print(f"[Auth] SUPABASE_URL configured: {bool(SUPABASE_URL)} (length: {len(SUPABASE_URL)})")
+    print(f"[Auth] SUPABASE_ANON_KEY configured: {bool(SUPABASE_ANON_KEY)}")
+
+    if not SUPABASE_ANON_KEY:
+        print("[Auth] WARNING: SUPABASE_ANON_KEY not set, JWKS fetch will fail")
+        return SUPABASE_JWT_SECRET
 
     try:
-        # Supabase JWKS endpoint (well-known standard location)
+        # Supabase JWKS endpoint (requires API key)
         jwks_url = f"{SUPABASE_URL}/auth/v1/jwks"
         print(f"[Auth] Fetching JWKS from: {jwks_url}")
 
+        headers = {
+            "apikey": SUPABASE_ANON_KEY,
+            "Authorization": f"Bearer {SUPABASE_ANON_KEY}"
+        }
+
         async with httpx.AsyncClient() as client:
-            response = await client.get(jwks_url, timeout=5.0)
+            response = await client.get(jwks_url, headers=headers, timeout=5.0)
             response.raise_for_status()
             jwks = response.json()
             print(f"[Auth] JWKS response received, keys count: {len(jwks.get('keys', []))}")
