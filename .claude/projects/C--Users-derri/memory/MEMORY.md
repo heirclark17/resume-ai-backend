@@ -2,6 +2,9 @@
 - **Auto-commit**: Always commit and deploy changes without asking for confirmation
 - **Auto-push**: Always push to remote after committing
 
+# Recent Completed Work
+- [Snacks Per Day Feature (Feb 23, 2026)](snacks-per-day-feature.md) - Full integration into goal wizard and AI meal generation
+
 # Heirclark Health App - Key Learnings
 
 ## Project Location
@@ -145,10 +148,36 @@ try {
   - Added `regenerateSingleDay(date)` action to DayPlannerContext
   - Preserves other days in weekly plan, only updates selected day
   - No meals during fasting hours enforced by both AI and algorithmic scheduling
+- **Resync Bug Fix (Feb 19, 2026)**:
+  - **Issue**: "No available slot for [meal]" error when resyncing workouts/meals
+  - **Root cause**: resyncWorkouts passed existing meals as mealBlocks, causing scheduler to try re-anchoring them
+  - **Fix**: Treat existing meals/workouts as immovable anchors (add to calendarBlocks) during resync
+  - **Implementation**: Set mealBlocks=[] when resyncing workouts, workout=null when resyncing meals
+  - **Result**: Existing blocks keep their times, preventing scheduling conflicts
+- **Scheduling Conflict Fixes (Feb 19, 2026)** - 6 bugs fixed by debug agents:
+  - Bug 1: Redundant overlap logic in isSlotAvailable - cleaned up duplicate checks
+  - Bug 2: **Minimum-gap bypass** (PRIMARY) - findNearestSlot could scan backward past gap enforcement
+  - Bug 3: Safety net in `resyncMeals` inserted recovered meals without overlap checking
+  - Bug 4: AI service meal recovery created duplicates without conflict checking
+  - Bug 5: **Safety net conflict-aware recovery** - Added `isRecoverySlotFree()` helper that scans for conflict-free slots, skips meal if no free slot exists (prevents forced overlaps)
+  - Bug 6: **Conflicting AI prompt instructions** - "Scheduling Strategy" section contradicted "MEAL TIME WINDOWS" section
+  - **Result**: All conflicts resolved, meals/workouts no longer overlap, safety net never creates conflicts
+- **AI Meal Time Windows Fix (Feb 19, 2026)**:
+  - **Issue**: AI not respecting meal time ranges (breakfast at 2 PM, dinner at 11 AM, etc.)
+  - **Root cause #1**: AI prompt used dynamic ranges (wake→2PM, 2PM→5PM, 5PM→sleep) instead of fixed MEAL_CONFIGS
+  - **Root cause #2** (CRITICAL): AI prompt had CONFLICTING instructions - "MEAL TIME WINDOWS" section had correct ranges but "Scheduling Strategy" section had wrong ranges. LLMs follow later instructions when conflicts exist.
+  - **Fix**: Updated both sections to match schedulingEngine_v2.ts ranges
+    - Breakfast: 5:00 AM - 10:59 AM (target 8:00 AM)
+    - Lunch: 11:00 AM - 2:00 PM (target 12:00 PM)
+    - Dinner: 5:00 PM - 10:00 PM (target 6:30 PM)
+  - Updated system message: "DO NOT schedule breakfast after 11 AM, lunch outside 11 AM-2 PM, or dinner outside 5 PM-10 PM"
+  - Fixed Scheduling Strategy section to use correct windows with fasting constraints
+  - **Result**: AI now schedules meals within proper time ranges, no more conflicting instructions
 - **Key Files**:
   - `services/aiSchedulingService.ts` - AI scheduling with GPT-4.1-mini
   - `services/schedulingEngine.ts` - Algorithmic fallback with buffer removal and eating window enforcement
-  - `contexts/DayPlannerContext.tsx` - AI integration, weekly generation, single-day regeneration
+  - `services/schedulingEngine_v2.ts` - Priority-based scheduling with flex windows
+  - `contexts/DayPlannerContext.tsx` - AI integration, weekly generation, single-day regeneration, resync logic
   - `components/planner/timeline/` - Timeline display components with wake time positioning
   - `app/(tabs)/planner.tsx` - Refresh button calls regenerateSingleDay
 
