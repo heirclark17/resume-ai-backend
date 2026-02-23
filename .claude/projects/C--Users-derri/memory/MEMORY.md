@@ -3,6 +3,7 @@
 - **Auto-push**: Always push to remote after committing
 
 # Recent Completed Work
+- **Programs Exercise Tap Behavior (Feb 23, 2026)** - Changed exercise tap to show instructions/form instead of alternatives. Users now see GIF demonstrations and step-by-step instructions when tapping exercises. Better UX for learning technique. Commit: 1553009
 - **Exercise Library Simplification (Feb 23, 2026)** - Removed all animations (FadeIn, FadeInDown, staggered delays) from exercise library page. Removed large body part icon from exercise cards. Kept small reference icons in badges. Instant rendering with cleaner UI. Commit: e7e1fc1
 - **Equipment Options Enhancement (Feb 23, 2026)** - Modified getAvailableEquipmentForDay() to always include bodyweight, machine, kettlebell, dumbbells, barbell options. Users can now swap to these equipment types via AI even if not in predefined alternatives. Commit: bb74fc5
 - **Nutrition Preferences Icon Size (Feb 23, 2026)** - Increased all icon sizes in nutrition preferences card from 24→32 (16→24 for AlertTriangle). Improved visibility and consistency. Commit: 4e7d28b
