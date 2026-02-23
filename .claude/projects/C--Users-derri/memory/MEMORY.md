@@ -3,6 +3,7 @@
 - **Auto-push**: Always push to remote after committing
 
 # Recent Completed Work
+- **Exercise Library Simplification (Feb 23, 2026)** - Removed all animations (FadeIn, FadeInDown, staggered delays) from exercise library page. Removed large body part icon from exercise cards. Kept small reference icons in badges. Instant rendering with cleaner UI. Commit: e7e1fc1
 - **Equipment Options Enhancement (Feb 23, 2026)** - Modified getAvailableEquipmentForDay() to always include bodyweight, machine, kettlebell, dumbbells, barbell options. Users can now swap to these equipment types via AI even if not in predefined alternatives. Commit: bb74fc5
 - **Nutrition Preferences Icon Size (Feb 23, 2026)** - Increased all icon sizes in nutrition preferences card from 24→32 (16→24 for AlertTriangle). Improved visibility and consistency. Commit: 4e7d28b
 - **Profile Picture Feature (Feb 23, 2026)** - Replaced User icon with LiquidGlassProfileImage component in PlanPreviewStep.tsx and dashboard index.tsx. Conditional edit button (only shows when no photo), no remove button across app. Added user's first name to subtitle. Added showRemoveButton prop to component. Commits: a28739d, 9250b81, 67369d0, 053c5aa
