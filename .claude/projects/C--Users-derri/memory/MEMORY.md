@@ -3,7 +3,10 @@
 - **Auto-push**: Always push to remote after committing
 
 # Recent Completed Work
+- **Profile Picture Feature (Feb 23, 2026)** - Replaced User icon with LiquidGlassProfileImage component in PlanPreviewStep.tsx. Includes upload capability via expo-image-picker, edit/remove functionality, liquid glass aesthetic. Integrates with SettingsContext.profileImageUri. Commits: a28739d, 9250b81
+- **Icon Dark Mode Fix (Feb 23, 2026)** - Fixed 15 icons in PlanPreviewStep.tsx with hardcoded #000000 colors → colors.text for proper light/dark mode adaptation
 - [Snacks Per Day Feature (Feb 23, 2026)](snacks-per-day-feature.md) - Full integration into goal wizard and AI meal generation
+- **Metabolic Stats Grid (Feb 23, 2026)** - Restructured to 2x2 grid matching nutrition preferences styling (48% width, 16px padding, 24px icons). Fixed JSX syntax error in 4th card closing tag. Commit: 43ec220
 
 # Heirclark Health App - Key Learnings
 
