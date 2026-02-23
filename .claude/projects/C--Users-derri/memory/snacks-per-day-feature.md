@@ -76,10 +76,14 @@ Added full integration of "snacks per day" preference to the goal wizard, allowi
 3. `contexts/MealPlanContext.tsx` - Context integration
 4. `backend/server-complete.js` - AI prompt update
 
-### Git Commit
-- Commit hash: `4460f3f`
-- Message: "Add snacks per day feature to goal wizard and AI meal generation"
-- Pushed to: `master` branch
+### Git Commits
+1. **Initial Feature** - Commit hash: `4460f3f`
+   - Message: "Add snacks per day feature to goal wizard and AI meal generation"
+
+2. **Icon Changes** - Commit hash: `460fc89`
+   - Message: "Fix icon import: Replace invalid Bread icon with Wheat"
+   - Fixed: Replaced non-existent `Bread` icon with `Wheat` for starches
+   - Icons: Grape (snacks), Sprout (vegetables), Wheat (starches), ChefHat (cooking skill)
 
 ### Testing Notes
 - Selection UI: Verify 0-4 chips selectable with haptic feedback
