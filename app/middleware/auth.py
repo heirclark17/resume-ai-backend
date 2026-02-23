@@ -25,16 +25,21 @@ async def get_supabase_public_key():
     global _supabase_public_key_cache
 
     if _supabase_public_key_cache:
+        print("[Auth] Using cached Supabase public key")
         return _supabase_public_key_cache
+
+    print(f"[Auth] SUPABASE_URL configured: {bool(SUPABASE_URL)} (length: {len(SUPABASE_URL)})")
 
     try:
         # Supabase JWKS endpoint (well-known standard location)
         jwks_url = f"{SUPABASE_URL}/auth/v1/jwks"
+        print(f"[Auth] Fetching JWKS from: {jwks_url}")
 
         async with httpx.AsyncClient() as client:
             response = await client.get(jwks_url, timeout=5.0)
             response.raise_for_status()
             jwks = response.json()
+            print(f"[Auth] JWKS response received, keys count: {len(jwks.get('keys', []))}")
 
         # Extract the first key (Supabase typically has one ES256 key)
         if 'keys' in jwks and len(jwks['keys']) > 0:
@@ -298,12 +303,20 @@ async def get_current_user_unified(
 
     Priority order: JWT > API Key > Session ID
     """
+    print(f"[Auth] Unified auth called with: auth={bool(authorization)}, api_key={bool(x_api_key)}, user_id={bool(x_user_id)}")
+
     # Try Supabase JWT authentication first
     if authorization:
         try:
+            print(f"[Auth] Attempting JWT auth with token: {authorization[:30]}...")
             user = await get_current_user_from_jwt(authorization, db)
+            print(f"[Auth] JWT auth succeeded for user: {user.email}")
             return (user, f"supabase_{user.supabase_id}")
-        except HTTPException:
+        except HTTPException as e:
+            print(f"[Auth] JWT auth failed: {e.detail}")
+            pass  # Fall through to next method
+        except Exception as e:
+            print(f"[Auth] JWT auth error: {type(e).__name__}: {str(e)}")
             pass  # Fall through to next method
 
     # Try API key authentication
