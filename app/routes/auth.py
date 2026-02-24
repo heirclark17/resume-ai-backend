@@ -15,6 +15,11 @@ from app.models.resume import BaseResume, TailoredResume
 from app.models.star_story import StarStory
 from app.models.saved_comparison import SavedComparison, TailoredResumeEdit
 from app.models.career_plan import CareerPlan
+from app.models.job import Job
+from app.models.cover_letter import CoverLetter
+from app.models.application import Application
+from app.models.resume_version import ResumeVersion
+from app.models.follow_up_reminder import FollowUpReminder
 from app.middleware.auth import get_current_user
 from app.utils.two_factor_auth import get_two_factor_auth
 from app.utils.recaptcha import get_recaptcha_verifier
@@ -423,15 +428,15 @@ async def migrate_session(
         # Validate ID formats
         if not request.old_user_id.startswith('user_'):
             raise HTTPException(status_code=400, detail="old_user_id must start with 'user_'")
-        if not request.new_user_id.startswith('clerk_'):
-            raise HTTPException(status_code=400, detail="new_user_id must start with 'clerk_'")
+        if not (request.new_user_id.startswith('clerk_') or request.new_user_id.startswith('supa_')):
+            raise HTTPException(status_code=400, detail="new_user_id must start with 'clerk_' or 'supa_'")
 
         logger.info(f"Migrating session: {request.old_user_id} -> {request.new_user_id}")
 
         total = 0
         details = {}
 
-        # Migrate each table
+        # Migrate each table that has session_user_id
         tables = [
             ("base_resumes", BaseResume),
             ("tailored_resumes", TailoredResume),
@@ -439,6 +444,11 @@ async def migrate_session(
             ("saved_comparisons", SavedComparison),
             ("tailored_resume_edits", TailoredResumeEdit),
             ("career_plans", CareerPlan),
+            ("jobs", Job),
+            ("cover_letters", CoverLetter),
+            ("applications", Application),
+            ("resume_versions", ResumeVersion),
+            ("follow_up_reminders", FollowUpReminder),
         ]
 
         for table_name, model in tables:
