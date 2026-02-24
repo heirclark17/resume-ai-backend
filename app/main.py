@@ -1,5 +1,6 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -39,6 +40,33 @@ app.add_middleware(
     expose_headers=["*"],
     max_age=3600,
 )
+
+def _cors_headers(request: Request) -> dict:
+    """Build CORS headers for error responses so browsers can read them."""
+    origin = request.headers.get("origin", "")
+    if origin in allowed_origins:
+        return {
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+        }
+    return {}
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+        headers=_cors_headers(request),
+    )
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled exception: {type(exc).__name__}: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+        headers=_cors_headers(request),
+    )
 
 # Startup: Initialize database
 @app.on_event("startup")

@@ -9,7 +9,9 @@ settings = get_settings()
 engine = create_async_engine(
     settings.database_url,
     echo=settings.debug,
-    future=True
+    future=True,
+    pool_pre_ping=True,  # Detect and recycle stale/broken connections
+    pool_recycle=300,  # Recycle connections every 5 minutes
 )
 
 # Create session factory
@@ -25,7 +27,11 @@ Base = declarative_base()
 # Dependency for FastAPI routes
 async def get_db() -> AsyncSession:
     async with AsyncSessionLocal() as session:
-        yield session
+        try:
+            yield session
+        except Exception:
+            await session.rollback()
+            raise
 
 # Initialize database (create tables)
 async def init_db():
