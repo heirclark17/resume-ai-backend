@@ -547,23 +547,25 @@ async def list_tailored_resumes(
     auth_result: tuple = Depends(get_current_user_unified),
     db: AsyncSession = Depends(get_db)
 ):
-    """List tailored resumes (requires authentication, excludes deleted resumes)"""
+    """List tailored resumes with job details (requires authentication, excludes deleted resumes)"""
     # Extract user and user_id from unified auth
     user, user_id = auth_result
 
+    # Join with Job table to get job title and company
     result = await db.execute(
-        select(TailoredResume)
+        select(TailoredResume, Job)
+        .join(Job, TailoredResume.job_id == Job.id, isouter=True)
         .where(
             TailoredResume.is_deleted == False,
             ownership_filter(TailoredResume.session_user_id, user_id)  # Filter by session user ID
         )
         .order_by(TailoredResume.created_at.desc())
     )
-    tailored_resumes = result.scalars().all()
+    rows = result.all()
 
     # Auto-migrate: update any old user_ records to current supa_ ID
     if user_id.startswith('supa_'):
-        for tr in tailored_resumes:
+        for tr, job in rows:
             if tr.session_user_id != user_id and tr.session_user_id.startswith('user_'):
                 tr.session_user_id = user_id
                 db.add(tr)
@@ -575,12 +577,14 @@ async def list_tailored_resumes(
                 "id": tr.id,
                 "base_resume_id": tr.base_resume_id,
                 "job_id": tr.job_id,
+                "job_title": job.title if job else "Unknown Position",
+                "company_name": job.company if job else None,
                 "summary": tr.tailored_summary[:200] + "..." if tr.tailored_summary and len(tr.tailored_summary) > 200 else tr.tailored_summary,
                 "docx_path": tr.docx_path,
                 "quality_score": tr.quality_score,
                 "created_at": tr.created_at.isoformat()
             }
-            for tr in tailored_resumes
+            for tr, job in rows
         ]
     }
 
