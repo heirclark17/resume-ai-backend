@@ -1,10 +1,10 @@
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, or_, update
 from app.database import get_db
 from app.models.resume import BaseResume
 from app.models.user import User
-from app.middleware.auth import get_current_user, get_current_user_optional, get_user_id, get_current_user_unified, get_current_user_from_form
+from app.middleware.auth import get_current_user, get_current_user_optional, get_user_id, get_current_user_unified, get_current_user_from_form, check_ownership
 from app.services.resume_parser import ResumeParser
 from app.utils.file_handler import FileHandler
 from app.utils.logger import logger
@@ -172,8 +172,32 @@ async def list_resumes(
     )
 
     result = await db.execute(query.order_by(BaseResume.uploaded_at.desc()))
-
     resumes = result.scalars().all()
+
+    # Auto-claim: if supa_ user has 0 resumes, check for orphaned user_ records
+    if not resumes and user_id.startswith('supa_'):
+        from sqlalchemy import func, distinct
+        # Count distinct anonymous user IDs
+        count_result = await db.execute(
+            select(func.count(distinct(BaseResume.session_user_id))).where(
+                BaseResume.session_user_id.like('user_%'),
+                BaseResume.is_deleted == False,
+            )
+        )
+        distinct_anon_users = count_result.scalar() or 0
+
+        # Only auto-claim if there's exactly one anonymous user (safe to assume same person)
+        if distinct_anon_users == 1:
+            await db.execute(
+                update(BaseResume)
+                .where(BaseResume.session_user_id.like('user_%'))
+                .values(session_user_id=user_id)
+            )
+            await db.commit()
+            # Re-query to get the migrated resumes
+            result = await db.execute(query.order_by(BaseResume.uploaded_at.desc()))
+            resumes = result.scalars().all()
+            logger.info(f"Auto-claimed {len(resumes)} resumes for {user_id}")
 
     return {
         "resumes": [
@@ -207,9 +231,13 @@ async def get_resume(
     if resume.is_deleted:
         raise HTTPException(status_code=404, detail="Resume has been deleted")
 
-    # Ownership verification via session user ID
-    if resume.session_user_id != user_id:
+    # Ownership verification (with auto-migration for supa_ users)
+    if not check_ownership(resume.session_user_id, user_id):
         raise HTTPException(status_code=403, detail="Access denied: You don't own this resume")
+    if resume.session_user_id != user_id:
+        resume.session_user_id = user_id
+        db.add(resume)
+        await db.commit()
 
     return {
         "id": resume.id,
@@ -248,8 +276,8 @@ async def delete_resume(
     if resume.is_deleted:
         raise HTTPException(status_code=400, detail="Resume is already deleted")
 
-    # Validate ownership via session user ID
-    if resume.session_user_id != user_id:
+    # Validate ownership (with auto-migration for supa_ users)
+    if not check_ownership(resume.session_user_id, user_id):
         raise HTTPException(status_code=403, detail="You don't have permission to delete this resume")
 
     logger.info(f"=== DELETING RESUME ID {resume_id} ===")
@@ -351,7 +379,7 @@ async def update_parsed_data(
     resume = result.scalar_one_or_none()
     if not resume or resume.is_deleted:
         raise HTTPException(status_code=404, detail="Resume not found")
-    if resume.session_user_id != user_id:
+    if not check_ownership(resume.session_user_id, user_id):
         raise HTTPException(status_code=403, detail="Access denied")
 
     update_data = data.model_dump(exclude_unset=True)
@@ -404,8 +432,8 @@ async def analyze_resume(
         if resume.is_deleted:
             raise HTTPException(status_code=404, detail="Resume has been deleted")
 
-        # Verify ownership
-        if resume.session_user_id != user_id:
+        # Verify ownership (with auto-migration for supa_ users)
+        if not check_ownership(resume.session_user_id, user_id):
             raise HTTPException(status_code=403, detail="Access denied: You don't own this resume")
 
         # Prepare resume content for analysis

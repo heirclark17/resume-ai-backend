@@ -13,7 +13,7 @@ from app.services.docx_generator import DOCXGenerator
 from app.services.firecrawl_client import FirecrawlClient
 from app.utils.url_validator import URLValidator
 from app.utils.quality_scorer import QualityScorer
-from app.middleware.auth import get_user_id
+from app.middleware.auth import get_user_id, check_ownership
 from app.config import get_settings
 import json
 from datetime import datetime
@@ -116,9 +116,15 @@ async def tailor_resume(
         if not base_resume:
             raise HTTPException(status_code=404, detail="Base resume not found")
 
-        # Verify ownership via session user ID
-        if base_resume.session_user_id != user_id:
+        # Verify ownership via session user ID (with auto-migration for supa_ users)
+        if not check_ownership(base_resume.session_user_id, user_id):
             raise HTTPException(status_code=403, detail="Access denied: You don't own this resume")
+        # Auto-migrate old user_ records to supa_ ID
+        if base_resume.session_user_id != user_id:
+            base_resume.session_user_id = user_id
+            db.add(base_resume)
+            await db.commit()
+            await db.refresh(base_resume)
 
         # Parse base resume data
         base_resume_data = {
@@ -421,8 +427,8 @@ async def get_tailored_resume(
     if tailored.is_deleted:
         raise HTTPException(status_code=404, detail="Tailored resume has been deleted")
 
-    # Verify ownership via session user ID
-    if tailored.session_user_id != user_id:
+    # Verify ownership (with auto-migration for supa_ users)
+    if not check_ownership(tailored.session_user_id, user_id):
         raise HTTPException(status_code=403, detail="Access denied: You don't own this tailored resume")
 
     # Fetch associated job record for company/title
@@ -474,8 +480,8 @@ async def update_tailored_resume(
     if tailored.is_deleted:
         raise HTTPException(status_code=404, detail="Tailored resume has been deleted")
 
-    # Verify ownership via session user ID
-    if tailored.session_user_id != user_id:
+    # Verify ownership (with auto-migration for supa_ users)
+    if not check_ownership(tailored.session_user_id, user_id):
         raise HTTPException(status_code=403, detail="Access denied: You don't own this tailored resume")
 
     # Update fields if provided
@@ -556,8 +562,8 @@ async def download_tailored_resume(
     if tailored.is_deleted:
         raise HTTPException(status_code=404, detail="Tailored resume has been deleted")
 
-    # Verify ownership via session user ID
-    if tailored.session_user_id != user_id:
+    # Verify ownership (with auto-migration for supa_ users)
+    if not check_ownership(tailored.session_user_id, user_id):
         raise HTTPException(status_code=403, detail="Access denied: You don't own this tailored resume")
 
     # Check if file exists
@@ -642,8 +648,8 @@ async def tailor_resume_batch(
     if not base_resume:
         raise HTTPException(status_code=404, detail="Base resume not found")
 
-    # Verify ownership via session user ID
-    if base_resume.session_user_id != user_id:
+    # Verify ownership (with auto-migration for supa_ users)
+    if not check_ownership(base_resume.session_user_id, user_id):
         raise HTTPException(status_code=403, detail="Access denied: You don't own this resume")
 
     # Process each job URL

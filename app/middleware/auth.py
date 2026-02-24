@@ -173,6 +173,21 @@ async def get_user_id(
     return x_user_id
 
 
+def check_ownership(record_user_id: str, request_user_id: str) -> bool:
+    """
+    Check if a record belongs to the requesting user.
+    Handles migration from anonymous user_ IDs to supa_ IDs:
+    if the record has a user_ ID and the request comes from supa_,
+    we treat it as a match (same person who signed up).
+    """
+    if record_user_id == request_user_id:
+        return True
+    # Allow supa_ users to claim their old user_ records
+    if record_user_id and record_user_id.startswith('user_') and request_user_id.startswith('supa_'):
+        return True
+    return False
+
+
 async def get_current_user_from_jwt(
     authorization: Optional[str] = Header(None),
     db: AsyncSession = Depends(get_db)

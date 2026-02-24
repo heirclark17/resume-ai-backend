@@ -420,7 +420,7 @@ async def migrate_session(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Migrate data from anonymous localStorage user ID to Clerk user ID.
+    Migrate data from anonymous localStorage user ID to Supabase user ID.
     Updates session_user_id on all tables that use it.
     Idempotent — returns 0 if no records to migrate.
     """
@@ -428,8 +428,8 @@ async def migrate_session(
         # Validate ID formats
         if not request.old_user_id.startswith('user_'):
             raise HTTPException(status_code=400, detail="old_user_id must start with 'user_'")
-        if not (request.new_user_id.startswith('clerk_') or request.new_user_id.startswith('supa_')):
-            raise HTTPException(status_code=400, detail="new_user_id must start with 'clerk_' or 'supa_'")
+        if not (request.new_user_id.startswith('supa_') or request.new_user_id.startswith('clerk_')):
+            raise HTTPException(status_code=400, detail="new_user_id must start with 'supa_'")
 
         logger.info(f"Migrating session: {request.old_user_id} -> {request.new_user_id}")
 
