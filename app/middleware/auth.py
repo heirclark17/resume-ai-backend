@@ -65,8 +65,10 @@ async def get_supabase_public_key():
 
     except Exception as e:
         print(f"[Auth] Failed to fetch Supabase public key: {e}")
-        # Fall back to JWT secret if public key fetch fails
-        return SUPABASE_JWT_SECRET
+        import traceback
+        traceback.print_exc()
+        # Cannot fall back for ES256 tokens - they require public key
+        raise Exception(f"Cannot verify ES256 token: JWKS fetch failed: {e}")
 
 
 async def get_current_user(
@@ -280,10 +282,12 @@ async def get_current_user_from_jwt(
             headers={"WWW-Authenticate": "Bearer"}
         )
     except Exception as e:
-        print(f"[Auth] JWT validation error: {e}")
+        print(f"[Auth] JWT validation error: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=401,
-            detail="Authentication failed",
+            detail=f"Authentication failed: {type(e).__name__}",
             headers={"WWW-Authenticate": "Bearer"}
         )
 
