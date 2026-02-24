@@ -118,4 +118,20 @@ async def run_migrations():
         except Exception as e:
             pass
 
+        # Add missing columns to users table
+        users_columns = {
+            'supabase_id': 'VARCHAR UNIQUE',
+            'username': 'VARCHAR UNIQUE',
+            'totp_secret': 'VARCHAR',
+            'twofa_enabled': 'BOOLEAN DEFAULT FALSE',
+            'twofa_backup_codes': 'VARCHAR',
+        }
+        for col, col_type in users_columns.items():
+            try:
+                if is_postgres:
+                    await conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col} {col_type}"))
+                print(f"  Migration: ensured column {col} exists on users")
+            except Exception as e:
+                pass
+
     print("Migrations completed")
