@@ -39,7 +39,7 @@ async def init_db():
     # Import models to register them with Base
     from app.models import resume, job, company, user, interview_prep, star_story, analysis_cache
     from app.models import application, cover_letter, resume_version, follow_up_reminder, career_plan, saved_comparison
-    from app.models import batch_job_url, template_preview
+    from app.models import batch_job_url, template_preview, salary_cache
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -147,5 +147,57 @@ async def run_migrations():
                     print(f"  Migration: users.{nullable_col} now allows NULL")
             except Exception as e:
                 pass
+
+        # Ensure salary_cache table and unique index exist for existing deployments
+        # (create_all above handles brand-new deployments; this handles upgrades)
+        try:
+            if is_postgres:
+                await conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS salary_cache (
+                        id SERIAL PRIMARY KEY,
+                        company VARCHAR(255) NOT NULL,
+                        job_title VARCHAR(255) NOT NULL,
+                        location VARCHAR(255),
+                        median_salary VARCHAR(100),
+                        salary_range VARCHAR(200),
+                        market_insights TEXT,
+                        sources TEXT,
+                        created_at TIMESTAMP DEFAULT NOW() NOT NULL,
+                        updated_at TIMESTAMP DEFAULT NOW() NOT NULL
+                    )
+                """))
+                await conn.execute(text("""
+                    CREATE UNIQUE INDEX IF NOT EXISTS uq_salary_cache_key
+                    ON salary_cache (company, job_title, COALESCE(location, ''))
+                """))
+                await conn.execute(text("""
+                    CREATE INDEX IF NOT EXISTS ix_salary_cache_lookup
+                    ON salary_cache (company, job_title, location)
+                """))
+                print("  Migration: salary_cache table and indexes ensured")
+            else:
+                # SQLite: check if table exists first
+                result = await conn.execute(text(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='salary_cache'"
+                ))
+                if not result.fetchone():
+                    await conn.execute(text("""
+                        CREATE TABLE salary_cache (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            company VARCHAR(255) NOT NULL,
+                            job_title VARCHAR(255) NOT NULL,
+                            location VARCHAR(255),
+                            median_salary VARCHAR(100),
+                            salary_range VARCHAR(200),
+                            market_insights TEXT,
+                            sources TEXT,
+                            created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                            UNIQUE (company, job_title, location)
+                        )
+                    """))
+                    print("  Migration: salary_cache table created (SQLite)")
+        except Exception as e:
+            print(f"  Migration warning (salary_cache): {e}")
 
     print("Migrations completed")

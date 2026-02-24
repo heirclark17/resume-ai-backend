@@ -7,6 +7,7 @@ from app.database import get_db
 from app.models.resume import BaseResume, TailoredResume
 from app.models.job import Job
 from app.models.company import CompanyResearch
+from app.models.salary_cache import SalaryCache
 from app.services.perplexity_client import PerplexityClient
 from app.services.openai_tailor import OpenAITailor
 from app.services.docx_generator import DOCXGenerator
@@ -26,6 +27,133 @@ router = APIRouter()
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 limiter = Limiter(key_func=get_remote_address)
+
+
+async def get_or_fetch_salary_data(
+    db: "AsyncSession",
+    company: str,
+    job_title: str,
+    location: str = None,
+) -> dict:
+    """
+    Cache-first salary lookup keyed on (company, job_title, location).
+
+    Lookup order:
+      1. salary_cache table: hit + younger than 30 days  -> return cached data
+      2. salary_cache table: hit + expired               -> re-fetch from Perplexity, update row
+      3. No row found                                     -> fetch from Perplexity, insert row
+
+    Returns a dict with the same shape as PerplexityClient.research_salary_insights()
+    plus two extra fields:
+      - from_cache (bool)
+      - days_old   (int)
+    Returns None if the Perplexity call itself fails.
+    """
+
+    norm_company, norm_title, norm_location = SalaryCache.make_key(
+        company, job_title, location
+    )
+
+    # --- 1. Check the cache -------------------------------------------------
+    cache_result = await db.execute(
+        select(SalaryCache).where(
+            SalaryCache.company == norm_company,
+            SalaryCache.job_title == norm_title,
+            SalaryCache.location == norm_location,
+        )
+    )
+    cached = cache_result.scalar_one_or_none()
+
+    if cached and not cached.is_expired():
+        print(
+            f"[SalaryCache] HIT (company={norm_company!r}, title={norm_title!r}, "
+            f"location={norm_location!r}, age={cached.days_old()}d) — skipping Perplexity"
+        )
+        return cached.to_salary_dict()
+
+    # --- 2. Cache miss or expired: call Perplexity --------------------------
+    if cached:
+        print(
+            f"[SalaryCache] EXPIRED (age={cached.days_old()}d) — refreshing from Perplexity"
+        )
+    else:
+        print(
+            f"[SalaryCache] MISS (company={norm_company!r}, title={norm_title!r}) "
+            "— calling Perplexity"
+        )
+
+    try:
+        perplexity = PerplexityClient()
+        raw = perplexity.research_salary_insights(
+            job_title=job_title,
+            location=location if location else None,
+        )
+    except Exception as exc:
+        print(f"[SalaryCache] Perplexity call failed: {exc}")
+        # Return stale cache data rather than nothing if we have it
+        if cached:
+            print("[SalaryCache] Returning stale cache data as fallback")
+            return cached.to_salary_dict()
+        return None
+
+    if not raw or raw.get("error"):
+        print(f"[SalaryCache] Perplexity returned error: {raw}")
+        if cached:
+            return cached.to_salary_dict()
+        return None
+
+    # --- 3. Persist to salary_cache -----------------------------------------
+    new_salary_range = raw.get("salary_range") or "Data not available"
+    new_median = raw.get("median_salary") or "Data not available"
+    new_insights = raw.get("market_insights") or ""
+    new_sources = json.dumps(raw.get("sources") or [])
+    now = datetime.utcnow()
+
+    try:
+        if cached:
+            # Update existing stale row in place
+            cached.median_salary = new_median
+            cached.salary_range = new_salary_range
+            cached.market_insights = new_insights
+            cached.sources = new_sources
+            cached.updated_at = now
+            db.add(cached)
+        else:
+            # Insert brand-new cache row
+            cached = SalaryCache(
+                company=norm_company,
+                job_title=norm_title,
+                location=norm_location,
+                median_salary=new_median,
+                salary_range=new_salary_range,
+                market_insights=new_insights,
+                sources=new_sources,
+                created_at=now,
+                updated_at=now,
+            )
+            db.add(cached)
+
+        await db.commit()
+        await db.refresh(cached)
+        print(
+            f"[SalaryCache] Stored: median={new_median!r}, "
+            f"range={new_salary_range!r}"
+        )
+    except Exception as exc:
+        # Non-fatal: cache write failure should not abort the tailoring flow
+        print(f"[SalaryCache] WARNING — failed to persist cache row: {exc}")
+        await db.rollback()
+
+    return {
+        "salary_range": new_salary_range,
+        "median_salary": new_median,
+        "market_insights": new_insights,
+        "sources": raw.get("sources") or [],
+        "last_updated": now.isoformat(),
+        "cache_updated_at": now.isoformat(),
+        "days_old": 0,
+        "from_cache": False,
+    }
 
 
 def safe_json_loads(json_str: str, default=None):
@@ -211,40 +339,52 @@ async def tailor_resume(
 
         print(f"Job record: {job.company} - {job.title}")
 
-        # Step 3b: Research salary data with Perplexity (if not already cached)
-        print("Step 3b: Researching salary data with Perplexity...")
-        perplexity = PerplexityClient()
-        if not job.median_salary or not job.salary_last_updated:
-            try:
-                perplexity_salary = perplexity.research_salary_insights(
-                    job_title=job.title,
-                    location=job.location if job.location else None
-                )
+        # Step 3b: Research salary data using the cross-job SalaryCache
+        # Cache key: (company, job_title, location) — not tied to URL.
+        # First call for a given company+title: hits Perplexity and stores in
+        # salary_cache.  Subsequent calls (any URL) hit the cache for 30 days.
+        print("Step 3b: Fetching salary data (SalaryCache → Perplexity)...")
 
-                if perplexity_salary and not perplexity_salary.get('error'):
-                    # Store Perplexity salary data in job record
-                    job.median_salary = perplexity_salary.get('median_salary', 'Data unavailable')
-                    job.salary_insights = perplexity_salary.get('market_insights', '')
-                    job.salary_sources = json.dumps(perplexity_salary.get('sources', []))
-                    job.salary_last_updated = datetime.utcnow()
+        perplexity_salary = None
+        try:
+            perplexity_salary = await get_or_fetch_salary_data(
+                db=db,
+                company=job.company,
+                job_title=job.title,
+                location=job.location if job.location else None,
+            )
+        except Exception as e:
+            print(f"⚠ Salary cache/fetch failed: {e}")
 
-                    # Use Perplexity range if available, otherwise keep Firecrawl salary
-                    if perplexity_salary.get('salary_range') and perplexity_salary['salary_range'] != "Data not available":
-                        job.salary = perplexity_salary['salary_range']
+        if perplexity_salary and not perplexity_salary.get("error"):
+            # Mirror salary data onto the Job row for backwards-compat with
+            # existing code that reads job.median_salary / job.salary_last_updated
+            job.median_salary = perplexity_salary.get("median_salary", "Data unavailable")
+            job.salary_insights = perplexity_salary.get("market_insights", "")
+            job.salary_sources = json.dumps(perplexity_salary.get("sources", []))
+            job.salary_last_updated = datetime.utcnow()
 
-                    db.add(job)
-                    await db.commit()
-                    await db.refresh(job)
-                    print(f"✓ Perplexity salary data saved: {job.median_salary}")
-                else:
-                    print(f"⚠ Perplexity salary research unavailable")
-            except Exception as e:
-                print(f"⚠ Perplexity salary research failed: {e}")
+            if (
+                perplexity_salary.get("salary_range")
+                and perplexity_salary["salary_range"] != "Data not available"
+            ):
+                job.salary = perplexity_salary["salary_range"]
+
+            db.add(job)
+            await db.commit()
+            await db.refresh(job)
+
+            cache_source = "cache" if perplexity_salary.get("from_cache") else "Perplexity API"
+            print(
+                f"✓ Salary data from {cache_source}: {job.median_salary} "
+                f"(age={perplexity_salary.get('days_old', 0)}d)"
+            )
         else:
-            print(f"✓ Using cached salary data from {job.salary_last_updated}")
+            print("⚠ Salary data unavailable")
 
         # Step 4: Research company with Perplexity
         print("Step 4: Researching company with Perplexity...")
+        perplexity = PerplexityClient()
 
         try:
             company_research = await perplexity.research_company(
@@ -384,6 +524,20 @@ async def tailor_resume(
         print(f"=== TAILORING COMPLETE ===")
         print(f"Tailored Resume ID: {tailored_resume.id}")
 
+        # Build salary data payload for the frontend (SalaryInsights component)
+        salary_payload = None
+        if perplexity_salary and not perplexity_salary.get("error"):
+            salary_payload = {
+                "salary_range": perplexity_salary.get("salary_range", "Data not available"),
+                "median_salary": perplexity_salary.get("median_salary", "Data not available"),
+                "market_insights": perplexity_salary.get("market_insights", ""),
+                "sources": perplexity_salary.get("sources", []),
+                "last_updated": perplexity_salary.get("last_updated"),
+                "cache_updated_at": perplexity_salary.get("cache_updated_at"),
+                "days_old": perplexity_salary.get("days_old", 0),
+                "from_cache": perplexity_salary.get("from_cache", False),
+            }
+
         return {
             "success": True,
             "tailored_resume_id": tailored_resume.id,
@@ -396,7 +550,9 @@ async def tailor_resume(
             "experience": tailored_content.get('experience', []),
             "education": tailored_content.get('education', ''),
             "certifications": tailored_content.get('certifications', ''),
-            "alignment_statement": tailored_content.get('alignment_statement', '')
+            "alignment_statement": tailored_content.get('alignment_statement', ''),
+            # Salary data — populated from SalaryCache (no extra API cost on cache hits)
+            "salary_data": salary_payload,
         }
 
     except HTTPException:
