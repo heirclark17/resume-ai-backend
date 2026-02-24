@@ -134,12 +134,13 @@ async def run_migrations():
             except Exception as e:
                 pass
 
-        # Fix users.username constraint - allow NULL for Supabase-only users
-        try:
-            if is_postgres:
-                await conn.execute(text("ALTER TABLE users ALTER COLUMN username DROP NOT NULL"))
-                print("  Migration: users.username now allows NULL")
-        except Exception as e:
-            pass
+        # Fix users table constraints - allow NULL for Supabase-only users
+        for nullable_col in ['username', 'api_key', 'totp_secret', 'twofa_backup_codes']:
+            try:
+                if is_postgres:
+                    await conn.execute(text(f"ALTER TABLE users ALTER COLUMN {nullable_col} DROP NOT NULL"))
+                    print(f"  Migration: users.{nullable_col} now allows NULL")
+            except Exception as e:
+                pass
 
     print("Migrations completed")
