@@ -39,6 +39,7 @@ async def init_db():
     # Import models to register them with Base
     from app.models import resume, job, company, user, interview_prep, star_story, analysis_cache
     from app.models import application, cover_letter, resume_version, follow_up_reminder, career_plan, saved_comparison
+    from app.models import batch_job_url
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

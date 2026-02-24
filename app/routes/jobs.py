@@ -14,6 +14,7 @@ from app.services.perplexity_client import PerplexityClient
 from app.utils.url_validator import URLValidator
 from app.database import get_db
 from app.models.job import Job
+from app.models.batch_job_url import BatchJobUrl
 from app.middleware.auth import get_user_id, ownership_filter
 
 router = APIRouter()
@@ -35,6 +36,10 @@ class SaveJobRequest(BaseModel):
     location: Optional[str] = None
     salary: Optional[str] = None
     description: Optional[str] = None
+
+
+class SaveBatchUrlsRequest(BaseModel):
+    urls: List[str]
 
 
 @router.post("/extract")
@@ -261,6 +266,87 @@ async def delete_saved_job(
 
     job.is_active = False
     db.add(job)
+    await db.commit()
+
+    return {"success": True}
+
+
+# ─── Batch Job URLs CRUD ─────────────────────────────────────────
+
+@router.get("/batch-urls")
+async def get_batch_urls(
+    user_id: str = Depends(get_user_id),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get all saved batch job URLs for the current user"""
+    result = await db.execute(
+        select(BatchJobUrl)
+        .where(BatchJobUrl.session_user_id == user_id)
+        .order_by(BatchJobUrl.id)
+    )
+    urls = result.scalars().all()
+
+    return {
+        "success": True,
+        "urls": [
+            {"id": u.id, "url": u.url}
+            for u in urls
+        ]
+    }
+
+
+@router.put("/batch-urls")
+async def save_batch_urls(
+    req: SaveBatchUrlsRequest,
+    user_id: str = Depends(get_user_id),
+    db: AsyncSession = Depends(get_db)
+):
+    """Replace all batch URLs for the user (full sync)"""
+    # Delete existing
+    existing = await db.execute(
+        select(BatchJobUrl).where(BatchJobUrl.session_user_id == user_id)
+    )
+    for row in existing.scalars().all():
+        await db.delete(row)
+
+    # Insert new
+    new_urls = []
+    for url in req.urls:
+        if url.strip():
+            obj = BatchJobUrl(url=url.strip(), session_user_id=user_id)
+            db.add(obj)
+            new_urls.append(obj)
+
+    await db.commit()
+
+    # Refresh to get IDs
+    for obj in new_urls:
+        await db.refresh(obj)
+
+    return {
+        "success": True,
+        "urls": [{"id": u.id, "url": u.url} for u in new_urls]
+    }
+
+
+@router.delete("/batch-urls/{url_id}")
+async def delete_batch_url(
+    url_id: int,
+    user_id: str = Depends(get_user_id),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete a single batch job URL"""
+    result = await db.execute(
+        select(BatchJobUrl)
+        .where(BatchJobUrl.id == url_id)
+        .where(BatchJobUrl.session_user_id == user_id)
+    )
+    url_obj = result.scalar_one_or_none()
+
+    if not url_obj:
+        raise HTTPException(status_code=404, detail="Batch URL not found")
+
+    await db.delete(url_obj)
     await db.commit()
 
     return {"success": True}
