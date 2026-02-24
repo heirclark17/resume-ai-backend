@@ -14,7 +14,10 @@ ADD COLUMN IF NOT EXISTS strategic_news_data JSONB DEFAULT NULL,
 ADD COLUMN IF NOT EXISTS competitive_intelligence_data JSONB DEFAULT NULL,
 ADD COLUMN IF NOT EXISTS interview_strategy_data JSONB DEFAULT NULL,
 ADD COLUMN IF NOT EXISTS executive_insights_data JSONB DEFAULT NULL,
-ADD COLUMN IF NOT EXISTS certification_recommendations_data JSONB DEFAULT NULL;
+ADD COLUMN IF NOT EXISTS certification_recommendations_data JSONB DEFAULT NULL,
+ADD COLUMN IF NOT EXISTS behavioral_technical_questions_data JSONB DEFAULT NULL,
+ADD COLUMN IF NOT EXISTS common_questions_data JSONB DEFAULT NULL,
+ADD COLUMN IF NOT EXISTS user_data JSONB DEFAULT NULL;
 
 -- Add comments for documentation
 COMMENT ON COLUMN interview_preps.readiness_score_data IS 'Cached interview readiness score from AI';
@@ -25,6 +28,9 @@ COMMENT ON COLUMN interview_preps.competitive_intelligence_data IS 'Cached compe
 COMMENT ON COLUMN interview_preps.interview_strategy_data IS 'Cached interview strategy recommendations';
 COMMENT ON COLUMN interview_preps.executive_insights_data IS 'Cached executive insights';
 COMMENT ON COLUMN interview_preps.certification_recommendations_data IS 'Cached certification recommendations';
+COMMENT ON COLUMN interview_preps.behavioral_technical_questions_data IS 'Cached behavioral and technical interview questions from AI';
+COMMENT ON COLUMN interview_preps.common_questions_data IS 'Cached common interview questions with sample answers';
+COMMENT ON COLUMN interview_preps.user_data IS 'User interaction state: checklist checks, notes, custom questions, interview date';
 
 -- =====================================================
 -- PART 2: Create career_plans table (if not exists)

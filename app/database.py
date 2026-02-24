@@ -68,7 +68,11 @@ async def run_migrations():
         'competitive_intelligence_data',
         'interview_strategy_data',
         'executive_insights_data',
-        'certification_recommendations_data'
+        'certification_recommendations_data',
+        # Added: columns for child component cached data and user interaction state
+        'behavioral_technical_questions_data',
+        'common_questions_data',
+        'user_data',
     ]
 
     async with engine.begin() as conn:
