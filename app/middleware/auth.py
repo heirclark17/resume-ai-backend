@@ -337,3 +337,68 @@ async def get_current_user_unified(
         status_code=401,
         detail="Authentication required. Provide Authorization Bearer token, X-API-Key, or X-User-ID header."
     )
+
+
+async def get_current_user_from_form(
+    request: Request,
+    authorization: Optional[str] = Header(None),
+    x_api_key: Optional[str] = Header(None),
+    x_user_id: Optional[str] = Header(None),
+    db: AsyncSession = Depends(get_db)
+) -> tuple[Optional[User], str]:
+    """
+    Unified authentication for file uploads - checks BOTH headers AND form fields
+
+    iOS has known issues with custom headers on multipart/form-data requests.
+    This dependency checks headers first, then falls back to form fields.
+
+    Accepts auth from:
+    1. Headers: Authorization, X-API-Key, X-User-ID (standard)
+    2. Form fields: authorization, x_user_id (iOS mobile fallback)
+
+    Returns: (user_object_or_None, user_id_string)
+    """
+    print(f"[Auth] Form auth called - Headers: auth={bool(authorization)}, api_key={bool(x_api_key)}, user_id={bool(x_user_id)}")
+
+    # First try standard header-based auth
+    try:
+        return await get_current_user_unified(authorization, x_api_key, x_user_id, db)
+    except HTTPException as header_error:
+        print(f"[Auth] Header auth failed: {header_error.detail}")
+        print("[Auth] Checking form fields for iOS mobile compatibility...")
+
+        # iOS fallback: Check form fields
+        try:
+            # Read form data (for multipart/form-data requests)
+            form = await request.form()
+            print(f"[Auth] Form fields received: {list(form.keys())}")
+
+            # Check for authorization token in form
+            form_auth = form.get('authorization')
+            form_user_id = form.get('x_user_id')
+
+            print(f"[Auth] Form fields: authorization={bool(form_auth)}, x_user_id={bool(form_user_id)}")
+
+            if form_auth:
+                # Try JWT authentication from form field
+                print(f"[Auth] Attempting JWT auth from form field: {str(form_auth)[:30]}...")
+                user = await get_current_user_from_jwt(str(form_auth), db)
+                print(f"[Auth] Form JWT auth succeeded for user: {user.email}")
+                return (user, f"supabase_{user.supabase_id}")
+
+            if form_user_id:
+                # Fall back to session ID from form
+                user_id_str = str(form_user_id)
+                if user_id_str.startswith('user_') or user_id_str.startswith('clerk_') or user_id_str.startswith('supa_'):
+                    print(f"[Auth] Using form user_id: {user_id_str[:20]}...")
+                    return (None, user_id_str)
+
+            # No valid form auth found either
+            print("[Auth] No valid auth in headers OR form fields")
+            raise header_error  # Re-raise original error
+
+        except HTTPException:
+            raise  # Re-raise auth errors
+        except Exception as e:
+            print(f"[Auth] Form parsing error: {type(e).__name__}: {str(e)}")
+            raise header_error  # Re-raise original header error if form parsing fails

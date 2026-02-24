@@ -4,7 +4,7 @@ from sqlalchemy import select
 from app.database import get_db
 from app.models.resume import BaseResume
 from app.models.user import User
-from app.middleware.auth import get_current_user, get_current_user_optional, get_user_id, get_current_user_unified
+from app.middleware.auth import get_current_user, get_current_user_optional, get_user_id, get_current_user_unified, get_current_user_from_form
 from app.services.resume_parser import ResumeParser
 from app.utils.file_handler import FileHandler
 from app.utils.logger import logger
@@ -42,13 +42,16 @@ class AnalyzeResumeRequest(BaseModel):
 async def upload_resume(
     request: Request,
     file: UploadFile = File(...),
-    auth_result: tuple = Depends(get_current_user_unified),
+    auth_result: tuple = Depends(get_current_user_from_form),
     db: AsyncSession = Depends(get_db)
 ):
     """Upload and parse resume (requires authentication)
 
     Rate limited to 5 uploads per minute per IP address to prevent abuse.
     Resumes are isolated by user ID (supports JWT, API key, or session auth).
+
+    iOS Mobile Support: Also accepts auth via form fields (authorization, x_user_id)
+    for iOS multipart/form-data compatibility.
     """
     # Extract user and user_id from unified auth
     user, user_id = auth_result
