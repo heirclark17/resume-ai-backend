@@ -228,7 +228,7 @@ async def get_current_user_from_jwt(
             token,
             verification_key,
             algorithms=algorithms,
-            options={"verify_exp": True}  # Verify token hasn't expired
+            options={"verify_exp": True, "verify_aud": False}  # Verify token hasn't expired, skip audience check
         )
 
         # Extract user ID from JWT (Supabase puts it in 'sub' field)
