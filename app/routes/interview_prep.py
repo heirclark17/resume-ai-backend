@@ -18,6 +18,7 @@ from app.services.interview_intelligence_service import InterviewIntelligenceSer
 from app.services.practice_questions_service import PracticeQuestionsService
 from app.services.interview_questions_generator import InterviewQuestionsGenerator
 from app.models.practice_question_response import PracticeQuestionResponse
+from app.middleware.auth import ownership_filter
 from app.utils.logger import logger
 from datetime import datetime
 import json
@@ -190,7 +191,7 @@ async def list_interview_preps(
             .join(Job, TailoredResume.job_id == Job.id)
             .where(
                 and_(
-                    TailoredResume.session_user_id == x_user_id,
+                    ownership_filter(TailoredResume.session_user_id, x_user_id),
                     InterviewPrep.is_deleted == False,
                     TailoredResume.is_deleted == False
                 )
@@ -259,7 +260,7 @@ async def get_interview_prep(
             .where(
                 InterviewPrep.tailored_resume_id == tailored_resume_id,
                 InterviewPrep.is_deleted == False,
-                TailoredResume.session_user_id == x_user_id,
+                ownership_filter(TailoredResume.session_user_id, x_user_id),
                 TailoredResume.is_deleted == False
             )
         )
@@ -377,7 +378,7 @@ async def update_cached_data(
         .where(
             InterviewPrep.id == interview_prep_id,
             InterviewPrep.is_deleted == False,
-            TailoredResume.session_user_id == x_user_id
+            ownership_filter(TailoredResume.session_user_id, x_user_id)
         )
     )
     row = result.first()
@@ -1296,7 +1297,7 @@ async def generate_common_questions(
                 and_(
                     InterviewPrep.id == request.interview_prep_id,
                     InterviewPrep.is_deleted == False,
-                    TailoredResume.session_user_id == x_user_id,
+                    ownership_filter(TailoredResume.session_user_id, x_user_id),
                     TailoredResume.is_deleted == False
                 )
             )
@@ -1417,7 +1418,7 @@ async def regenerate_single_question(
                 and_(
                     InterviewPrep.id == request.interview_prep_id,
                     InterviewPrep.is_deleted == False,
-                    TailoredResume.session_user_id == x_user_id,
+                    ownership_filter(TailoredResume.session_user_id, x_user_id),
                     TailoredResume.is_deleted == False
                 )
             )
@@ -2096,7 +2097,7 @@ async def generate_behavioral_technical_questions(
                 and_(
                     InterviewPrep.id == request.interview_prep_id,
                     InterviewPrep.is_deleted == False,
-                    TailoredResume.session_user_id == x_user_id,
+                    ownership_filter(TailoredResume.session_user_id, x_user_id),
                     TailoredResume.is_deleted == False
                 )
             )
@@ -2234,7 +2235,7 @@ async def save_star_story_for_question(
                 and_(
                     InterviewPrep.id == request.interview_prep_id,
                     InterviewPrep.is_deleted == False,
-                    TailoredResume.session_user_id == x_user_id,
+                    ownership_filter(TailoredResume.session_user_id, x_user_id),
                     TailoredResume.is_deleted == False
                 )
             )
