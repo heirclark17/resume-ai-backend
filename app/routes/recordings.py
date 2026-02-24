@@ -4,7 +4,7 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, text
 from app.database import get_db
-from app.services.s3_service import (
+from app.services.storage_service import (
     generate_presigned_upload_url,
     generate_presigned_download_url,
     delete_object,
@@ -51,7 +51,7 @@ async def get_presigned_upload_url(
         )
 
     try:
-        result = generate_presigned_upload_url(
+        result = await generate_presigned_upload_url(
             user_id=x_user_id,
             question_context=req.question_context,
             content_type=req.content_type,
@@ -75,7 +75,7 @@ async def get_presigned_download_url(
         raise HTTPException(status_code=403, detail="Access denied")
 
     try:
-        url = generate_presigned_download_url(req.s3_key)
+        url = await generate_presigned_download_url(req.s3_key)
         return {"success": True, "download_url": url}
     except Exception as e:
         logger.error(f"Failed to generate download URL: {e}")
@@ -96,8 +96,8 @@ async def delete_recording(
         raise HTTPException(status_code=403, detail="Access denied")
 
     try:
-        # Delete from S3
-        delete_object(req.s3_key)
+        # Delete from storage
+        await delete_object(req.s3_key)
 
         # Clear URL in database based on question_context prefix
         if req.question_context.startswith("star_story_"):

@@ -2,6 +2,7 @@
 """Verify that video recording feature is fully configured and ready"""
 import os
 import sys
+import asyncio
 
 print("=" * 70)
 print("VIDEO RECORDING FEATURE - SETUP VERIFICATION")
@@ -9,19 +10,16 @@ print("=" * 70)
 print()
 
 # Check 1: Environment variables
-print("1. Checking Railway environment variables...")
+print("1. Checking environment variables...")
 required_vars = [
-    "AWS_ACCESS_KEY_ID",
-    "AWS_SECRET_ACCESS_KEY",
-    "AWS_S3_BUCKET",
-    "AWS_S3_REGION"
+    "SUPABASE_URL",
+    "SUPABASE_SERVICE_ROLE_KEY",
 ]
 
 missing_vars = []
 for var in required_vars:
     value = os.getenv(var)
     if value:
-        # Show partial value for security
         if "KEY" in var:
             display = f"{value[:8]}...{value[-4:]}" if len(value) > 12 else "****"
         else:
@@ -31,38 +29,18 @@ for var in required_vars:
         print(f"  [ERROR] {var}: NOT SET")
         missing_vars.append(var)
 
+bucket = os.getenv("SUPABASE_STORAGE_BUCKET", "recordings")
+print(f"  [OK] SUPABASE_STORAGE_BUCKET: {bucket}")
+
 if missing_vars:
     print()
     print(f"ERROR: Missing environment variables: {', '.join(missing_vars)}")
     print("Please add them to Railway dashboard and redeploy.")
     sys.exit(1)
 
-# Check 2: S3 client initialization
+# Check 2: Database connection
 print()
-print("2. Testing AWS S3 connection...")
-try:
-    from app.services.s3_service import _get_s3_client
-    client = _get_s3_client()
-    print("  [OK] S3 client initialized successfully")
-
-    # Test bucket access
-    bucket = os.getenv("AWS_S3_BUCKET")
-    try:
-        client.head_bucket(Bucket=bucket)
-        print(f"  [OK] Bucket '{bucket}' is accessible")
-    except Exception as e:
-        print(f"  [ERROR] Cannot access bucket '{bucket}': {e}")
-        print("  → Check IAM permissions and bucket name")
-        sys.exit(1)
-
-except Exception as e:
-    print(f"  [ERROR] Failed to initialize S3 client: {e}")
-    print("  → Check AWS credentials are correct")
-    sys.exit(1)
-
-# Check 3: Database connection
-print()
-print("3. Testing database connection...")
+print("2. Testing database connection...")
 try:
     import psycopg2
     db_url = os.getenv("DATABASE_URL")
@@ -74,7 +52,6 @@ try:
     cursor = conn.cursor()
     print("  [OK] Database connection successful")
 
-    # Check if video_recording_url column exists
     cursor.execute("""
         SELECT EXISTS (
             SELECT FROM information_schema.columns
@@ -87,39 +64,40 @@ try:
         print("  [OK] video_recording_url column exists in star_stories table")
     else:
         print("  [ERROR] video_recording_url column NOT FOUND")
-        print("  → Run migration: railway run python run_video_recording_migration.py")
         sys.exit(1)
 
     cursor.close()
     conn.close()
 
 except ImportError:
-    print("  ! psycopg2 not installed (install with: pip install psycopg2-binary)")
-    print("  ⚠ Skipping database check (non-critical for Railway deployment)")
+    print("  ! psycopg2 not installed, skipping database check")
 except Exception as e:
     print(f"  ! Database check failed: {e}")
-    print("  ⚠ This is OK if running locally (non-critical for Railway deployment)")
 
-# Check 4: Test presigned URL generation
+# Check 3: Test signed URL generation
 print()
-print("4. Testing presigned URL generation...")
+print("3. Testing signed URL generation...")
 try:
-    from app.services.s3_service import generate_presigned_upload_url
-    result = generate_presigned_upload_url(
-        user_id="test-user",
-        question_context="test-question",
-        content_type="video/webm"
-    )
+    from app.services.storage_service import generate_presigned_upload_url
+
+    async def test_url():
+        return await generate_presigned_upload_url(
+            user_id="test-user",
+            question_context="test-question",
+            content_type="video/webm"
+        )
+
+    result = asyncio.run(test_url())
 
     if "upload_url" in result and "s3_key" in result:
-        print("  [OK] Presigned upload URL generated successfully")
-        print(f"  [OK] S3 key format: {result['s3_key']}")
+        print("  [OK] Signed upload URL generated successfully")
+        print(f"  [OK] Object path: {result['s3_key']}")
     else:
         print("  [ERROR] Invalid response from generate_presigned_upload_url")
         sys.exit(1)
 
 except Exception as e:
-    print(f"  [ERROR] Failed to generate presigned URL: {e}")
+    print(f"  [ERROR] Failed to generate signed URL: {e}")
     sys.exit(1)
 
 # All checks passed
@@ -128,13 +106,6 @@ print("=" * 70)
 print("[OK] ALL CHECKS PASSED - VIDEO RECORDING FEATURE READY!")
 print("=" * 70)
 print()
-print("Next steps:")
-print("1. Go to https://talorme.com")
-print("2. Login → Interview Prep → Behavioral/Technical Questions")
-print("3. Expand any question")
-print("4. Click 'Record Practice' button below STAR story")
-print("5. Test recording, playback, and delete functions")
-print()
-print(f"S3 Bucket: {os.getenv('AWS_S3_BUCKET')}")
-print(f"Region: {os.getenv('AWS_S3_REGION')}")
+print(f"Storage Bucket: {bucket}")
+print(f"Supabase URL: {os.getenv('SUPABASE_URL', '')[:40]}...")
 print()

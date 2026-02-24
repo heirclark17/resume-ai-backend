@@ -12,11 +12,10 @@ class Settings(BaseSettings):
     # Test Mode - explicitly read from environment
     test_mode: bool = os.getenv("TEST_MODE", "false").lower() == "true"
 
-    # AWS S3 - Recording Storage
-    aws_access_key_id: str = os.getenv("AWS_ACCESS_KEY_ID", "")
-    aws_secret_access_key: str = os.getenv("AWS_SECRET_ACCESS_KEY", "")
-    aws_s3_bucket: str = os.getenv("AWS_S3_BUCKET", "")
-    aws_s3_region: str = os.getenv("AWS_S3_REGION", "us-east-1")
+    # Supabase Storage - Recording Storage
+    supabase_url: str = os.getenv("SUPABASE_URL", "")
+    supabase_service_role_key: str = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+    supabase_storage_bucket: str = os.getenv("SUPABASE_STORAGE_BUCKET", "recordings")
 
     # File Storage
     upload_dir: str = "./uploads"
