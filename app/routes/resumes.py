@@ -187,8 +187,17 @@ async def list_resumes(
             {
                 "id": r.id,
                 "filename": r.filename,
-                "summary": r.summary[:200] + "..." if len(r.summary) > 200 else r.summary,
+                "candidate_name": r.candidate_name,
+                "candidate_email": r.candidate_email,
+                "candidate_phone": r.candidate_phone,
+                "candidate_location": r.candidate_location,
+                "candidate_linkedin": r.candidate_linkedin,
+                "summary": r.summary,
+                "skills": safe_json_loads(r.skills, []),
                 "skills_count": len(safe_json_loads(r.skills, [])),
+                "experience": safe_json_loads(r.experience, []),
+                "education": r.education,
+                "certifications": r.certifications,
                 "uploaded_at": r.uploaded_at.isoformat()
             }
             for r in resumes
