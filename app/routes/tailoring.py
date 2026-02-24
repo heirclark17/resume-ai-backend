@@ -135,7 +135,9 @@ async def tailor_resume(
         print("Step 2: Processing job details...")
 
         extracted_job_data = None
-        if tailor_request.job_url:
+        # Skip Firecrawl when company and title are already provided (saves 10-20s)
+        needs_extraction = tailor_request.job_url and (not tailor_request.company or not tailor_request.job_title)
+        if needs_extraction:
             print(f"Job URL provided: {tailor_request.job_url}")
             print("Extracting job details with Firecrawl...")
 
