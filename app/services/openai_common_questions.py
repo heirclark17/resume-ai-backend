@@ -220,6 +220,7 @@ Generate all 10 now. Return valid JSON only."""
                     {"role": "user", "content": user_prompt}
                 ],
                 temperature=0.7,
+                max_tokens=8000,  # Prevent excessive generation time (10 questions × ~800 tokens each)
                 response_format={"type": "json_object"}
             )
 
