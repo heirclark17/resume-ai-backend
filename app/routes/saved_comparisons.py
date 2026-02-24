@@ -258,6 +258,9 @@ async def get_saved_comparison(
             "certifications": base_resume.certifications
         },
         "tailored_resume": {
+            # id is required by the frontend for export and refresh button guards.
+            # Without it the frontend sets id=0 (falsy) and those features break.
+            "id": tailored_resume.id,
             "summary": tailored_resume.tailored_summary,
             "skills": json.loads(tailored_resume.tailored_skills) if tailored_resume.tailored_skills else [],
             "experience": json.loads(tailored_resume.tailored_experience) if tailored_resume.tailored_experience else [],
