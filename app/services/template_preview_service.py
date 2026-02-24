@@ -2,17 +2,16 @@
 Template Preview Service
 
 Generates AI-powered resume template preview images using OpenAI DALL-E
-and stores them in Supabase Storage for reuse.
+and stores them in PostgreSQL for reuse.
 """
 
-import httpx
 import base64
-import os
 from openai import AsyncOpenAI
+from sqlalchemy import select
 from app.config import get_settings
+from app.database import AsyncSessionLocal
+from app.models.template_preview import TemplatePreview
 from app.utils.logger import logger
-
-BUCKET = "template-previews"
 
 # Template visual descriptions for DALL-E prompt generation
 TEMPLATE_PROMPTS = {
@@ -154,74 +153,8 @@ def _build_prompt(template_id: str) -> str:
     )
 
 
-async def _ensure_bucket_exists():
-    """Create the template-previews bucket if it doesn't exist."""
-    settings = get_settings()
-    if not settings.supabase_url or not settings.supabase_service_role_key:
-        logger.warning("Supabase not configured, skipping bucket creation")
-        return False
-
-    url = f"{settings.supabase_url}/storage/v1/bucket"
-    async with httpx.AsyncClient() as client:
-        # Check if bucket exists
-        resp = await client.get(
-            f"{url}/{BUCKET}",
-            headers={"Authorization": f"Bearer {settings.supabase_service_role_key}"},
-        )
-        if resp.status_code == 200:
-            logger.info(f"Bucket '{BUCKET}' already exists")
-            return True
-
-        # Create bucket
-        resp = await client.post(
-            url,
-            headers={
-                "Authorization": f"Bearer {settings.supabase_service_role_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "id": BUCKET,
-                "name": BUCKET,
-                "public": True,
-                "allowed_mime_types": ["image/png", "image/webp", "image/jpeg"],
-                "file_size_limit": 10485760,
-            },
-        )
-        if resp.status_code < 300:
-            logger.info(f"Created bucket '{BUCKET}'")
-            return True
-        else:
-            logger.error(f"Failed to create bucket: {resp.status_code} {resp.text}")
-            return False
-
-
-async def _upload_to_supabase(template_id: str, image_data: bytes) -> str:
-    """Upload image bytes to Supabase Storage and return the public URL."""
-    settings = get_settings()
-    object_path = f"{template_id}.png"
-    url = f"{settings.supabase_url}/storage/v1/object/{BUCKET}/{object_path}"
-
-    async with httpx.AsyncClient() as client:
-        resp = await client.put(
-            url,
-            headers={
-                "Authorization": f"Bearer {settings.supabase_service_role_key}",
-                "Content-Type": "image/png",
-                "x-upsert": "true",
-                "Cache-Control": "max-age=31536000",
-            },
-            content=image_data,
-        )
-        if resp.status_code >= 300:
-            raise Exception(f"Upload failed: {resp.status_code} {resp.text}")
-
-    public_url = f"{settings.supabase_url}/storage/v1/object/public/{BUCKET}/{object_path}"
-    logger.info(f"Uploaded template preview: {public_url}")
-    return public_url
-
-
 async def generate_template_preview(template_id: str) -> dict:
-    """Generate an AI preview image for a single template and upload it."""
+    """Generate an AI preview image for a single template and store in DB."""
     settings = get_settings()
     if not settings.openai_api_key:
         raise ValueError("OPENAI_API_KEY not configured")
@@ -234,7 +167,7 @@ async def generate_template_preview(template_id: str) -> dict:
     response = await client.images.generate(
         model="dall-e-3",
         prompt=prompt,
-        size="1024x1792",  # Portrait orientation (closest to letter paper)
+        size="1024x1792",
         quality="hd",
         n=1,
         response_format="b64_json",
@@ -243,13 +176,26 @@ async def generate_template_preview(template_id: str) -> dict:
     image_b64 = response.data[0].b64_json
     image_bytes = base64.b64decode(image_b64)
 
-    # Ensure bucket exists then upload
-    await _ensure_bucket_exists()
-    public_url = await _upload_to_supabase(template_id, image_bytes)
+    # Store in PostgreSQL
+    async with AsyncSessionLocal() as session:
+        existing = await session.get(TemplatePreview, template_id)
+        if existing:
+            existing.image_data = image_bytes
+            existing.revised_prompt = response.data[0].revised_prompt
+        else:
+            preview = TemplatePreview(
+                template_id=template_id,
+                image_data=image_bytes,
+                content_type="image/png",
+                revised_prompt=response.data[0].revised_prompt,
+            )
+            session.add(preview)
+        await session.commit()
 
+    logger.info(f"Stored template preview in DB: {template_id}")
     return {
         "template_id": template_id,
-        "preview_url": public_url,
+        "preview_url": f"/api/templates/previews/{template_id}/image",
         "revised_prompt": response.data[0].revised_prompt,
     }
 
@@ -261,22 +207,31 @@ async def generate_all_previews() -> list[dict]:
         try:
             result = await generate_template_preview(template_id)
             results.append(result)
-            logger.info(f"[OK] {template_id}: {result['preview_url']}")
+            logger.info(f"[OK] {template_id}")
         except Exception as e:
             logger.error(f"[FAIL] {template_id}: {e}")
-            results.append({
-                "template_id": template_id,
-                "error": str(e),
-            })
+            results.append({"template_id": template_id, "error": str(e)})
     return results
 
 
-def get_preview_url(template_id: str) -> str:
-    """Get the public URL for a template preview image."""
-    settings = get_settings()
-    return f"{settings.supabase_url}/storage/v1/object/public/{BUCKET}/{template_id}.png"
+async def get_preview_image(template_id: str) -> bytes | None:
+    """Get the raw image bytes for a template preview from DB."""
+    async with AsyncSessionLocal() as session:
+        preview = await session.get(TemplatePreview, template_id)
+        if preview:
+            return preview.image_data
+    return None
 
 
-def get_all_preview_urls() -> dict[str, str]:
-    """Get public URLs for all template previews."""
-    return {tid: get_preview_url(tid) for tid in TEMPLATE_PROMPTS}
+def get_all_template_ids() -> list[str]:
+    """Get all known template IDs."""
+    return list(TEMPLATE_PROMPTS.keys())
+
+
+async def get_stored_template_ids() -> list[str]:
+    """Get template IDs that have stored preview images."""
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(TemplatePreview.template_id)
+        )
+        return [row[0] for row in result.fetchall()]
