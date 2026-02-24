@@ -13,7 +13,7 @@ from app.database import get_db
 from app.models.application import Application
 from app.models.resume import TailoredResume
 from app.models.job import Job
-from app.middleware.auth import get_user_id
+from app.middleware.auth import get_user_id, ownership_filter
 from app.utils.logger import get_logger
 
 router = APIRouter()
@@ -61,7 +61,7 @@ async def list_applications(
     db: AsyncSession = Depends(get_db),
 ):
     query = select(Application).where(
-        Application.session_user_id == user_id,
+        ownership_filter(Application.session_user_id, user_id),
         Application.is_deleted == False,
     )
     if status and status in VALID_STATUSES:
@@ -117,7 +117,7 @@ async def get_stats(
 ):
     query = (
         select(Application.status, func.count(Application.id))
-        .where(Application.session_user_id == user_id, Application.is_deleted == False)
+        .where(ownership_filter(Application.session_user_id, user_id), Application.is_deleted == False)
         .group_by(Application.status)
     )
     result = await db.execute(query)
@@ -164,7 +164,7 @@ async def update_application(
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
-        select(Application).where(Application.id == app_id, Application.session_user_id == user_id)
+        select(Application).where(Application.id == app_id, ownership_filter(Application.session_user_id, user_id))
     )
     app = result.scalar_one_or_none()
     if not app or app.is_deleted:
@@ -192,7 +192,7 @@ async def delete_application(
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
-        select(Application).where(Application.id == app_id, Application.session_user_id == user_id)
+        select(Application).where(Application.id == app_id, ownership_filter(Application.session_user_id, user_id))
     )
     app = result.scalar_one_or_none()
     if not app:

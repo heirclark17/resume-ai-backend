@@ -9,7 +9,7 @@ from datetime import datetime
 
 from app.database import get_db
 from app.models.follow_up_reminder import FollowUpReminder
-from app.middleware.auth import get_user_id
+from app.middleware.auth import get_user_id, ownership_filter
 from app.utils.logger import get_logger
 
 router = APIRouter()
@@ -38,7 +38,7 @@ async def list_reminders(
 ):
     result = await db.execute(
         select(FollowUpReminder)
-        .where(FollowUpReminder.session_user_id == user_id)
+        .where(ownership_filter(FollowUpReminder.session_user_id, user_id))
         .order_by(FollowUpReminder.reminder_date.asc())
     )
     reminders = result.scalars().all()
@@ -74,7 +74,7 @@ async def delete_reminder(
     result = await db.execute(
         select(FollowUpReminder).where(
             FollowUpReminder.id == reminder_id,
-            FollowUpReminder.session_user_id == user_id,
+            ownership_filter(FollowUpReminder.session_user_id, user_id),
         )
     )
     reminder = result.scalar_one_or_none()

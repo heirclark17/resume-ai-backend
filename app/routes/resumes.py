@@ -4,7 +4,7 @@ from sqlalchemy import select, or_, update
 from app.database import get_db
 from app.models.resume import BaseResume
 from app.models.user import User
-from app.middleware.auth import get_current_user, get_current_user_optional, get_user_id, get_current_user_unified, get_current_user_from_form, check_ownership
+from app.middleware.auth import get_current_user, get_current_user_optional, get_user_id, get_current_user_unified, get_current_user_from_form, check_ownership, ownership_filter
 from app.services.resume_parser import ResumeParser
 from app.utils.file_handler import FileHandler
 from app.utils.logger import logger
@@ -165,39 +165,22 @@ async def list_resumes(
     # Extract user and user_id from unified auth
     user, user_id = auth_result
 
-    # Filter by user ID for data isolation
+    # Filter by user ID for data isolation (ownership_filter handles user_ → supa_ migration)
     query = select(BaseResume).where(
         BaseResume.is_deleted == False,
-        BaseResume.session_user_id == user_id
+        ownership_filter(BaseResume.session_user_id, user_id),
     )
 
     result = await db.execute(query.order_by(BaseResume.uploaded_at.desc()))
     resumes = result.scalars().all()
 
-    # Auto-claim: if supa_ user has 0 resumes, check for orphaned user_ records
-    if not resumes and user_id.startswith('supa_'):
-        from sqlalchemy import func, distinct
-        # Count distinct anonymous user IDs
-        count_result = await db.execute(
-            select(func.count(distinct(BaseResume.session_user_id))).where(
-                BaseResume.session_user_id.like('user_%'),
-                BaseResume.is_deleted == False,
-            )
-        )
-        distinct_anon_users = count_result.scalar() or 0
-
-        # Only auto-claim if there's exactly one anonymous user (safe to assume same person)
-        if distinct_anon_users == 1:
-            await db.execute(
-                update(BaseResume)
-                .where(BaseResume.session_user_id.like('user_%'))
-                .values(session_user_id=user_id)
-            )
-            await db.commit()
-            # Re-query to get the migrated resumes
-            result = await db.execute(query.order_by(BaseResume.uploaded_at.desc()))
-            resumes = result.scalars().all()
-            logger.info(f"Auto-claimed {len(resumes)} resumes for {user_id}")
+    # Auto-migrate: update any old user_ records to current supa_ ID
+    if user_id.startswith('supa_'):
+        for r in resumes:
+            if r.session_user_id != user_id and r.session_user_id.startswith('user_'):
+                r.session_user_id = user_id
+                db.add(r)
+        await db.commit()
 
     return {
         "resumes": [

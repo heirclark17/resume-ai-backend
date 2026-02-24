@@ -9,7 +9,7 @@ import json
 from app.database import get_db
 from app.models.resume_version import ResumeVersion
 from app.models.resume import TailoredResume
-from app.middleware.auth import get_user_id
+from app.middleware.auth import get_user_id, ownership_filter
 from app.utils.logger import get_logger
 
 router = APIRouter()
@@ -26,7 +26,7 @@ async def list_versions(
     tr_result = await db.execute(
         select(TailoredResume).where(
             TailoredResume.id == tailored_resume_id,
-            TailoredResume.session_user_id == user_id,
+            ownership_filter(TailoredResume.session_user_id, user_id),
         )
     )
     tr = tr_result.scalar_one_or_none()
@@ -53,7 +53,7 @@ async def get_version(
         select(ResumeVersion).where(
             ResumeVersion.id == version_id,
             ResumeVersion.tailored_resume_id == tailored_resume_id,
-            ResumeVersion.session_user_id == user_id,
+            ownership_filter(ResumeVersion.session_user_id, user_id),
         )
     )
     version = result.scalar_one_or_none()
@@ -78,7 +78,7 @@ async def restore_version(
         select(ResumeVersion).where(
             ResumeVersion.id == version_id,
             ResumeVersion.tailored_resume_id == tailored_resume_id,
-            ResumeVersion.session_user_id == user_id,
+            ownership_filter(ResumeVersion.session_user_id, user_id),
         )
     )
     version = ver_result.scalar_one_or_none()

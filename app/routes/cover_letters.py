@@ -9,7 +9,7 @@ from datetime import datetime
 
 from app.database import get_db
 from app.models.cover_letter import CoverLetter
-from app.middleware.auth import get_user_id
+from app.middleware.auth import get_user_id, ownership_filter
 from app.services.cover_letter_service import generate_cover_letter_content
 from app.utils.logger import get_logger
 
@@ -39,7 +39,7 @@ async def list_cover_letters(
 ):
     result = await db.execute(
         select(CoverLetter)
-        .where(CoverLetter.session_user_id == user_id, CoverLetter.is_deleted == False)
+        .where(ownership_filter(CoverLetter.session_user_id, user_id), CoverLetter.is_deleted == False)
         .order_by(CoverLetter.created_at.desc())
     )
     letters = result.scalars().all()
@@ -221,7 +221,7 @@ async def update_cover_letter(
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
-        select(CoverLetter).where(CoverLetter.id == letter_id, CoverLetter.session_user_id == user_id)
+        select(CoverLetter).where(CoverLetter.id == letter_id, ownership_filter(CoverLetter.session_user_id, user_id))
     )
     letter = result.scalar_one_or_none()
     if not letter or letter.is_deleted:
@@ -243,7 +243,7 @@ async def delete_cover_letter(
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
-        select(CoverLetter).where(CoverLetter.id == letter_id, CoverLetter.session_user_id == user_id)
+        select(CoverLetter).where(CoverLetter.id == letter_id, ownership_filter(CoverLetter.session_user_id, user_id))
     )
     letter = result.scalar_one_or_none()
     if not letter:
@@ -266,7 +266,7 @@ async def export_cover_letter(
     from io import BytesIO
 
     result = await db.execute(
-        select(CoverLetter).where(CoverLetter.id == letter_id, CoverLetter.session_user_id == user_id)
+        select(CoverLetter).where(CoverLetter.id == letter_id, ownership_filter(CoverLetter.session_user_id, user_id))
     )
     letter = result.scalar_one_or_none()
     if not letter or letter.is_deleted:

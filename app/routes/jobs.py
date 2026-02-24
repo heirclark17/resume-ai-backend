@@ -14,7 +14,7 @@ from app.services.perplexity_client import PerplexityClient
 from app.utils.url_validator import URLValidator
 from app.database import get_db
 from app.models.job import Job
-from app.middleware.auth import get_user_id
+from app.middleware.auth import get_user_id, ownership_filter
 
 router = APIRouter()
 
@@ -164,7 +164,7 @@ async def get_saved_jobs(
     """Get all saved jobs for the current user, newest first"""
     result = await db.execute(
         select(Job)
-        .where(Job.session_user_id == user_id)
+        .where(ownership_filter(Job.session_user_id, user_id))
         .where(Job.is_active == True)
         .order_by(desc(Job.created_at))
     )
@@ -252,7 +252,7 @@ async def delete_saved_job(
     result = await db.execute(
         select(Job)
         .where(Job.id == job_id)
-        .where(Job.session_user_id == user_id)
+        .where(ownership_filter(Job.session_user_id, user_id))
     )
     job = result.scalar_one_or_none()
 

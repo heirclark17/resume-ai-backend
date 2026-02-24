@@ -13,7 +13,7 @@ from app.services.docx_generator import DOCXGenerator
 from app.services.firecrawl_client import FirecrawlClient
 from app.utils.url_validator import URLValidator
 from app.utils.quality_scorer import QualityScorer
-from app.middleware.auth import get_user_id, check_ownership
+from app.middleware.auth import get_user_id, check_ownership, ownership_filter
 from app.config import get_settings
 import json
 from datetime import datetime
@@ -213,6 +213,7 @@ async def tailor_resume(
 
         # Step 3b: Research salary data with Perplexity (if not already cached)
         print("Step 3b: Researching salary data with Perplexity...")
+        perplexity = PerplexityClient()
         if not job.median_salary or not job.salary_last_updated:
             try:
                 perplexity_salary = perplexity.research_salary_insights(
@@ -244,7 +245,6 @@ async def tailor_resume(
 
         # Step 4: Research company with Perplexity
         print("Step 4: Researching company with Perplexity...")
-        perplexity = PerplexityClient()
 
         try:
             company_research = await perplexity.research_company(
@@ -521,7 +521,7 @@ async def list_tailored_resumes(
         select(TailoredResume)
         .where(
             TailoredResume.is_deleted == False,
-            TailoredResume.session_user_id == user_id  # Filter by session user ID
+            ownership_filter(TailoredResume.session_user_id, user_id)  # Filter by session user ID
         )
         .order_by(TailoredResume.created_at.desc())
     )

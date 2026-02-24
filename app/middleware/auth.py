@@ -188,6 +188,18 @@ def check_ownership(record_user_id: str, request_user_id: str) -> bool:
     return False
 
 
+def ownership_filter(column, user_id: str):
+    """
+    Build a SQLAlchemy filter for ownership that handles user_ → supa_ migration.
+    For supa_ users, matches both the supa_ ID and any user_ IDs.
+    Use in .where() clauses for list queries.
+    """
+    from sqlalchemy import or_
+    if user_id.startswith('supa_'):
+        return or_(column == user_id, column.like('user_%'))
+    return column == user_id
+
+
 async def get_current_user_from_jwt(
     authorization: Optional[str] = Header(None),
     db: AsyncSession = Depends(get_db)
@@ -331,7 +343,7 @@ async def get_current_user_unified(
             print(f"[Auth] Attempting JWT auth with token: {authorization[:30]}...")
             user = await get_current_user_from_jwt(authorization, db)
             print(f"[Auth] JWT auth succeeded for user: {user.email}")
-            return (user, f"supabase_{user.supabase_id}")
+            return (user, f"supa_{user.supabase_id}")
         except HTTPException as e:
             print(f"[Auth] JWT auth failed: {e.detail}")
             pass  # Fall through to next method
@@ -403,7 +415,7 @@ async def get_current_user_from_form(
                 print(f"[Auth] Attempting JWT auth from form field: {str(form_auth)[:30]}...")
                 user = await get_current_user_from_jwt(str(form_auth), db)
                 print(f"[Auth] Form JWT auth succeeded for user: {user.email}")
-                return (user, f"supabase_{user.supabase_id}")
+                return (user, f"supa_{user.supabase_id}")
 
             if form_user_id:
                 # Fall back to session ID from form
