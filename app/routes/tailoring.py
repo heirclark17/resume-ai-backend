@@ -13,7 +13,7 @@ from app.services.docx_generator import DOCXGenerator
 from app.services.firecrawl_client import FirecrawlClient
 from app.utils.url_validator import URLValidator
 from app.utils.quality_scorer import QualityScorer
-from app.middleware.auth import get_user_id, check_ownership, ownership_filter
+from app.middleware.auth import get_user_id, check_ownership, ownership_filter, get_current_user_unified
 from app.config import get_settings
 import json
 from datetime import datetime
@@ -411,17 +411,25 @@ async def tailor_resume(
 @router.get("/tailored/{tailored_id}")
 async def get_tailored_resume(
     tailored_id: int,
-    user_id: str = Depends(get_user_id),
+    auth_result: tuple = Depends(get_current_user_unified),
     db: AsyncSession = Depends(get_db)
 ):
     """Get a tailored resume by ID (requires ownership, excludes deleted resumes)"""
-    result = await db.execute(
-        select(TailoredResume).where(TailoredResume.id == tailored_id)
-    )
-    tailored = result.scalar_one_or_none()
+    # Extract user and user_id from unified auth (handles both JWT and session-based auth)
+    user, user_id = auth_result
 
-    if not tailored:
+    # Fetch tailored resume with base resume joined
+    result = await db.execute(
+        select(TailoredResume, BaseResume)
+        .join(BaseResume, TailoredResume.base_resume_id == BaseResume.id)
+        .where(TailoredResume.id == tailored_id)
+    )
+    row = result.one_or_none()
+
+    if not row:
         raise HTTPException(status_code=404, detail="Tailored resume not found")
+
+    tailored, base_resume = row
 
     # Check if deleted
     if tailored.is_deleted:
@@ -430,6 +438,13 @@ async def get_tailored_resume(
     # Verify ownership (with auto-migration for supa_ users)
     if not check_ownership(tailored.session_user_id, user_id):
         raise HTTPException(status_code=403, detail="Access denied: You don't own this tailored resume")
+
+    # Auto-migrate: update old user_ records to current supa_ ID
+    if tailored.session_user_id != user_id and tailored.session_user_id.startswith('user_') and user_id.startswith('supa_'):
+        tailored.session_user_id = user_id
+        db.add(tailored)
+        await db.commit()
+        await db.refresh(tailored)
 
     # Fetch associated job record for company/title
     job_data = {}
@@ -456,6 +471,15 @@ async def get_tailored_resume(
         "docx_path": tailored.docx_path,
         "quality_score": tailored.quality_score,
         "created_at": tailored.created_at.isoformat(),
+        # Include education and certifications from base resume
+        "education": base_resume.education,
+        "certifications": base_resume.certifications,
+        # Include contact info from base resume for template header
+        "name": base_resume.candidate_name,
+        "email": base_resume.candidate_email,
+        "phone": base_resume.candidate_phone,
+        "linkedin": base_resume.candidate_linkedin,
+        "location": base_resume.candidate_location,
         **job_data,
     }
 
@@ -464,10 +488,13 @@ async def get_tailored_resume(
 async def update_tailored_resume(
     tailored_id: int,
     update_request: UpdateTailoredResumeRequest,
-    user_id: str = Depends(get_user_id),
+    auth_result: tuple = Depends(get_current_user_unified),
     db: AsyncSession = Depends(get_db)
 ):
     """Update a tailored resume's content (requires ownership)"""
+    # Extract user and user_id from unified auth
+    user, user_id = auth_result
+
     result = await db.execute(
         select(TailoredResume).where(TailoredResume.id == tailored_id)
     )
@@ -483,6 +510,10 @@ async def update_tailored_resume(
     # Verify ownership (with auto-migration for supa_ users)
     if not check_ownership(tailored.session_user_id, user_id):
         raise HTTPException(status_code=403, detail="Access denied: You don't own this tailored resume")
+
+    # Auto-migrate: update old user_ records to current supa_ ID
+    if tailored.session_user_id != user_id and tailored.session_user_id.startswith('user_') and user_id.startswith('supa_'):
+        tailored.session_user_id = user_id
 
     # Update fields if provided
     if update_request.summary is not None:
@@ -513,10 +544,13 @@ async def update_tailored_resume(
 
 @router.get("/list")
 async def list_tailored_resumes(
-    user_id: str = Depends(get_user_id),
+    auth_result: tuple = Depends(get_current_user_unified),
     db: AsyncSession = Depends(get_db)
 ):
-    """List tailored resumes (requires session user ID, excludes deleted resumes)"""
+    """List tailored resumes (requires authentication, excludes deleted resumes)"""
+    # Extract user and user_id from unified auth
+    user, user_id = auth_result
+
     result = await db.execute(
         select(TailoredResume)
         .where(
@@ -526,6 +560,14 @@ async def list_tailored_resumes(
         .order_by(TailoredResume.created_at.desc())
     )
     tailored_resumes = result.scalars().all()
+
+    # Auto-migrate: update any old user_ records to current supa_ ID
+    if user_id.startswith('supa_'):
+        for tr in tailored_resumes:
+            if tr.session_user_id != user_id and tr.session_user_id.startswith('user_'):
+                tr.session_user_id = user_id
+                db.add(tr)
+        await db.commit()
 
     return {
         "tailored_resumes": [
@@ -546,10 +588,13 @@ async def list_tailored_resumes(
 @router.get("/download/{tailored_id}")
 async def download_tailored_resume(
     tailored_id: int,
-    user_id: str = Depends(get_user_id),
+    auth_result: tuple = Depends(get_current_user_unified),
     db: AsyncSession = Depends(get_db)
 ):
     """Download a tailored resume DOCX file (requires ownership)"""
+    # Extract user and user_id from unified auth
+    user, user_id = auth_result
+
     result = await db.execute(
         select(TailoredResume).where(TailoredResume.id == tailored_id)
     )
@@ -565,6 +610,13 @@ async def download_tailored_resume(
     # Verify ownership (with auto-migration for supa_ users)
     if not check_ownership(tailored.session_user_id, user_id):
         raise HTTPException(status_code=403, detail="Access denied: You don't own this tailored resume")
+
+    # Auto-migrate: update old user_ records to current supa_ ID
+    if tailored.session_user_id != user_id and tailored.session_user_id.startswith('user_') and user_id.startswith('supa_'):
+        tailored.session_user_id = user_id
+        db.add(tailored)
+        await db.commit()
+        await db.refresh(tailored)
 
     # Check if file exists
     import os
