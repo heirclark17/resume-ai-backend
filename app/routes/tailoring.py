@@ -191,7 +191,7 @@ class UpdateTailoredResumeRequest(BaseModel):
 async def tailor_resume(
     request: Request,
     tailor_request: TailorRequest,
-    user_id: str = Depends(get_user_id),
+    auth_result: tuple = Depends(get_current_user_unified),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -206,6 +206,9 @@ async def tailor_resume(
     4. Generate DOCX file
     5. Save to database
     """
+
+    # Extract user and user_id from unified auth (handles both JWT and session-based auth)
+    user, user_id = auth_result
 
     try:
         print(f"=== TAILORING START ===")
@@ -807,7 +810,7 @@ async def download_tailored_resume(
 async def tailor_resume_batch(
     request: Request,
     batch_request: BatchTailorRequest,
-    user_id: str = Depends(get_user_id),
+    auth_result: tuple = Depends(get_current_user_unified),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -817,6 +820,9 @@ async def tailor_resume_batch(
 
     Returns results for each job URL with success/failure status
     """
+    # Extract user and user_id from unified auth (handles both JWT and session-based auth)
+    user, user_id = auth_result
+
     # Validate URL limit
     if len(batch_request.job_urls) > 10:
         raise HTTPException(
@@ -877,8 +883,8 @@ async def tailor_resume_batch(
                 job_url=job_url
             )
 
-            # Call single tailor endpoint (pass request and user_id for rate limiting and ownership)
-            result = await tailor_resume(request, tailor_req, user_id, db)
+            # Call single tailor endpoint (pass request and auth_result for rate limiting and ownership)
+            result = await tailor_resume(request, tailor_req, auth_result, db)
 
             results.append({
                 "job_url": job_url,

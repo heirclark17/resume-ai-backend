@@ -428,7 +428,7 @@ async def migrate_session(
         # Validate ID formats
         if not request.old_user_id.startswith('user_'):
             raise HTTPException(status_code=400, detail="old_user_id must start with 'user_'")
-        if not (request.new_user_id.startswith('supa_') or request.new_user_id.startswith('clerk_')):
+        if not request.new_user_id.startswith('supa_'):
             raise HTTPException(status_code=400, detail="new_user_id must start with 'supa_'")
 
         logger.info(f"Migrating session: {request.old_user_id} -> {request.new_user_id}")

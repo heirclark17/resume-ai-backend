@@ -163,8 +163,8 @@ async def get_user_id(
             detail="User ID required. Please refresh the page."
         )
 
-    # Validate format (should start with 'user_', 'clerk_', or 'supa_')
-    if not (x_user_id.startswith('user_') or x_user_id.startswith('clerk_') or x_user_id.startswith('supa_')):
+    # Validate format (should start with 'user_' or 'supa_')
+    if not (x_user_id.startswith('user_') or x_user_id.startswith('supa_')):
         raise HTTPException(
             status_code=400,
             detail="Invalid user ID format"
@@ -360,7 +360,7 @@ async def get_current_user_unified(
             pass  # Fall through to next method
 
     # Fall back to session-based user ID
-    if x_user_id and (x_user_id.startswith('user_') or x_user_id.startswith('clerk_') or x_user_id.startswith('supa_')):
+    if x_user_id and (x_user_id.startswith('user_') or x_user_id.startswith('supa_')):
         return (None, x_user_id)
 
     # No valid authentication provided
@@ -420,7 +420,7 @@ async def get_current_user_from_form(
             if form_user_id:
                 # Fall back to session ID from form
                 user_id_str = str(form_user_id)
-                if user_id_str.startswith('user_') or user_id_str.startswith('clerk_') or user_id_str.startswith('supa_'):
+                if user_id_str.startswith('user_') or user_id_str.startswith('supa_'):
                     print(f"[Auth] Using form user_id: {user_id_str[:20]}...")
                     return (None, user_id_str)
 
