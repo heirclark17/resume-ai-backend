@@ -300,7 +300,7 @@ IMPORTANT: Since the user is targeting THIS specific job:
 - Dislikes: {', '.join(intake.dislikes[:5])}
 
 # TARGET
-- Target Role Interest: {intake.target_role_interest or "To be determined - suggest 3-6 aligned roles"}
+- Dream Role (USER'S STATED GOAL): {intake.target_role_interest or "To be determined - suggest 3-6 aligned roles"}
 - Education Level: {intake.education_level}
 - Location: {intake.location}
 - Time Available: {intake.time_per_week} hours/week
@@ -339,8 +339,10 @@ Match this EXACT schema:
   "profile_summary": "150-500 char summary of user's background and transition goals",
 
   "target_roles": [
+    // FIRST target role MUST be the user's exact dream role: "{intake.target_role_interest}"
+    // Additional roles (2-3 more) can be related alternatives
     {{
-      "title": "Specific Job Title",
+      "title": "MUST be '{intake.target_role_interest}' for the first entry - use the user's exact dream role title",
       "why_aligned": "How user's background maps to this role based on typical requirements",
       "growth_outlook": "Industry growth trends and demand, e.g., '23% growth 2024-2034 per BLS, strong demand in market'",
       "salary_range": "USE THE EXACT PERPLEXITY SALARY DATA PROVIDED ABOVE. If not available, provide typical range like '$95,000 - $135,000 for {intake.location} market'",
@@ -668,6 +670,7 @@ Match this EXACT schema:
 }}
 
 # CRITICAL REQUIREMENTS
+0. **RESPECT THE USER'S DREAM ROLE**: The FIRST entry in target_roles MUST use the user's exact stated dream role title from the "Dream Role" field above. Do NOT substitute, modify, or replace it with a different role. Build the entire plan around achieving THIS specific role. Additional target_roles can suggest alternatives.
 1. **COMPLETE ALL FIELDS**: Provide comprehensive career guidance based on your knowledge of industry practices. Use placeholders for URLs if needed.
 2. **Study Materials**: Each certification should have 2-3 study materials with descriptions (50-150 words each)
 3. **Tech Stack Details**: Each project should have 3-5 key technologies, each with a brief "why_this_tech" explanation
@@ -719,7 +722,8 @@ CRITICAL REQUIREMENTS:
 YOU MUST PROVIDE:
 
 **Target Roles (1-3 roles):**
-- Specific job titles aligned with user's experience and interests
+- The FIRST target role MUST be the user's exact stated dream role (from "Dream Role" field) - never override or change it
+- Additional roles (2-3) can be related alternatives or stepping stones
 - Salary ranges based on current market data
 - Growth outlook and demand trends
 - Required qualifications and experience
