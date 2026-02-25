@@ -186,6 +186,10 @@ class UpdateTailoredResumeRequest(BaseModel):
     experience: List[dict] = None
     alignment_statement: str = None
 
+class BulkDeleteRequest(BaseModel):
+    """Request model for bulk deleting tailored resumes"""
+    ids: List[int]
+
 @router.post("/tailor")
 @limiter.limit("10/hour")  # Rate limit: 10 tailoring operations per hour per IP
 async def tailor_resume(
@@ -803,6 +807,80 @@ async def download_tailored_resume(
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         filename=filename
     )
+
+
+@router.delete("/tailored/{tailored_id}")
+async def delete_tailored_resume(
+    tailored_id: int,
+    auth_result: tuple = Depends(get_current_user_unified),
+    db: AsyncSession = Depends(get_db)
+):
+    """Soft-delete a tailored resume (requires ownership)"""
+    user, user_id = auth_result
+
+    result = await db.execute(
+        select(TailoredResume).where(TailoredResume.id == tailored_id)
+    )
+    tailored = result.scalar_one_or_none()
+
+    if not tailored:
+        raise HTTPException(status_code=404, detail="Tailored resume not found")
+
+    if tailored.is_deleted:
+        raise HTTPException(status_code=404, detail="Tailored resume already deleted")
+
+    if not check_ownership(tailored.session_user_id, user_id):
+        raise HTTPException(status_code=403, detail="Access denied: You don't own this tailored resume")
+
+    tailored.is_deleted = True
+    tailored.deleted_at = datetime.utcnow()
+    tailored.deleted_by = user_id
+    db.add(tailored)
+    await db.commit()
+
+    return {"success": True, "message": "Tailored resume deleted"}
+
+
+@router.post("/tailored/bulk-delete")
+async def bulk_delete_tailored_resumes(
+    bulk_request: BulkDeleteRequest,
+    auth_result: tuple = Depends(get_current_user_unified),
+    db: AsyncSession = Depends(get_db)
+):
+    """Soft-delete multiple tailored resumes (requires ownership of each)"""
+    user, user_id = auth_result
+
+    if not bulk_request.ids:
+        raise HTTPException(status_code=400, detail="No IDs provided")
+
+    if len(bulk_request.ids) > 100:
+        raise HTTPException(status_code=400, detail="Maximum 100 IDs per request")
+
+    result = await db.execute(
+        select(TailoredResume).where(
+            TailoredResume.id.in_(bulk_request.ids),
+            TailoredResume.is_deleted == False,
+            ownership_filter(TailoredResume.session_user_id, user_id)
+        )
+    )
+    resumes = result.scalars().all()
+
+    now = datetime.utcnow()
+    deleted_count = 0
+    for resume in resumes:
+        resume.is_deleted = True
+        resume.deleted_at = now
+        resume.deleted_by = user_id
+        db.add(resume)
+        deleted_count += 1
+
+    await db.commit()
+
+    return {
+        "success": True,
+        "deleted_count": deleted_count,
+        "requested_count": len(bulk_request.ids)
+    }
 
 
 @router.post("/tailor/batch")
