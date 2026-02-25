@@ -599,7 +599,7 @@ async def get_tailored_resume(
         raise HTTPException(status_code=403, detail="Access denied: You don't own this tailored resume")
 
     # Auto-migrate: update old user_ records to current supa_ ID
-    if tailored.session_user_id != user_id and tailored.session_user_id.startswith('user_') and user_id.startswith('supa_'):
+    if tailored.session_user_id != user_id and user_id.startswith('supa_') and (tailored.session_user_id.startswith('user_') or user_id == f"supa_{tailored.session_user_id}"):
         tailored.session_user_id = user_id
         db.add(tailored)
         await db.commit()
@@ -671,7 +671,7 @@ async def update_tailored_resume(
         raise HTTPException(status_code=403, detail="Access denied: You don't own this tailored resume")
 
     # Auto-migrate: update old user_ records to current supa_ ID
-    if tailored.session_user_id != user_id and tailored.session_user_id.startswith('user_') and user_id.startswith('supa_'):
+    if tailored.session_user_id != user_id and user_id.startswith('supa_') and (tailored.session_user_id.startswith('user_') or user_id == f"supa_{tailored.session_user_id}"):
         tailored.session_user_id = user_id
 
     # Update fields if provided
@@ -722,10 +722,10 @@ async def list_tailored_resumes(
     )
     rows = result.all()
 
-    # Auto-migrate: update any old user_ records to current supa_ ID
+    # Auto-migrate: update any old user_ or raw UUID records to current supa_ ID
     if user_id.startswith('supa_'):
         for tr, job in rows:
-            if tr.session_user_id != user_id and tr.session_user_id.startswith('user_'):
+            if tr.session_user_id != user_id:
                 tr.session_user_id = user_id
                 db.add(tr)
         await db.commit()
@@ -775,7 +775,7 @@ async def download_tailored_resume(
         raise HTTPException(status_code=403, detail="Access denied: You don't own this tailored resume")
 
     # Auto-migrate: update old user_ records to current supa_ ID
-    if tailored.session_user_id != user_id and tailored.session_user_id.startswith('user_') and user_id.startswith('supa_'):
+    if tailored.session_user_id != user_id and user_id.startswith('supa_') and (tailored.session_user_id.startswith('user_') or user_id == f"supa_{tailored.session_user_id}"):
         tailored.session_user_id = user_id
         db.add(tailored)
         await db.commit()

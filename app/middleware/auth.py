@@ -179,11 +179,15 @@ def check_ownership(record_user_id: str, request_user_id: str) -> bool:
     Handles migration from anonymous user_ IDs to supa_ IDs:
     if the record has a user_ ID and the request comes from supa_,
     we treat it as a match (same person who signed up).
+    Also handles raw UUID records (no prefix) matching supa_ users.
     """
     if record_user_id == request_user_id:
         return True
     # Allow supa_ users to claim their old user_ records
     if record_user_id and record_user_id.startswith('user_') and request_user_id.startswith('supa_'):
+        return True
+    # Allow supa_ users to claim records stored with raw UUID (no prefix)
+    if record_user_id and request_user_id.startswith('supa_') and request_user_id == f"supa_{record_user_id}":
         return True
     return False
 
@@ -191,12 +195,13 @@ def check_ownership(record_user_id: str, request_user_id: str) -> bool:
 def ownership_filter(column, user_id: str):
     """
     Build a SQLAlchemy filter for ownership that handles user_ → supa_ migration.
-    For supa_ users, matches both the supa_ ID and any user_ IDs.
+    For supa_ users, matches the supa_ ID, any user_ IDs, and raw UUID records.
     Use in .where() clauses for list queries.
     """
     from sqlalchemy import or_
     if user_id.startswith('supa_'):
-        return or_(column == user_id, column.like('user_%'))
+        raw_uuid = user_id[5:]  # Strip 'supa_' prefix to get raw UUID
+        return or_(column == user_id, column.like('user_%'), column == raw_uuid)
     return column == user_id
 
 
