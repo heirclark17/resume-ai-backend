@@ -185,6 +185,7 @@ async def get_saved_jobs(
                 "title": job.title,
                 "location": job.location or "",
                 "salary": job.salary or "",
+                "description": job.description or "",
                 "created_at": job.created_at.isoformat() if job.created_at else None,
             }
             for job in jobs
