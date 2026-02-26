@@ -50,29 +50,35 @@ class CareerPathResearchService:
 
         context_block = " ".join(context_parts)
 
-        query = f"""Find the TOP professional certifications for someone transitioning to these roles: {roles_str}.
+        query = f"""List ALL professional certifications for transitioning from {current_role or 'current role'} in {current_industry or 'current industry'} to these roles: {roles_str}.
 
 {context_block}
 
+Organize by level:
+FOUNDATION/ENTRY LEVEL (start here):
+INTERMEDIATE LEVEL (after foundation):
+ADVANCED LEVEL (career accelerators):
+
 For EACH certification, provide:
-1. Full official name
-2. Certification level (foundation/intermediate/advanced)
-3. Prerequisites if any
-4. Est. study time in weeks for someone with {current_experience} years experience
-5. Current cost range in USD
-6. OFFICIAL certification website URL (not blog posts)
-7. What career doors it opens
-8. Alternative certifications that serve similar purpose
+1. EXACT official certification name (e.g., "CompTIA Security+", "AWS Solutions Architect Associate")
+2. Certifying body (e.g., CompTIA, AWS, ISC2, Microsoft)
+3. Level: foundation, intermediate, or advanced
+4. Prerequisites (what you need before attempting)
+5. Est. study time in weeks for someone with {current_experience} years experience
+6. Current exam cost in USD (exact, not range)
+7. OFFICIAL certification page URL (from the certifying body's website)
+8. What career doors it opens (specific roles and salary impact)
+9. Alternative certifications that serve similar purpose
+10. Recommended study order: which cert should come BEFORE and AFTER this one
 
 Focus on certifications that are:
 - Widely recognized in the industry
-- Actually required or strongly preferred in job postings
-- Worth the investment for CAREER CHANGERS (not generic "top 10" lists)
-- Have clear ROI
+- Actually required or strongly preferred in job postings for {roles_str}
+- Worth the investment for CAREER CHANGERS
+- Have clear ROI and salary uplift data
 
 Include budget-friendly options if budget is '{budget}'.
-
-Format as a structured list with clear sections for each certification.
+Include at least 4-6 certifications covering the full beginner-to-expert journey.
 Include specific URLs only from official certification bodies."""
 
         try:
@@ -121,7 +127,7 @@ Include specific URLs only from official certification bodies."""
 
         context_block = " ".join(context_parts)
 
-        query = f"""Find education and training options for someone transitioning to: {roles_str}.
+        query = f"""Find specific education programs for career changers moving to: {roles_str}.
 
 {context_block}
 
@@ -130,26 +136,29 @@ Location: {location}
 Budget: {budget}
 Format preference: {format_preference}
 
+Find 4-5 options across these price points:
+FREE OPTIONS: MOOCs, YouTube channels, free bootcamp prep
+MID-RANGE ($100-$2,000): Coursera specializations, Udemy courses, edX certificates
+PREMIUM ($5,000+): Bootcamps, degree programs, immersive training
+
 For EACH option, provide:
-1. Program name and institution
+1. EXACT program name and institution (e.g., "Google Cybersecurity Certificate on Coursera")
 2. Type: degree/bootcamp/self-study/online-course
-3. Duration (weeks or months)
-4. Total cost range
+3. Duration (exact weeks or months)
+4. Total cost (exact price, not range)
 5. Format: online/in-person/hybrid
-6. OFFICIAL program website URL
+6. OFFICIAL enrollment/program URL (direct link to the program page)
 7. Pros (3-5 specific benefits)
 8. Cons (3-5 honest drawbacks)
-9. Admission requirements
-10. Job placement rate or outcomes if available
+9. Who it's best for (career changers, experienced pros, complete beginners)
+10. Job placement rate or employment outcomes if available
+11. Time commitment per week
+12. Financing options (payment plans, scholarships, ISAs)
 
-Include a MIX of:
-- Traditional degrees (if gaps exist)
-- Bootcamps (intensive, job-focused)
-- Online platforms (Coursera, edX, Udemy, Pluralsight)
-- Self-study paths (books, free resources)
-
-Focus on options that make sense given current education and budget.
-Include ONLY options with proven outcomes or strong reviews.
+Include ONLY programs with:
+- Verified enrollment links (Coursera, Udemy, edX, university websites)
+- Proven outcomes or strong reviews
+- Current availability (not discontinued programs)
 Provide OFFICIAL URLs only (not affiliate links or blog posts)."""
 
         try:
@@ -238,144 +247,50 @@ Prioritize events that help with:
             print(f"✗ Error researching events: {e}")
             return []
 
+    def _extract_raw_research(self, content: str, citations: List[Dict]) -> Dict[str, Any]:
+        """
+        Return raw Perplexity content + citation URLs for GPT synthesis.
+        Instead of parsing into fake objects, we pass the full research text
+        to the synthesis prompt so GPT can extract real names, costs, and URLs.
+        """
+        citation_urls = [c.get("url", "") for c in citations if c.get("url")]
+        return {
+            "raw_content": content,
+            "citation_urls": citation_urls
+        }
+
     def _parse_certifications(self, content: str, citations: List[Dict]) -> List[Dict[str, Any]]:
         """
-        Parse certification data from Perplexity response
-
-        Extracts structured certification info and maps to official URLs
+        Return raw certification research for GPT synthesis.
+        The AI model is far better at extracting structured data from prose
+        than regex-based parsing which was producing hardcoded placeholders.
         """
-        certs = []
-
-        # Extract URLs from citations for validation
-        citation_urls = {c.get("url", "") for c in citations if c.get("url")}
-
-        # Simple parser - looks for certification sections
-        # In production, this would use more sophisticated NLP
-        sections = content.split("\n\n")
-
-        for section in sections:
-            # Look for certification indicators
-            if any(keyword in section.lower() for keyword in ["certification", "certificate", "certified", "credential"]):
-                # Try to extract official links from this section
-                urls_in_section = re.findall(r'https?://[^\s<>"]+', section)
-                official_urls = [url for url in urls_in_section if url in citation_urls]
-
-                # Basic certification object
-                # In production, would parse name, cost, etc. from content
-                if official_urls:
-                    certs.append({
-                        "name": "Certification (parsed from research)",
-                        "level": "intermediate",
-                        "prerequisites": [],
-                        "est_study_weeks": 12,
-                        "est_cost_range": "$300-$600",
-                        "official_links": official_urls[:2],  # Limit to 2 URLs per cert
-                        "what_it_unlocks": "Career advancement",
-                        "alternatives": [],
-                        "source_citations": official_urls[:2]
-                    })
-
-        # If no certs found, create fallback with citation URLs
-        if not certs and citation_urls:
-            certs.append({
-                "name": "Industry-Recognized Certification",
-                "level": "intermediate",
-                "prerequisites": [],
-                "est_study_weeks": 12,
-                "est_cost_range": "$300-$600",
-                "official_links": list(citation_urls)[:3],
-                "what_it_unlocks": "Professional credibility and career advancement",
-                "alternatives": [],
-                "source_citations": list(citation_urls)[:3]
-            })
-
-        return certs[:8]  # Limit to 8 certifications
+        raw = self._extract_raw_research(content, citations)
+        # Return a single-item list with raw content for backward compat
+        # The synthesis prompt will use raw_certification_content instead
+        return [{
+            "raw_content": raw["raw_content"],
+            "citation_urls": raw["citation_urls"],
+            "source_citations": raw["citation_urls"][:5]
+        }]
 
     def _parse_education_options(self, content: str, citations: List[Dict]) -> List[Dict[str, Any]]:
-        """Parse education options from research"""
-
-        options = []
-        citation_urls = {c.get("url", "") for c in citations if c.get("url")}
-
-        # Simple parser - looks for program sections
-        sections = content.split("\n\n")
-
-        for section in sections:
-            if any(keyword in section.lower() for keyword in ["bootcamp", "course", "degree", "program", "training"]):
-                urls_in_section = re.findall(r'https?://[^\s<>"]+', section)
-                official_urls = [url for url in urls_in_section if url in citation_urls]
-
-                if official_urls:
-                    options.append({
-                        "type": "bootcamp",
-                        "name": "Career Transition Program",
-                        "duration": "12-16 weeks",
-                        "cost_range": "$10,000-$15,000",
-                        "format": "online",
-                        "official_link": official_urls[0],
-                        "pros": ["Intensive training", "Job placement support", "Portfolio development"],
-                        "cons": ["High cost", "Time commitment", "Fast-paced"],
-                        "source_citations": official_urls[:2]
-                    })
-
-        # Fallback if no options found
-        if not options and citation_urls:
-            options.append({
-                "type": "online-course",
-                "name": "Self-Paced Learning Path",
-                "duration": "3-6 months",
-                "cost_range": "$0-$500",
-                "format": "online",
-                "official_link": list(citation_urls)[0] if citation_urls else None,
-                "pros": ["Flexible schedule", "Affordable", "Learn at own pace"],
-                "cons": ["Requires self-discipline", "No structured support", "No credential"],
-                "source_citations": list(citation_urls)[:2]
-            })
-
-        return options[:5]  # Limit to 5 options
+        """Return raw education research for GPT synthesis."""
+        raw = self._extract_raw_research(content, citations)
+        return [{
+            "raw_content": raw["raw_content"],
+            "citation_urls": raw["citation_urls"],
+            "source_citations": raw["citation_urls"][:5]
+        }]
 
     def _parse_events(self, content: str, citations: List[Dict]) -> List[Dict[str, Any]]:
-        """Parse events from research"""
-
-        events = []
-        citation_urls = {c.get("url", "") for c in citations if c.get("url")}
-
-        sections = content.split("\n\n")
-
-        for section in sections:
-            if any(keyword in section.lower() for keyword in ["conference", "meetup", "event", "workshop", "summit"]):
-                urls_in_section = re.findall(r'https?://[^\s<>"]+', section)
-                registration_urls = [url for url in urls_in_section if url in citation_urls]
-
-                if registration_urls:
-                    events.append({
-                        "name": "Industry Event (from research)",
-                        "type": "conference",
-                        "date_or_season": "Check website for dates",
-                        "location": "Various",
-                        "price_range": "$0-$500",
-                        "beginner_friendly": True,
-                        "why_attend": "Networking and learning opportunities",
-                        "registration_link": registration_urls[0],
-                        "source_citations": registration_urls[:2]
-                    })
-
-        # Fallback
-        if not events and citation_urls:
-            for url in list(citation_urls)[:5]:
-                events.append({
-                    "name": "Professional Development Event",
-                    "type": "virtual",
-                    "date_or_season": "Ongoing",
-                    "location": "Online",
-                    "price_range": "Free-$100",
-                    "beginner_friendly": True,
-                    "why_attend": "Stay current with industry trends",
-                    "registration_link": url,
-                    "source_citations": [url]
-                })
-
-        return events[:15]  # Limit to 15 events
+        """Return raw events research for GPT synthesis."""
+        raw = self._extract_raw_research(content, citations)
+        return [{
+            "raw_content": raw["raw_content"],
+            "citation_urls": raw["citation_urls"],
+            "source_citations": raw["citation_urls"][:5]
+        }]
 
     async def research_all(
         self,
@@ -429,17 +344,36 @@ Prioritize events that help with:
         all_sources = set()
         for cert in certs:
             all_sources.update(cert.get("source_citations", []))
+            all_sources.update(cert.get("citation_urls", []))
         for option in edu_options:
             all_sources.update(option.get("source_citations", []))
+            all_sources.update(option.get("citation_urls", []))
         for event in events:
             all_sources.update(event.get("source_citations", []))
+            all_sources.update(event.get("citation_urls", []))
 
-        print(f"✓ Research complete: {len(certs)} certs, {len(edu_options)} education options, {len(events)} events")
+        # Extract raw content for GPT synthesis prompt injection
+        raw_cert_content = certs[0].get("raw_content", "") if certs else ""
+        raw_edu_content = edu_options[0].get("raw_content", "") if edu_options else ""
+        raw_events_content = events[0].get("raw_content", "") if events else ""
+
+        cert_citation_urls = certs[0].get("citation_urls", []) if certs else []
+        edu_citation_urls = edu_options[0].get("citation_urls", []) if edu_options else []
+        events_citation_urls = events[0].get("citation_urls", []) if events else []
+
+        print(f"✓ Research complete: cert content={len(raw_cert_content)} chars, edu content={len(raw_edu_content)} chars, events content={len(raw_events_content)} chars")
         print(f"✓ Total sources: {len(all_sources)}")
 
         return {
             "certifications": certs,
             "education_options": edu_options,
             "events": events,
-            "research_sources": list(all_sources)
+            "research_sources": list(all_sources),
+            # Raw content for direct injection into synthesis prompt
+            "raw_certification_content": raw_cert_content,
+            "raw_education_content": raw_edu_content,
+            "raw_events_content": raw_events_content,
+            "cert_citation_urls": cert_citation_urls,
+            "edu_citation_urls": edu_citation_urls,
+            "events_citation_urls": events_citation_urls,
         }

@@ -411,6 +411,13 @@ IMPORTANT: Since the user is targeting THIS specific job:
         events = research_data.get("events", [])
         sources = research_data.get("research_sources", [])
 
+        # Extract raw Perplexity research content for direct prompt injection
+        raw_cert_content = research_data.get("raw_certification_content", "")
+        raw_edu_content = research_data.get("raw_education_content", "")
+        raw_events_content = research_data.get("raw_events_content", "")
+        cert_citation_urls = research_data.get("cert_citation_urls", [])
+        edu_citation_urls = research_data.get("edu_citation_urls", [])
+
         # Build enhanced user profile
         existing_certs_str = ", ".join(intake.existing_certifications) if intake.existing_certifications else "None"
         tools_str = ", ".join(intake.tools[:10]) if intake.tools else "Not specified"
@@ -499,14 +506,20 @@ User has very limited budget. Prioritize:
 - Motivation: {', '.join(intake.transition_motivation)}
 
 {self._build_job_posting_section(job_details)}# WEB-GROUNDED RESEARCH DATA (USE THESE VERIFIED FACTS)
-## Certifications Found ({len(certs)} options):
-{json.dumps(certs[:5], indent=2) if certs else "None found"}
+## CERTIFICATION RESEARCH (from Perplexity web search):
+{raw_cert_content if raw_cert_content else "No certification research available. Use your knowledge of industry certifications."}
 
-## Education Options Found ({len(edu_options)} options):
-{json.dumps(edu_options[:3], indent=2) if edu_options else "None found"}
+Source URLs for certifications: {json.dumps(cert_citation_urls[:10]) if cert_citation_urls else "[]"}
 
-## Events Found ({len(events)} options):
-{json.dumps(events[:5], indent=2) if events else "None found"}
+## EDUCATION RESEARCH (from Perplexity web search):
+{raw_edu_content if raw_edu_content else "No education research available. Use your knowledge of education programs."}
+
+Source URLs for education: {json.dumps(edu_citation_urls[:10]) if edu_citation_urls else "[]"}
+
+## EVENTS RESEARCH (from Perplexity web search):
+{raw_events_content if raw_events_content else "No events research available. Use your knowledge of industry events."}
+
+Source URLs for events: {json.dumps(research_data.get("events_citation_urls", [])[:10]) if research_data.get("events_citation_urls") else "[]"}
 
 ## Source Citations ({len(sources)} sources):
 {json.dumps(sources[:10], indent=2) if sources else "None"}
@@ -613,18 +626,25 @@ Match this EXACT schema:
     "skill_development_strategy": "Comprehensive strategy (200+ chars minimum) for how the user should approach building all these skills in parallel. Include prioritization advice, time allocation recommendations, how to balance skill development with current responsibilities, and milestones to track progress. Reference the user's stated learning preferences and available time per week."
   }},
 
+  "certification_journey_summary": "2-4 sentence overview of the complete certification journey from beginner to expert. E.g., 'Start with CompTIA Security+ to build foundational knowledge, then advance to AWS Solutions Architect for cloud expertise. Complete with CISSP to unlock senior leadership roles. This 12-18 month journey will qualify you for 90%+ of job postings in your target roles.'",
+
   "certification_path": [
-    Recommend relevant certifications for the target role.
-    Sequence logically (foundation -> intermediate -> advanced).
+    CRITICAL: Generate 4-6 certifications as a SEQUENTIAL PROGRESSION (certification journey).
+    Use the CERTIFICATION RESEARCH above to extract REAL cert names, costs, and official URLs.
+    Order: foundation (start here) → intermediate → advanced (career accelerators).
 
     For EACH certification, provide:
     {{
-      "name": "EXACT certification name from official body",
+      "name": "EXACT certification name from official body (from research above)",
       "certifying_body": "e.g., CompTIA, AWS, Microsoft, ISC2, Google, etc.",
       "level": "foundation|intermediate|advanced",
+      "journey_order": 1,  // Sequential order in the journey (1 = first cert to pursue, 2 = second, etc.)
+      "tier": "foundation|intermediate|advanced",  // Tier grouping for UI display
+      "unlocks_next": "Name of the NEXT cert in the journey (null for the last cert)",
+      "beginner_entry_point": true,  // Set to true on EXACTLY ONE cert (the starting point)
       "prerequisites": ["List any prerequisite certs or experience"],
       "est_study_weeks": 12,
-      "est_cost_range": "$XXX-$YYY (search official pricing)",
+      "est_cost_range": "$XXX-$YYY (from research data or official pricing)",
       "exam_details": {{
         "exam_code": "e.g., SAA-C03, 200-301, AZ-104",
         "passing_score": "e.g., 720/1000, 70%, 825/900",
@@ -663,25 +683,36 @@ Match this EXACT schema:
     }}
   ],
 
+  "education_recommendation": "2-3 sentence recommendation of the BEST education option for this user based on their budget, timeline, and learning style. E.g., 'Given your $2K budget and preference for online learning, the Google Cybersecurity Certificate on Coursera is your best starting point at $49/month. For deeper expertise, supplement with TryHackMe labs ($14/month) for hands-on practice.'",
+
   "education_options": [
-    USE VERIFIED EDUCATION OPTIONS FROM RESEARCH.
-    Include degrees, bootcamps, online courses, self-study.
+    CRITICAL: Generate 4-5 education options across DIFFERENT PRICE POINTS.
+    Use the EDUCATION RESEARCH above to extract REAL program names, costs, and enrollment URLs.
+    Must include: 1 FREE option, 1-2 MID-RANGE ($100-$2,000), 1-2 PREMIUM ($5,000+).
+
     {{
       "type": "degree|bootcamp|self-study|online-course",
-      "name": "Program name",
+      "name": "EXACT program name from research (e.g., 'Google Cybersecurity Certificate on Coursera')",
       "duration": "X weeks/months",
-      "cost_range": "$X-$Y",
+      "cost_range": "$X-$Y (exact price from research)",
       "format": "online|in-person|hybrid",
-      "official_link": "VERIFIED URL",
-      "pros": ["pro1", "pro2", "pro3"],
+      "official_link": "VERIFIED enrollment URL from research data",
+      "description": "100-300 word description of what the program covers, learning outcomes, and why it's valuable for career changers",
+      "who_its_best_for": "Describe the ideal student for this program (e.g., 'Complete beginners with no tech background who want structured learning')",
+      "financing_options": "Payment plans, scholarships, ISAs, employer reimbursement, financial aid options",
+      "employment_outcomes": "Job placement rate, average salary after completion, employer partnerships if available",
+      "time_commitment_weekly": "X hours per week",
+      "comparison_rank": 1,  // 1 = best overall fit for this user, 2 = second best, etc.
+      "pros": ["pro1", "pro2", "pro3", "pro4"],
       "cons": ["con1", "con2", "con3"],
-      "source_citations": ["url"]
+      "source_citations": ["url from research"]
     }}
   ],
 
   "experience_plan": [
-    Portfolio projects, volunteer work, labs, side projects with DETAILED TECH STACKS.
-    Minimum 1, maximum 10. Provide 2-5 high-impact projects.
+    CRITICAL: Generate EXACTLY 5 projects as CHOICES for the user to pick from.
+    Distribution: 2 beginner projects, 2 intermediate projects, 1 advanced project.
+    Each project is a standalone option — user picks 1-2 to build.
 
     For EACH project, provide EXTREME technical detail:
     {{
@@ -874,9 +905,11 @@ Match this EXACT schema:
    - target_roles: At least 1
    - skills_analysis.already_have: At least 1
    - skills_analysis.need_to_build: At least 1
-   - certification_path: At least 1 (with source_citations having at least 1 URL)
-   - education_options: At least 1 (degree programs, bootcamps, or self-study paths)
-   - experience_plan: At least 1
+   - certification_path: At least 4 certifications with journey_order, tier, unlocks_next, beginner_entry_point fields
+   - certification_journey_summary: Required (2-4 sentence overview of the journey)
+   - education_options: At least 4 options across price points with description, who_its_best_for, comparison_rank, official_link
+   - education_recommendation: Required (2-3 sentence recommendation)
+   - experience_plan: EXACTLY 5 projects (2 beginner, 2 intermediate, 1 advanced)
    - events: At least 1 (conferences, meetups, or networking opportunities)
    - timeline.twelve_week_plan: EXACTLY 12 weekly tasks (one per week, Week 1 through Week 12)
    - timeline.six_month_plan: EXACTLY 6 monthly phases (Month 1 through Month 6)
@@ -952,9 +985,9 @@ You MUST produce the most comprehensive, granular, actionable career plan possib
 - **skills_guidance.soft_skills**: 4-6 skills, each with 150+ word how_to_improve including specific exercises, books by title, courses by name.
 - **skills_guidance.hard_skills**: 5-8 skills, each with 150+ word how_to_improve referencing exact tools, platforms, tutorials, and hands-on practice.
 - **skill_development_strategy**: 300+ words covering week-by-week prioritization, parallel learning tracks, and measurement milestones.
-- **certification_path**: 2-4 certifications in logical sequence. EACH must have 3-5 study materials with 50-150 word descriptions, AND a week-by-week study plan covering ALL study weeks.
-- **education_options**: 3-5 options spanning bootcamps, online courses, self-study, and formal programs. Include specific program names, not generic categories.
-- **experience_plan**: 3-5 projects with FULL technical architecture breakdowns, 8-15 technologies each with why_this_tech explanations, detailed step-by-step guides (8-12 steps), and interview talking points.
+- **certification_path**: 4-6 certifications as a SEQUENTIAL JOURNEY (foundation → intermediate → advanced). Set journey_order (1-N), tier labels, unlocks_next chain, and beginner_entry_point=true on exactly ONE cert. Each cert must have 3-5 study materials with descriptions AND a week-by-week study plan. Generate certification_journey_summary.
+- **education_options**: 4-5 options across price points: 1 FREE, 1-2 MID-RANGE ($100-$2K), 1-2 PREMIUM ($5K+). EVERY option MUST have official_link from research data. Set comparison_rank (1=best fit). Include description, who_its_best_for, financing_options. Generate education_recommendation.
+- **experience_plan**: EXACTLY 5 projects: 2 beginner, 2 intermediate, 1 advanced. Each with FULL technical architecture breakdowns, 8-15 technologies each with why_this_tech explanations, detailed step-by-step guides (8-12 WEEK-LEVEL tasks with deliverables), and interview talking points.
 - **events**: 8-15 events mixing conferences, meetups, virtual events, and career fairs. Each with 100+ word why_attend and specific networking strategies.
 - **timeline.twelve_week_plan**: 12 detailed weeks with 3-5 specific tasks per week, clear milestones, and checkpoint assessments.
 - **timeline.six_month_plan**: 6 monthly phases with 3-4 goals and 2-3 deliverables per month.
@@ -1007,9 +1040,11 @@ You MUST produce the most comprehensive, granular, actionable career plan possib
 - skills_analysis.need_to_build: 4+
 - skills_guidance.soft_skills: 4+
 - skills_guidance.hard_skills: 5+
-- certification_path: 2+ with study materials AND week-by-week study plans
-- education_options: 3+
-- experience_plan: 3+
+- certification_path: 4+ with journey_order, tier, unlocks_next, beginner_entry_point, study materials, AND week-by-week study plans
+- certification_journey_summary: required (2-4 sentence overview)
+- education_options: 4+ across price points (free, mid-range, premium) with description, who_its_best_for, comparison_rank
+- education_recommendation: required (2-3 sentence recommendation)
+- experience_plan: EXACTLY 5 projects (2 beginner, 2 intermediate, 1 advanced)
 - events: 8+
 - timeline.twelve_week_plan: EXACTLY 12 weekly entries with 3-5 tasks each
 - timeline.six_month_plan: EXACTLY 6 monthly entries with 3+ goals each

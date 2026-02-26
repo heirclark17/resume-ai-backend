@@ -160,6 +160,11 @@ class Certification(BaseModel):
     study_materials: List[StudyMaterial] = Field(..., min_items=1, description="Detailed study resources in recommended order")
     study_plan_weeks: List[Dict[str, str]] = Field(default_factory=list, description="Week-by-week study plan")
     source_citations: List[str] = Field(..., min_items=1)
+    # Journey fields (Optional for backward compat)
+    journey_order: Optional[int] = Field(None, ge=1, le=20, description="Sequential order in the certification journey")
+    tier: Optional[str] = Field(None, description="foundation/intermediate/advanced tier grouping")
+    unlocks_next: Optional[str] = Field(None, description="Name of the cert to pursue after this one")
+    beginner_entry_point: Optional[bool] = Field(None, description="True if this is the recommended starting cert")
 
 
 # ========== Education Schemas ==========
@@ -174,6 +179,13 @@ class EducationOption(BaseModel):
     pros: List[str] = Field(..., min_items=1, max_items=5)
     cons: List[str] = Field(..., min_items=1, max_items=5)
     source_citations: List[str] = Field(default_factory=list)
+    # Enhanced detail fields (Optional for backward compat)
+    description: Optional[str] = Field(None, max_length=800, description="Program overview")
+    who_its_best_for: Optional[str] = Field(None, description="Ideal learner profile")
+    financing_options: Optional[str] = Field(None, description="Payment plans, scholarships, ISAs")
+    employment_outcomes: Optional[str] = Field(None, description="Job placement rates, salary data")
+    time_commitment_weekly: Optional[str] = Field(None, description="Hours per week required")
+    comparison_rank: Optional[int] = Field(None, ge=1, le=10, description="1 = best fit for this user")
 
 
 # ========== Experience Builder Schemas ==========
@@ -313,13 +325,17 @@ class CareerPlan(BaseModel):
     skills_guidance: SkillsGuidance
     certification_path: List[Certification] = Field(..., min_items=1, max_items=8)
     education_options: List[EducationOption] = Field(..., min_items=1, max_items=5)
-    experience_plan: List[ExperienceProject] = Field(..., min_items=1, max_items=10)  # Reduced from 2 to 1
-    events: List[Event] = Field(..., min_items=1, max_items=15)  # Reduced from 3 to 1
+    experience_plan: List[ExperienceProject] = Field(..., min_items=1, max_items=10)
+    events: List[Event] = Field(..., min_items=1, max_items=15)
     timeline: Timeline
     resume_assets: ResumeAssets
 
     # Source tracking
-    research_sources: List[str] = Field(..., min_items=1, description="All web-grounded sources")  # Reduced from 3 to 1
+    research_sources: List[str] = Field(..., min_items=1, description="All web-grounded sources")
+
+    # Top-level summary fields (Optional for backward compat)
+    certification_journey_summary: Optional[str] = Field(None, description="Overview of the cert progression path")
+    education_recommendation: Optional[str] = Field(None, description="Top pick and rationale for education")
 
 
 # ========== API Request/Response Schemas ==========
