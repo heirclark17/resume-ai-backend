@@ -136,8 +136,8 @@ async def generate_cover_letter(
         if not job_description and not data.job_url:
             raise HTTPException(status_code=400, detail="Either job_description or job_url must be provided")
 
-        # Extract job description from URL if provided
-        if data.job_url:
+        # Extract job description from URL if provided and we don't already have one
+        if data.job_url and not job_description:
             logger.info(f"Extracting job from URL: {data.job_url}")
             job_description = await extract_job_from_url(data.job_url)
 
