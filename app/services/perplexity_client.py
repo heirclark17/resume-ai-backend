@@ -386,8 +386,7 @@ Focus on data from 2024-2025. Include citations from sources like Glassdoor, Lev
                     }
                 ],
                 temperature=0.2,  # Low temperature for factual accuracy
-                max_tokens=2000,
-                return_citations=True  # Get source URLs
+                max_tokens=2000
             )
 
             raw_content = response.choices[0].message.content
