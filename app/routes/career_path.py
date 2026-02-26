@@ -98,6 +98,18 @@ async def generate_career_plan(
     print(f"📝 Generating career plan for {request.intake.current_role_title}")
 
     try:
+        # Build intake context dict for enhanced research queries
+        intake_context = {
+            "current_role_title": request.intake.current_role_title,
+            "current_industry": request.intake.current_industry,
+            "tools": request.intake.tools,
+            "existing_certifications": getattr(request.intake, 'existing_certifications', []),
+            "already_started": getattr(request.intake, 'already_started', False),
+            "steps_already_taken": getattr(request.intake, 'steps_already_taken', ''),
+            "preferred_platforms": request.intake.preferred_platforms,
+            "specific_companies": request.intake.specific_companies,
+        }
+
         # Step 1: Research if not provided
         research_data = None
         skip_research = os.getenv("SKIP_RESEARCH", "false").lower() == "true"
@@ -106,7 +118,6 @@ async def generate_career_plan(
             research_data = request.research_data.dict()
         elif skip_research:
             # Skip research to avoid Railway timeout (60s limit)
-            # Synthesis will work with empty research data
             print("  ⚠ Skipping research (SKIP_RESEARCH=true)")
             research_data = {
                 "certifications": [],
@@ -120,8 +131,6 @@ async def generate_career_plan(
             if request.intake.target_role_interest:
                 target_roles = [request.intake.target_role_interest]
             else:
-                # Will be determined by AI synthesis
-                # For research, use current role + industry as hint
                 target_roles = [f"{request.intake.current_industry} Professional"]
 
             print(f"  Running research for: {', '.join(target_roles)}")
@@ -131,8 +140,9 @@ async def generate_career_plan(
                 location=request.intake.location,
                 current_experience=request.intake.years_experience,
                 current_education=request.intake.education_level,
-                budget="flexible",  # Budget field removed from intake form
-                format_preference=request.intake.in_person_vs_remote
+                budget=getattr(request.intake, 'training_budget', None) or "flexible",
+                format_preference=request.intake.in_person_vs_remote,
+                intake_context=intake_context
             )
             research_data = research_result
 
@@ -140,14 +150,19 @@ async def generate_career_plan(
         print(f"  Researching salary data with Perplexity...")
         perplexity = PerplexityClient()
         salary_insights = {}
+        current_salary = getattr(request.intake, 'current_salary_range', None)
 
-        for role in target_roles[:3]:  # Research salary for up to 3 target roles
+        for role in target_roles[:3]:
             try:
                 salary_data = perplexity.research_salary_insights(
                     job_title=role,
                     location=request.intake.location,
-                    experience_level=f"{request.intake.years_experience} years" if request.intake.years_experience else None
+                    experience_level=f"{request.intake.years_experience} years, career changer from {request.intake.current_role_title}" if request.intake.years_experience else None
                 )
+                # Add career changer salary context
+                if current_salary and isinstance(salary_data, dict):
+                    salary_data["current_salary"] = current_salary
+                    salary_data["career_changer_note"] = f"Candidate currently earns {current_salary}. First-role salary as career changer may differ from established median."
                 salary_insights[role] = salary_data
                 print(f"  ✓ Salary research for {role}: {salary_data.get('salary_range', 'N/A')}")
             except Exception as e:
@@ -695,14 +710,27 @@ async def process_career_plan_job(job_id: str, request: GenerateRequest, user_id
                   message=f"Researching certifications, education, and events for {', '.join(target_roles)}"
               )
 
+              # Build intake context for enhanced research queries
+              intake_context = {
+                  "current_role_title": request.intake.current_role_title,
+                  "current_industry": request.intake.current_industry,
+                  "tools": request.intake.tools,
+                  "existing_certifications": getattr(request.intake, 'existing_certifications', []),
+                  "already_started": getattr(request.intake, 'already_started', False),
+                  "steps_already_taken": getattr(request.intake, 'steps_already_taken', ''),
+                  "preferred_platforms": request.intake.preferred_platforms,
+                  "specific_companies": request.intake.specific_companies,
+              }
+
               research_service = CareerPathResearchService()
               research_result = await research_service.research_all(
                   target_roles=target_roles,
                   location=request.intake.location,
                   current_experience=request.intake.years_experience,
                   current_education=request.intake.education_level,
-                  budget="flexible",
-                  format_preference=request.intake.in_person_vs_remote
+                  budget=getattr(request.intake, 'training_budget', None) or "flexible",
+                  format_preference=request.intake.in_person_vs_remote,
+                  intake_context=intake_context
               )
               research_data = research_result
 
@@ -717,18 +745,23 @@ async def process_career_plan_job(job_id: str, request: GenerateRequest, user_id
           # Step 2: Synthesize plan with OpenAI
           print(f"  [Job {job_id}] Synthesizing plan with OpenAI GPT-4.1-mini...")
 
-          # Research salary data with Perplexity
+          # Research salary data with Perplexity (career changer context)
           print(f"  [Job {job_id}] Researching salary data with Perplexity...")
           perplexity = PerplexityClient()
           salary_insights = {}
+          current_salary = getattr(request.intake, 'current_salary_range', None)
 
           for role in target_roles[:3]:
               try:
                   salary_data = perplexity.research_salary_insights(
                       job_title=role,
                       location=request.intake.location,
-                      experience_level=f"{request.intake.years_experience} years" if request.intake.years_experience else None
+                      experience_level=f"{request.intake.years_experience} years, career changer from {request.intake.current_role_title}" if request.intake.years_experience else None
                   )
+                  # Add career changer salary context
+                  if current_salary and isinstance(salary_data, dict):
+                      salary_data["current_salary"] = current_salary
+                      salary_data["career_changer_note"] = f"Candidate currently earns {current_salary}. First-role salary as career changer may differ from established median."
                   salary_insights[role] = salary_data
                   print(f"  [Job {job_id}] ✓ Salary: {role} - {salary_data.get('salary_range', 'N/A')}")
               except Exception as e:

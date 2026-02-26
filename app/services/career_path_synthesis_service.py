@@ -44,6 +44,119 @@ class CareerPathSynthesisService:
             # Use GPT-4.1-mini for fast, accurate career planning with 16K output limit
             self.model = "gpt-4.1-mini"
 
+    def _compute_intake_variables(self, intake: IntakeRequest) -> Dict[str, Any]:
+        """Compute derived variables from intake for prompt engineering"""
+        # Total hours available
+        timeline_weeks = {"3months": 13, "6months": 26, "12months": 52}.get(intake.timeline, 26)
+        total_hours = timeline_weeks * intake.time_per_week
+
+        # Experience tier
+        yrs = intake.years_experience
+        if yrs <= 3:
+            experience_tier = "early-career"
+        elif yrs <= 10:
+            experience_tier = "mid-career"
+        elif yrs <= 20:
+            experience_tier = "experienced"
+        else:
+            experience_tier = "senior"
+
+        # Budget tier
+        budget = (intake.training_budget or "").lower()
+        if "employer" in budget:
+            budget_tier = "flexible"
+        elif "5k" in budget or "5K" in budget:
+            budget_tier = "comfortable"
+        elif "2k" in budget or "2K" in budget:
+            budget_tier = "moderate"
+        elif "500" in budget or not budget:
+            budget_tier = "shoestring"
+        else:
+            budget_tier = "moderate"
+
+        # Head start detection
+        has_head_start = intake.already_started and bool(intake.steps_already_taken and intake.steps_already_taken.strip())
+
+        return {
+            "total_hours": total_hours,
+            "timeline_weeks": timeline_weeks,
+            "experience_tier": experience_tier,
+            "budget_tier": budget_tier,
+            "has_head_start": has_head_start,
+        }
+
+    def _validate_plan_quality(self, plan_data: Dict[str, Any], intake: IntakeRequest, computed: Dict[str, Any]) -> None:
+        """
+        Advisory-only quality checks — logged warnings, never blocks response.
+        Checks that the AI output respects user context (dream role, hours, certs, concern, tools, head-start).
+        """
+        warnings = []
+
+        try:
+            # 1. Dream role should be target_roles[0] with highest match_score
+            target_roles = plan_data.get("target_roles", [])
+            dream = intake.target_role_interest or ""
+            if target_roles and dream:
+                first_role = target_roles[0].get("role_title", "") if isinstance(target_roles[0], dict) else ""
+                if dream.lower() not in first_role.lower() and first_role.lower() not in dream.lower():
+                    warnings.append(f"Dream role '{dream}' is not first in target_roles (got '{first_role}')")
+
+            # 2. Weekly hours in 12-week plan shouldn't exceed time_per_week
+            twelve_week = plan_data.get("twelve_week_action_plan", [])
+            for week in twelve_week:
+                hours = week.get("hours_this_week", 0) if isinstance(week, dict) else 0
+                if hours > intake.time_per_week * 1.5:  # Allow 50% buffer
+                    warnings.append(f"Week {week.get('week', '?')} has {hours}hrs, exceeds {intake.time_per_week}hrs/week budget")
+                    break  # Only warn once
+
+            # 3. No cert in certification_path should duplicate existing_certifications
+            existing = [c.lower().strip() for c in (intake.existing_certifications or [])]
+            if existing:
+                cert_path = plan_data.get("certification_path", [])
+                for cert in cert_path:
+                    cert_name = (cert.get("name", "") if isinstance(cert, dict) else "").lower()
+                    for ec in existing:
+                        if ec in cert_name or cert_name in ec:
+                            warnings.append(f"Cert '{cert.get('name', '')}' may duplicate existing cert '{ec}'")
+
+            # 4. Skills guidance should reference at least 2 of user's tools
+            tools = intake.tools or []
+            if len(tools) >= 2:
+                plan_text = json.dumps(plan_data.get("skills_guidance", {})).lower()
+                referenced = sum(1 for t in tools if t.lower() in plan_text)
+                if referenced < 2:
+                    warnings.append(f"Skills guidance references only {referenced} of {len(tools)} user tools")
+
+            # 5. Biggest concern keywords should appear in plan
+            concern = intake.biggest_concern or ""
+            if concern:
+                concern_words = [w.lower() for w in concern.split() if len(w) > 4]
+                plan_text_full = json.dumps(plan_data).lower()
+                found = sum(1 for w in concern_words if w in plan_text_full)
+                if found == 0 and concern_words:
+                    warnings.append(f"Biggest concern '{concern}' keywords not found in plan text")
+
+            # 6. If has_head_start, Week 1 shouldn't repeat steps already taken
+            if computed.get("has_head_start") and twelve_week:
+                steps = (intake.steps_already_taken or "").lower()
+                week1 = twelve_week[0] if twelve_week else {}
+                week1_text = json.dumps(week1).lower()
+                step_words = [w for w in steps.split() if len(w) > 5]
+                overlap = sum(1 for w in step_words[:10] if w in week1_text)
+                if overlap > 3:
+                    warnings.append(f"Week 1 may repeat steps already taken ({overlap} keyword overlaps)")
+
+        except Exception as e:
+            warnings.append(f"Quality validation error: {e}")
+
+        # Log warnings (advisory only)
+        if warnings:
+            print(f"⚠ Plan quality warnings ({len(warnings)}):")
+            for w in warnings:
+                print(f"  - {w}")
+        else:
+            print("✓ Plan passed all quality checks")
+
     async def generate_career_plan(
         self,
         intake: IntakeRequest,
@@ -68,8 +181,11 @@ class CareerPathSynthesisService:
             print("[TEST MODE] Returning mock career plan")
             return await self._generate_mock_plan(intake)
 
+        # Compute derived variables
+        computed = self._compute_intake_variables(intake)
+
         # Build synthesis prompt
-        prompt = self._build_synthesis_prompt(intake, research_data, job_details=job_details)
+        prompt = self._build_synthesis_prompt(intake, research_data, job_details=job_details, computed=computed)
 
         try:
             # Call OpenAI with JSON mode for guaranteed valid JSON
@@ -78,7 +194,7 @@ class CareerPathSynthesisService:
                 messages=[
                     {
                         "role": "system",
-                        "content": self._get_system_prompt()
+                        "content": self._get_system_prompt(intake=intake, computed=computed)
                     },
                     {
                         "role": "user",
@@ -107,6 +223,8 @@ class CareerPathSynthesisService:
 
             if validation_result.valid:
                 print("✓ Plan passed schema validation")
+                # Advisory quality checks (never blocks response)
+                self._validate_plan_quality(plan_data, intake, computed)
                 return {
                     "success": True,
                     "plan": plan_data,
@@ -128,6 +246,7 @@ class CareerPathSynthesisService:
 
             if repaired["success"]:
                 print("✓ Plan successfully repaired")
+                self._validate_plan_quality(repaired.get("plan", {}), intake, computed)
                 return repaired
             else:
                 print("✗ Repair failed")
@@ -275,11 +394,16 @@ IMPORTANT: Since the user is targeting THIS specific job:
         self,
         intake: IntakeRequest,
         research_data: Dict[str, Any],
-        job_details: Optional[Dict[str, Any]] = None
+        job_details: Optional[Dict[str, Any]] = None,
+        computed: Optional[Dict[str, Any]] = None
     ) -> str:
         """
-        Build comprehensive prompt for OpenAI synthesis
+        Build comprehensive prompt for OpenAI synthesis with enhanced context
         """
+
+        # Compute if not provided
+        if computed is None:
+            computed = self._compute_intake_variables(intake)
 
         # Extract research data
         certs = research_data.get("certifications", [])
@@ -287,25 +411,92 @@ IMPORTANT: Since the user is targeting THIS specific job:
         events = research_data.get("events", [])
         sources = research_data.get("research_sources", [])
 
+        # Build enhanced user profile
+        existing_certs_str = ", ".join(intake.existing_certifications) if intake.existing_certifications else "None"
+        tools_str = ", ".join(intake.tools[:10]) if intake.tools else "Not specified"
+        dislikes_str = ", ".join(intake.dislikes[:5]) if intake.dislikes else "None listed"
+        likes_str = ", ".join(intake.likes[:5]) if intake.likes else "Not specified"
+        companies_str = ", ".join(intake.specific_companies[:5]) if intake.specific_companies else "None"
+        platforms_str = ", ".join(intake.preferred_platforms[:5]) if intake.preferred_platforms else "Not specified"
+        tech_interests_str = ", ".join(intake.specific_technologies_interest[:5]) if intake.specific_technologies_interest else "Not specified"
+        cert_interests_str = ", ".join(intake.certification_areas_interest[:5]) if intake.certification_areas_interest else "Not specified"
+
+        # Build conditional instructions
+        conditional_instructions = ""
+
+        if intake.biggest_concern:
+            conditional_instructions += f"""
+## CONCERN THREADING
+The user's biggest concern is: "{intake.biggest_concern}"
+You MUST address this concern in at least 3 places:
+1. In the profile_summary or skills_guidance strategy
+2. In at least one timeline task or milestone
+3. In the resume_assets section (how to position despite this concern)
+Do NOT add a generic "don't worry" paragraph. Instead, give concrete steps that directly mitigate this concern.
+"""
+
+        if computed["has_head_start"]:
+            conditional_instructions += f"""
+## HEAD-START AWARENESS
+The user has already started their transition and completed: "{intake.steps_already_taken}"
+- Week 1 of the timeline must NOT repeat what they already did
+- Acknowledge their progress in the profile_summary
+- Skip recommending certifications they already hold: {existing_certs_str}
+- Build on their momentum - suggest NEXT steps, not starting-from-scratch steps
+"""
+
+        if intake.existing_certifications:
+            conditional_instructions += f"""
+## CERT DEDUPLICATION
+The user already holds: {existing_certs_str}
+Do NOT recommend any of these certifications again. Recommend the NEXT level up or complementary certs.
+"""
+
+        if computed["budget_tier"] == "shoestring":
+            conditional_instructions += """
+## BUDGET GUARDRAILS (SHOESTRING)
+User has very limited budget. Prioritize:
+- Free resources (YouTube, official documentation, free tier cloud accounts)
+- Low-cost options (Udemy sales, Coursera financial aid, free community events)
+- Do NOT recommend expensive bootcamps ($5K+) or premium certifications as first steps
+"""
+
         prompt = f"""Generate a comprehensive career transition plan for this professional.
 
-# USER PROFILE
+## COMPUTED CONTEXT
+- Total Available Hours: {computed['total_hours']} hours ({intake.time_per_week} hrs/week x {computed['timeline_weeks']} weeks)
+- Experience Tier: {computed['experience_tier']}
+- Budget Tier: {computed['budget_tier']}
+- Has Head Start: {computed['has_head_start']}
+
+## USER PROFILE
 - Current Role: {intake.current_role_title}
 - Industry: {intake.current_industry}
 - Years Experience: {intake.years_experience}
-- Top 3 Tasks: {', '.join(intake.top_tasks[:3])}
-- Tools/Technologies: {', '.join(intake.tools[:10])}
+- Top Tasks: {', '.join(intake.top_tasks[:5])}
+- Tools/Technologies: {tools_str}
 - Strengths: {', '.join(intake.strengths[:5])}
-- Likes: {', '.join(intake.likes[:5])}
-- Dislikes: {', '.join(intake.dislikes[:5])}
+- Likes: {likes_str}
+- Dislikes: {dislikes_str}
+- Current Salary: {intake.current_salary_range or 'Not disclosed'}
+- Existing Certifications: {existing_certs_str}
+- Training Budget: {intake.training_budget or 'Not specified'}
+- Biggest Concern: {intake.biggest_concern or 'Not stated'}
+- Already Started: {'Yes' if computed['has_head_start'] else 'No'}
+{f'- Steps Taken: {intake.steps_already_taken}' if computed['has_head_start'] else ''}
 
-# TARGET
+## TARGET
 - Dream Role (USER'S STATED GOAL): {intake.target_role_interest or "To be determined - suggest 3-6 aligned roles"}
+- Target Companies: {companies_str}
 - Education Level: {intake.education_level}
 - Location: {intake.location}
 - Time Available: {intake.time_per_week} hours/week
 - Timeline: {intake.timeline}
 - Format Preference: {intake.in_person_vs_remote}
+- Preferred Platforms: {platforms_str}
+- Tech Interests: {tech_interests_str}
+- Cert Area Interests: {cert_interests_str}
+- Motivation: {', '.join(intake.transition_motivation)}
 
 {self._build_job_posting_section(job_details)}# WEB-GROUNDED RESEARCH DATA (USE THESE VERIFIED FACTS)
 ## Certifications Found ({len(certs)} options):
@@ -323,13 +514,16 @@ IMPORTANT: Since the user is targeting THIS specific job:
 ## Salary Data (Real-time Perplexity Research):
 {self._format_salary_insights(research_data.get("salary_insights", {}))}
 
+{conditional_instructions}
+
 # YOUR TASK
 
 Generate a complete career plan JSON object based on:
-1. The user's background and goals above
+1. The user's background, tools, existing certs, and concerns above
 2. Current industry best practices and trends
 3. Your knowledge of typical requirements for target roles
 4. The research data provided above (if any)
+5. The computed context (time budget, experience tier, budget tier)
 
 Match this EXACT schema:
 
@@ -697,6 +891,15 @@ Match this EXACT schema:
 9. **Certification Sequencing**: Order foundation → intermediate → advanced with clear prerequisites
 10. **JSON Only**: Return ONLY valid JSON - no markdown code blocks, no explanatory text before/after
 
+## QUALITY CHECKLIST (verify before returning)
+- [ ] Dream role "{intake.target_role_interest}" is target_roles[0] with highest relevance
+- [ ] Total study hours across all certs and courses fit within {computed['total_hours']} available hours
+- [ ] No certification in certification_path duplicates existing certs: {existing_certs_str}
+- [ ] Skills guidance references at least 2 of user's tools: {tools_str}
+- [ ] If biggest concern was stated, it's addressed in at least 2 sections
+- [ ] If user already started, Week 1 builds on their progress
+- [ ] Salary ranges reflect career-changer expectations, not established professional median
+
 IMPORTANT: Your response must be ONLY a JSON object. Do not include:
 - Markdown code blocks (no ```json or ```)
 - Explanatory text before or after the JSON
@@ -707,64 +910,86 @@ Generate the plan now:"""
 
         return prompt
 
-    def _get_system_prompt(self) -> str:
-        """System prompt for OpenAI career plan generation"""
+    def _get_system_prompt(self, intake: IntakeRequest = None, computed: Dict[str, Any] = None) -> str:
+        """Enhanced system prompt with reasoning architecture and personalization"""
 
-        return """You are an EXPERT career transition advisor. You provide CONCISE, actionable career guidance based on industry best practices and current market trends.
+        # Build client profile section if intake available
+        client_profile = ""
+        if intake and computed:
+            existing_certs = ", ".join(intake.existing_certifications) if intake.existing_certifications else "None listed"
+            tools_list = ", ".join(intake.tools[:10]) if intake.tools else "None listed"
+            dislikes_list = ", ".join(intake.dislikes[:5]) if intake.dislikes else "None listed"
+            companies_list = ", ".join(intake.specific_companies[:5]) if intake.specific_companies else "None"
 
-CRITICAL REQUIREMENTS:
-1. **COMPLETE RESPONSES**: Generate career plans with ALL required sections filled
-2. **NO EMPTY LISTS**: Every list field (target_roles, skills, certifications, etc.) must have at least the minimum required items
-3. **CONCISE EXPLANATIONS**: Be clear and specific but brief (20-100 words per explanation field, not per section)
-4. **VALID JSON ONLY**: Return ONLY a valid JSON object - no markdown, no text before/after
-5. **BREVITY**: Keep all text fields concise. Profile_summary under 400 characters.
+            client_profile = f"""
+## CLIENT PROFILE (use for all reasoning)
+- Current: {intake.current_role_title} in {intake.current_industry} ({intake.years_experience} yrs)
+- Target: {intake.target_role_interest or 'TBD'}
+- Experience Tier: {computed['experience_tier']}
+- Tools they use: {tools_list}
+- Existing certifications: {existing_certs}
+- Budget tier: {computed['budget_tier']} (stated: {intake.training_budget or 'not specified'})
+- Current salary: {intake.current_salary_range or 'not disclosed'}
+- Time budget: {intake.time_per_week} hrs/week x {computed['timeline_weeks']} weeks = {computed['total_hours']} total hours
+- Biggest concern: {intake.biggest_concern or 'not stated'}
+- Already started: {computed['has_head_start']}
+- Dislikes: {dislikes_list}
+- Target companies: {companies_list}
+"""
 
-YOU MUST PROVIDE:
+        return f"""You are an expert career transition strategist who has coached thousands of career changers. You create deeply personalized, actionable career plans.
+{client_profile}
+## CRITICAL REQUIREMENTS
 
-**Target Roles (1-3 roles):**
-- The FIRST target role MUST be the user's exact stated dream role (from "Dream Role" field) - never override or change it
-- Additional roles (2-3) can be related alternatives or stepping stones
-- Salary ranges based on current market data
-- Growth outlook and demand trends
-- Required qualifications and experience
+1. **THINK BEFORE WRITING**: Internally reason about: What transferable skills does this person actually have? What is the minimum viable path to their dream role? Does the time budget ({computed['total_hours'] if computed else 'N/A'} hours) support the plan?
 
-**Skills Analysis:**
-- Already Have: Identify 3-5 transferable skills from their background
-- Need to Build: Identify 3-5 skills gaps for target roles
-- Include evidence and how to build each skill
+2. **RESPECT THE DREAM ROLE**: The FIRST entry in target_roles MUST be the user's exact stated dream role. Do NOT substitute or replace it. Build the entire plan around achieving THIS role.
 
-**Skills Guidance (REQUIRED - separate from Skills Analysis):**
-- Soft Skills (3-8 items): Communication, leadership, problem-solving, collaboration, time management, etc.
-  * For EACH soft skill: why_needed (100+ chars), how_to_improve (150+ chars), importance (critical/high/medium), estimated_time, resources (URLs), real_world_application (100+ chars)
-- Hard Skills (3-10 items): Technical/domain-specific skills for target role
-  * For EACH hard skill: Same detailed structure as soft skills
-- skill_development_strategy: Overall strategy for building both soft and hard skills in parallel (200+ chars)
+3. **SKILLS GAP ANALYSIS WITH TOOL BRIDGING**: Map the user's actual tools/software to target role equivalents. If they use Jira, note that translates to project management. If they use Excel, note data analysis skills.
 
-**Certifications (1-3 relevant certs):**
-- Industry-recognized certifications for target role
-- Cost estimates and study time (keep brief)
+4. **TIME-BUDGET CONSTRAINED**: The total available hours ({computed['total_hours'] if computed else 'N/A'}) is a HARD constraint. Don't recommend 3 certifications requiring 300+ study hours if the user only has 260 total hours.
 
-**Projects (2-3 portfolio projects):**
-- Hands-on projects that demonstrate target role skills
-- Key technologies (3-5 per project, keep descriptions under 30 words)
+5. **BUDGET CONSTRAINED**: Filter recommendations by training budget. Don't recommend a $15K bootcamp to someone with a $500 budget.
 
-**Resume Guidance:**
-- Concise headlines and bullet point examples
-- Brief LinkedIn and cover letter tips
+6. **EXPERIENCE-LEVEL CALIBRATION**: Don't recommend beginner content to a {computed['experience_tier'] if computed else 'mid-career'} professional. Calibrate difficulty and depth appropriately.
 
-**Timeline (12-week plan with 12 weekly tasks):**
-- Specific, actionable weekly tasks (keep descriptions under 50 words each)
-- 6 monthly phases (keep descriptions under 50 words each)
+7. **HONEST SALARY EXPECTATIONS**: Career changers typically start 10-20% below established median for the role. Be honest about first-role salary vs eventual salary.
 
-YOU MUST:
-- Return ONLY valid JSON (no markdown code blocks like ```json)
-- Match the exact schema structure provided in the user prompt
-- Fill ALL required fields - no empty lists or null values for required fields
-- Keep profile_summary under 500 characters
-- Provide at least the minimum number of items for each list field
-- Use proper JSON syntax (double quotes, no trailing commas)
+8. **ADDRESS THE BIGGEST CONCERN**: If the user stated a concern, weave your response to that concern throughout the plan - not as a throwaway paragraph, but as a thread in skills guidance, timeline, and resume strategy.
 
-CRITICAL: Your response must be a single valid JSON object starting with { and ending with }. No other text."""
+9. **BUILD ON EXISTING PROGRESS**: If the user has already started (steps_already_taken), acknowledge what they've done and pick up where they left off. Week 1 should NOT repeat what they already completed.
+
+10. **AVOID WHAT THEY HATE**: If dislikes include "repetitive tasks", don't recommend roles heavy in repetitive work. Thread this through role recommendations and skills guidance.
+
+11. **TARGET COMPANY INTELLIGENCE**: If specific companies are listed, tailor certifications and networking to those companies' known tech stacks and hiring patterns.
+
+12. **ACTIONABLE SPECIFICITY**: Every recommendation must pass the "what do I do Monday morning?" test. Not "learn cloud computing" but "create an AWS free tier account and complete the Cloud Practitioner learning path on aws.training".
+
+13. **RESEARCH GROUNDING**: Only use URLs from the provided Perplexity research data. If no URL is available, use a descriptive placeholder. NEVER fabricate URLs.
+
+14. **MOTIVATION-AWARE FRAMING**: Lead with ROI for "better-pay" motivation, passion for "follow-passion", flexibility for "work-life-balance".
+
+15. **STRUCTURAL REQUIREMENTS**:
+    - target_roles: At least 1
+    - skills_analysis: at least 1 already_have, 1 need_to_build
+    - certification_path: At least 1 with source_citations
+    - education_options: At least 1
+    - experience_plan: At least 1
+    - events: At least 1
+    - timeline.twelve_week_plan: EXACTLY 12 weekly entries
+    - timeline.six_month_plan: EXACTLY 6 monthly entries
+    - resume_assets.skills_grouped: At least 2
+    - research_sources: At least 1
+    - profile_summary: 150-500 characters
+
+## ANTI-HALLUCINATION RULES
+- URLs: ONLY from provided research data or well-known official domains (aws.amazon.com, coursera.org, etc.)
+- Prices: Use "check current pricing" if unsure
+- Dates: Use "check website for dates" if unsure
+- Salary figures: Use Perplexity data when provided, otherwise state "estimated range based on market data"
+
+## OUTPUT FORMAT
+Return ONLY a valid JSON object starting with {{ and ending with }}. No markdown, no explanation text."""
 
     def _validate_plan(self, plan_data: Dict[str, Any]) -> ValidationResult:
         """

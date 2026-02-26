@@ -51,6 +51,14 @@ class IntakeRequest(BaseModel):
     specific_technologies_interest: List[str] = Field(default_factory=list, max_items=20, description="Specific tech/frameworks want to learn")
     certification_areas_interest: List[str] = Field(default_factory=list, max_items=10, description="Areas want to get certified in")
 
+    # Enhanced fields (all optional for backward compat)
+    current_salary_range: Optional[str] = Field(None, description="Current salary range: Under $40K/$40-60K/$60-80K/$80-100K/$100-130K/$130-170K/$170K+")
+    existing_certifications: List[str] = Field(default_factory=list, max_items=20, description="Certifications user already holds")
+    training_budget: Optional[str] = Field(None, description="Budget for training: Under $500/$500-2K/$2K-5K/$5K+/Employer pays")
+    biggest_concern: Optional[str] = Field(None, max_length=500, description="Primary concern about career transition")
+    already_started: bool = Field(default=False, description="Whether user has already started transitioning")
+    steps_already_taken: Optional[str] = Field(None, max_length=2000, description="Steps already taken toward transition")
+
 
 # ========== Target Role Schemas ==========
 class BridgeRole(BaseModel):

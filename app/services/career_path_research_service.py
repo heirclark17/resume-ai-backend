@@ -19,7 +19,13 @@ class CareerPathResearchService:
         self,
         target_roles: List[str],
         current_experience: float,
-        budget: str
+        budget: str,
+        current_role: str = "",
+        current_industry: str = "",
+        tools: List[str] = None,
+        existing_certs: List[str] = None,
+        already_started: bool = False,
+        steps_taken: str = ""
     ) -> List[Dict[str, Any]]:
         """
         Research real certifications with official links and costs
@@ -28,8 +34,25 @@ class CareerPathResearchService:
         """
 
         roles_str = ", ".join(target_roles[:3])  # Limit to top 3 for focused results
+        tools_str = ", ".join((tools or [])[:10]) if tools else "not specified"
+        existing_certs_str = ", ".join((existing_certs or [])[:10]) if existing_certs else "none"
+
+        # Build context-anchored query
+        context_parts = []
+        if current_role and current_industry:
+            context_parts.append(f"The user is transitioning FROM {current_role} in {current_industry}.")
+        if tools:
+            context_parts.append(f"They currently use: {tools_str}.")
+        if existing_certs:
+            context_parts.append(f"They already hold: {existing_certs_str}. Do NOT recommend these again.")
+        if already_started and steps_taken:
+            context_parts.append(f"They've already started and completed: {steps_taken}. Recommend NEXT steps only.")
+
+        context_block = " ".join(context_parts)
 
         query = f"""Find the TOP professional certifications for someone transitioning to these roles: {roles_str}.
+
+{context_block}
 
 For EACH certification, provide:
 1. Full official name
@@ -44,7 +67,7 @@ For EACH certification, provide:
 Focus on certifications that are:
 - Widely recognized in the industry
 - Actually required or strongly preferred in job postings
-- Worth the investment for career changers
+- Worth the investment for CAREER CHANGERS (not generic "top 10" lists)
 - Have clear ROI
 
 Include budget-friendly options if budget is '{budget}'.
@@ -73,7 +96,11 @@ Include specific URLs only from official certification bodies."""
         current_education: str,
         location: str,
         budget: str,
-        format_preference: str
+        format_preference: str,
+        current_role: str = "",
+        current_industry: str = "",
+        preferred_platforms: List[str] = None,
+        existing_certs: List[str] = None
     ) -> List[Dict[str, Any]]:
         """
         Research degrees, bootcamps, and online courses
@@ -83,7 +110,20 @@ Include specific URLs only from official certification bodies."""
 
         roles_str = ", ".join(target_roles[:3])
 
+        # Build context
+        context_parts = []
+        if current_role and current_industry:
+            context_parts.append(f"User is transitioning FROM {current_role} in {current_industry}.")
+        if preferred_platforms:
+            context_parts.append(f"Preferred learning platforms: {', '.join(preferred_platforms[:5])}.")
+        if existing_certs:
+            context_parts.append(f"Already holds: {', '.join(existing_certs[:5])}.")
+
+        context_block = " ".join(context_parts)
+
         query = f"""Find education and training options for someone transitioning to: {roles_str}.
+
+{context_block}
 
 Current education: {current_education}
 Location: {location}
@@ -130,7 +170,9 @@ Provide OFFICIAL URLs only (not affiliate links or blog posts)."""
         self,
         target_roles: List[str],
         location: str,
-        beginner_friendly: bool = True
+        beginner_friendly: bool = True,
+        current_role: str = "",
+        target_companies: List[str] = None
     ) -> List[Dict[str, Any]]:
         """
         Research real networking events, conferences, and meetups
@@ -141,7 +183,18 @@ Provide OFFICIAL URLs only (not affiliate links or blog posts)."""
         roles_str = ", ".join(target_roles[:3])
         location_query = f"near {location}" if location else "virtual/online"
 
+        # Build context
+        context_parts = []
+        if current_role:
+            context_parts.append(f"User is transitioning from {current_role}.")
+        if target_companies:
+            context_parts.append(f"They're targeting companies like: {', '.join(target_companies[:3])}. Include events where these companies recruit or present.")
+
+        context_block = " ".join(context_parts)
+
         query = f"""Find upcoming networking and learning events for someone interested in: {roles_str}.
+
+{context_block}
 
 Location: {location_query}
 Beginner-friendly: {beginner_friendly}
@@ -331,7 +384,8 @@ Prioritize events that help with:
         current_experience: float,
         current_education: str,
         budget: str,
-        format_preference: str
+        format_preference: str,
+        intake_context: Dict[str, Any] = None
     ) -> Dict[str, Any]:
         """
         Run all research in parallel and return combined results
@@ -339,12 +393,35 @@ Prioritize events that help with:
 
         print(f"🔍 Starting comprehensive research for roles: {', '.join(target_roles)}")
 
+        # Extract intake context for enhanced queries
+        ctx = intake_context or {}
+        current_role = ctx.get("current_role_title", "")
+        current_industry = ctx.get("current_industry", "")
+        tools = ctx.get("tools", [])
+        existing_certs = ctx.get("existing_certifications", [])
+        already_started = ctx.get("already_started", False)
+        steps_taken = ctx.get("steps_already_taken", "")
+        preferred_platforms = ctx.get("preferred_platforms", [])
+        target_companies = ctx.get("specific_companies", [])
+
         # Run all research concurrently
         import asyncio
 
-        certs_task = self.research_certifications(target_roles, current_experience, budget)
-        edu_task = self.research_education_options(target_roles, current_education, location, budget, format_preference)
-        events_task = self.research_events(target_roles, location, beginner_friendly=True)
+        certs_task = self.research_certifications(
+            target_roles, current_experience, budget,
+            current_role=current_role, current_industry=current_industry,
+            tools=tools, existing_certs=existing_certs,
+            already_started=already_started, steps_taken=steps_taken
+        )
+        edu_task = self.research_education_options(
+            target_roles, current_education, location, budget, format_preference,
+            current_role=current_role, current_industry=current_industry,
+            preferred_platforms=preferred_platforms, existing_certs=existing_certs
+        )
+        events_task = self.research_events(
+            target_roles, location, beginner_friendly=True,
+            current_role=current_role, target_companies=target_companies
+        )
 
         certs, edu_options, events = await asyncio.gather(certs_task, edu_task, events_task)
 
