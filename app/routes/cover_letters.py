@@ -116,9 +116,19 @@ async def generate_cover_letter(
         from app.models.resume import TailoredResume, BaseResume
         from app.models.job import Job
 
-        # Resolve job_description from tailored resume's Job if not provided directly
+        # Normalize job_url: discard any non-HTTP placeholder values (e.g. manual_ IDs
+        # stored by the tailoring route when no real URL was provided). Only treat it
+        # as a real URL if it starts with http:// or https://.
+        effective_job_url = data.job_url
+        if effective_job_url and not (effective_job_url.startswith('http://') or effective_job_url.startswith('https://')):
+            logger.info(f"Ignoring non-HTTP job_url value '{effective_job_url}' - treating as no URL")
+            effective_job_url = None
+
+        # Resolve job_description from tailored resume's Job if not provided directly.
+        # Run this whenever job_description is missing, regardless of whether a URL was
+        # also sent - the URL may be a manual_ placeholder that provides no description.
         job_description = data.job_description
-        if not job_description and not data.job_url and data.tailored_resume_id:
+        if not job_description and data.tailored_resume_id:
             tr_result = await db.execute(
                 select(TailoredResume).where(TailoredResume.id == data.tailored_resume_id)
             )
@@ -133,17 +143,17 @@ async def generate_cover_letter(
                     logger.info(f"Resolved job description from tailored resume {data.tailored_resume_id}, job {tr.job_id}")
 
         # Validate that we have a job description from some source
-        if not job_description and not data.job_url:
+        if not job_description and not effective_job_url:
             raise HTTPException(status_code=400, detail="Either job_description or job_url must be provided")
 
         # Extract job description from URL if provided and we don't already have one
-        if data.job_url and not job_description:
-            logger.info(f"Extracting job from URL: {data.job_url}")
-            job_description = await extract_job_from_url(data.job_url)
+        if effective_job_url and not job_description:
+            logger.info(f"Extracting job from URL: {effective_job_url}")
+            job_description = await extract_job_from_url(effective_job_url)
 
             # Auto-detect company from URL if company_name is generic or empty
             if not data.company_name or data.company_name.lower() in ['company', 'target company']:
-                detected_company = detect_company_from_url(data.job_url)
+                detected_company = detect_company_from_url(effective_job_url)
                 if detected_company:
                     data.company_name = detected_company
                     logger.info(f"Detected company from URL: {detected_company}")
