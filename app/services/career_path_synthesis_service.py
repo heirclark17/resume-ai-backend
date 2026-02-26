@@ -219,6 +219,9 @@ class CareerPathSynthesisService:
                     del plan_data["resume_assets"]["research_sources"]
                     print("✓ Moved research_sources from resume_assets to root level")
 
+            # Apply deterministic type coercions before Pydantic validation
+            plan_data = self._pre_validate_coerce(plan_data)
+
             validation_result = self._validate_plan(plan_data)
 
             if validation_result.valid:
@@ -412,9 +415,16 @@ IMPORTANT: Since the user is targeting THIS specific job:
         sources = research_data.get("research_sources", [])
 
         # Extract raw Perplexity research content for direct prompt injection
-        raw_cert_content = research_data.get("raw_certification_content", "")
-        raw_edu_content = research_data.get("raw_education_content", "")
-        raw_events_content = research_data.get("raw_events_content", "")
+        # Truncate each to 3000 chars to prevent prompt overflow that causes truncated JSON
+        raw_cert_content = research_data.get("raw_certification_content", "")[:3000]
+        raw_edu_content = research_data.get("raw_education_content", "")[:3000]
+        raw_events_content = research_data.get("raw_events_content", "")[:3000]
+        if research_data.get("raw_certification_content", "") and len(research_data.get("raw_certification_content", "")) > 3000:
+            raw_cert_content += "\n[...truncated for length, use key facts above...]"
+        if research_data.get("raw_education_content", "") and len(research_data.get("raw_education_content", "")) > 3000:
+            raw_edu_content += "\n[...truncated for length, use key facts above...]"
+        if research_data.get("raw_events_content", "") and len(research_data.get("raw_events_content", "")) > 3000:
+            raw_events_content += "\n[...truncated for length, use key facts above...]"
         cert_citation_urls = research_data.get("cert_citation_urls", [])
         edu_citation_urls = research_data.get("edu_citation_urls", [])
 
@@ -629,11 +639,6 @@ Match this EXACT schema:
   "certification_journey_summary": "2-4 sentence overview of the complete certification journey from beginner to expert. E.g., 'Start with CompTIA Security+ to build foundational knowledge, then advance to AWS Solutions Architect for cloud expertise. Complete with CISSP to unlock senior leadership roles. This 12-18 month journey will qualify you for 90%+ of job postings in your target roles.'",
 
   "certification_path": [
-    CRITICAL: Generate 4-6 certifications as a SEQUENTIAL PROGRESSION (certification journey).
-    Use the CERTIFICATION RESEARCH above to extract REAL cert names, costs, and official URLs.
-    Order: foundation (start here) → intermediate → advanced (career accelerators).
-
-    For EACH certification, provide:
     {{
       "name": "EXACT certification name from official body (from research above)",
       "certifying_body": "e.g., CompTIA, AWS, Microsoft, ISC2, Google, etc.",
@@ -674,10 +679,9 @@ Match this EXACT schema:
         // 5. Hands-on labs (if applicable)
       ],
       "study_plan_weeks": [
-        {{"week": 1, "focus": "Module 1: Fundamentals", "resources": "Official course chapters 1-3", "practice": "Quiz 1"}},
-        {{"week": 2, "focus": "Module 2: Core concepts", "resources": "Video course sections 4-6", "practice": "Hands-on lab 1"}},
-        // ...continue for est_study_weeks
-        {{"week": 12, "focus": "Final review and exam", "resources": "Practice exams", "practice": "Full mock exam"}}
+        {{"week": "Week 1", "focus": "Module 1: Fundamentals", "resources": "Official course chapters 1-3", "practice": "Quiz 1"}},
+        {{"week": "Week 2", "focus": "Module 2: Core concepts", "resources": "Video course sections 4-6", "practice": "Hands-on lab 1"}},
+        {{"week": "Week 12", "focus": "Final review and exam", "resources": "Practice exams", "practice": "Full mock exam"}}
       ],
       "source_citations": ["All URLs where you found this data"]
     }}
@@ -686,10 +690,6 @@ Match this EXACT schema:
   "education_recommendation": "2-3 sentence recommendation of the BEST education option for this user based on their budget, timeline, and learning style. E.g., 'Given your $2K budget and preference for online learning, the Google Cybersecurity Certificate on Coursera is your best starting point at $49/month. For deeper expertise, supplement with TryHackMe labs ($14/month) for hands-on practice.'",
 
   "education_options": [
-    CRITICAL: Generate 4-5 education options across DIFFERENT PRICE POINTS.
-    Use the EDUCATION RESEARCH above to extract REAL program names, costs, and enrollment URLs.
-    Must include: 1 FREE option, 1-2 MID-RANGE ($100-$2,000), 1-2 PREMIUM ($5,000+).
-
     {{
       "type": "degree|bootcamp|self-study|online-course",
       "name": "EXACT program name from research (e.g., 'Google Cybersecurity Certificate on Coursera')",
@@ -710,11 +710,6 @@ Match this EXACT schema:
   ],
 
   "experience_plan": [
-    CRITICAL: Generate EXACTLY 5 projects as CHOICES for the user to pick from.
-    Distribution: 2 beginner projects, 2 intermediate projects, 1 advanced project.
-    Each project is a standalone option — user picks 1-2 to build.
-
-    For EACH project, provide EXTREME technical detail:
     {{
       "type": "portfolio|volunteer|lab|side-project|freelance",
       "title": "Clear, professional project title",
@@ -769,11 +764,6 @@ Match this EXACT schema:
   ],
 
   "events": [
-    Recommend relevant industry events and networking opportunities.
-    Include: major conferences, regional events, local meetups, virtual options.
-    Provide mix of local (in {intake.location}) and national events.
-
-    For EACH event, provide details:
     {{
       "name": "Event name",
       "organizer": "Who runs this event (e.g., Linux Foundation, OWASP, local user group, company name)",
@@ -792,21 +782,7 @@ Match this EXACT schema:
       "recurring": true|false,
       "virtual_option_available": true|false,
       "source_citations": ["Event website URL", "Meetup.com URL", "etc."]
-    }},
-
-    // REQUIRED MIX:
-    // - 2-3 major national/international conferences (even if expensive - good to know about)
-    // - 3-5 regional or local in-person events in {intake.location}
-    // - 5-10 virtual events (accessible from anywhere)
-    // - Ongoing meetups (recurring community events)
-
-    // RESEARCH SOURCES TO USE:
-    // - Meetup.com for local groups in {intake.location}
-    // - Eventbrite for workshops
-    // - Conference websites (search: "[target role] conference 2026")
-    // - Professional associations (ACM, IEEE, ISACA, etc.)
-    // - LinkedIn Events for {intake.location}
-    // - Tech company event calendars
+    }}
   ],
 
   "timeline": {{
@@ -1061,6 +1037,116 @@ You MUST produce the most comprehensive, granular, actionable career plan possib
 ## OUTPUT FORMAT
 Return ONLY a valid JSON object starting with {{ and ending with }}. No markdown, no explanation text. MAXIMIZE detail in every field — treat empty space as wasted opportunity."""
 
+    def _pre_validate_coerce(self, plan_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Deterministically fix common GPT type mismatches before Pydantic validation.
+        These are predictable errors that can be fixed without a second LLM call.
+        """
+        try:
+            # 1. study_plan_weeks: all dict values must be strings (List[Dict[str, str]])
+            for cert in plan_data.get("certification_path", []):
+                if isinstance(cert, dict) and "study_plan_weeks" in cert:
+                    fixed_weeks = []
+                    for week_entry in cert["study_plan_weeks"]:
+                        if isinstance(week_entry, dict):
+                            fixed_entry = {k: str(v) for k, v in week_entry.items()}
+                            fixed_weeks.append(fixed_entry)
+                        else:
+                            fixed_weeks.append(week_entry)
+                    cert["study_plan_weeks"] = fixed_weeks
+
+            # 2. beginner_entry_point: must be bool, not string "true"/"false"
+            for cert in plan_data.get("certification_path", []):
+                if isinstance(cert, dict) and "beginner_entry_point" in cert:
+                    val = cert["beginner_entry_point"]
+                    if isinstance(val, str):
+                        cert["beginner_entry_point"] = val.lower() == "true"
+
+            # 3. journey_order: must be int (ge=1, le=20)
+            for cert in plan_data.get("certification_path", []):
+                if isinstance(cert, dict) and "journey_order" in cert:
+                    val = cert["journey_order"]
+                    if isinstance(val, str):
+                        try:
+                            cert["journey_order"] = int(val)
+                        except (ValueError, TypeError):
+                            cert["journey_order"] = None
+
+            # 4. comparison_rank in education_options: must be int (ge=1, le=10)
+            for edu in plan_data.get("education_options", []):
+                if isinstance(edu, dict) and "comparison_rank" in edu:
+                    val = edu["comparison_rank"]
+                    if isinstance(val, str):
+                        try:
+                            edu["comparison_rank"] = int(val)
+                        except (ValueError, TypeError):
+                            edu["comparison_rank"] = None
+
+            # 5. what_to_emphasize in resume bullets: must be string, not list
+            resume_assets = plan_data.get("resume_assets", {})
+            if isinstance(resume_assets, dict):
+                for bullet in resume_assets.get("target_role_bullets", []):
+                    if isinstance(bullet, dict) and "what_to_emphasize" in bullet:
+                        val = bullet["what_to_emphasize"]
+                        if isinstance(val, list):
+                            bullet["what_to_emphasize"] = "; ".join(str(v) for v in val)
+
+            # 6. recommended_order in study_materials: must be int (ge=1, le=20)
+            for cert in plan_data.get("certification_path", []):
+                if isinstance(cert, dict):
+                    for material in cert.get("study_materials", []):
+                        if isinstance(material, dict) and "recommended_order" in material:
+                            val = material["recommended_order"]
+                            if isinstance(val, str):
+                                try:
+                                    material["recommended_order"] = int(val)
+                                except (ValueError, TypeError):
+                                    material["recommended_order"] = 1
+
+            # 7. week_number in twelve_week_plan: must be int (ge=1, le=52)
+            timeline = plan_data.get("timeline", {})
+            if isinstance(timeline, dict):
+                for week in timeline.get("twelve_week_plan", []):
+                    if isinstance(week, dict) and "week_number" in week:
+                        val = week["week_number"]
+                        if isinstance(val, str):
+                            # Handle "Week 1" format
+                            try:
+                                week["week_number"] = int(str(val).replace("Week ", "").replace("week ", "").strip())
+                            except (ValueError, TypeError):
+                                pass
+
+                # 8. month_number in six_month_plan: must be int (ge=1, le=12)
+                for month in timeline.get("six_month_plan", []):
+                    if isinstance(month, dict) and "month_number" in month:
+                        val = month["month_number"]
+                        if isinstance(val, str):
+                            try:
+                                month["month_number"] = int(str(val).replace("Month ", "").replace("month ", "").strip())
+                            except (ValueError, TypeError):
+                                pass
+
+            # 9. profile_summary: truncate if over 1000 chars (schema max)
+            if isinstance(plan_data.get("profile_summary"), str) and len(plan_data["profile_summary"]) > 1000:
+                plan_data["profile_summary"] = plan_data["profile_summary"][:997] + "..."
+
+            # 10. est_study_weeks: must be int (ge=1, le=104)
+            for cert in plan_data.get("certification_path", []):
+                if isinstance(cert, dict) and "est_study_weeks" in cert:
+                    val = cert["est_study_weeks"]
+                    if isinstance(val, str):
+                        try:
+                            cert["est_study_weeks"] = int(val)
+                        except (ValueError, TypeError):
+                            cert["est_study_weeks"] = 8  # default fallback
+
+            print("✓ Pre-validation type coercions applied")
+
+        except Exception as e:
+            print(f"⚠ Pre-validation coercion error (non-fatal): {e}")
+
+        return plan_data
+
     def _validate_plan(self, plan_data: Dict[str, Any]) -> ValidationResult:
         """
         Validate plan against Pydantic schema
@@ -1121,12 +1207,17 @@ Return ONLY a valid JSON object starting with {{ and ending with }}. No markdown
             for e in validation_result.errors[:25]  # Limit to top 25 errors for better repair
         ])
 
+        # Limit the plan JSON sent to repair to avoid exceeding repair max_tokens
+        plan_json_str = json.dumps(invalid_plan, indent=2)
+        if len(plan_json_str) > 40000:
+            plan_json_str = plan_json_str[:40000] + "\n... [truncated]"
+
         repair_prompt = f"""The following JSON failed schema validation with these errors:
 
 {error_summary}
 
 INVALID JSON:
-{json.dumps(invalid_plan, indent=2)}
+{plan_json_str}
 
 Fix ALL validation errors and return a corrected JSON object that passes validation.
 
@@ -1135,9 +1226,19 @@ Requirements:
 2. Fix missing required fields by adding realistic values
 3. Fix type mismatches (e.g., string vs array)
 4. Ensure array minimum/maximum item constraints are met
-5. Ensure string length constraints are met
-6. Remove any invalid keys not in schema
-7. Return ONLY the corrected JSON - no explanations
+5. Ensure string length constraints are met (profile_summary max 1000 chars)
+6. FIELD TYPE FIXES REQUIRED:
+   - study_plan_weeks entries: all dict values must be strings, e.g. {{"week": "Week 1", "focus": "...", "resources": "..."}}
+   - beginner_entry_point: must be boolean true/false, not string "true"/"false"
+   - journey_order: must be an integer, not a string
+   - comparison_rank: must be an integer 1-10, not a string
+   - what_to_emphasize in resume bullets: must be a single string, NOT a list/array
+   - week_number in twelve_week_plan: must be an integer 1-52
+   - month_number in six_month_plan: must be an integer 1-12
+   - recommended_order in study_materials: must be an integer 1-20
+   - est_study_weeks: must be an integer 1-104
+7. REQUIRED ROOT-LEVEL FIELDS: certification_journey_summary (string) and education_recommendation (string) must be at the top level of the JSON object
+8. Return ONLY the corrected JSON - no explanations
 
 Return the fixed JSON now:"""
 
@@ -1161,6 +1262,9 @@ Return the fixed JSON now:"""
 
             repaired_json = response.choices[0].message.content
             repaired_data = json.loads(repaired_json)
+
+            # Apply deterministic coercions to repaired data too
+            repaired_data = self._pre_validate_coerce(repaired_data)
 
             # Validate repaired version
             validation = self._validate_plan(repaired_data)
