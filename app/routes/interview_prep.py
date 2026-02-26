@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, text
 from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
 from typing import List, Optional, Dict
@@ -2326,3 +2326,177 @@ async def save_star_story_for_question(
             status_code=500,
             detail=f"Failed to save STAR story: {str(e)}"
         )
+
+
+# ─── MOCK INTERVIEW SESSIONS ────────────────────────────────────────────────
+
+class SaveMockSessionRequest(BaseModel):
+    interview_type: str = "behavioral"
+    company: str
+    job_title: str
+    messages: list
+    performance: Optional[dict] = None
+    question_count: int = 0
+
+
+@router.post("/{prep_id}/mock-sessions")
+async def save_mock_session(
+    prep_id: int,
+    request: SaveMockSessionRequest,
+    db: AsyncSession = Depends(get_db),
+    x_user_id: str = Header(None),
+):
+    """Save a completed mock interview session."""
+    if not x_user_id:
+        raise HTTPException(status_code=401, detail="Missing X-User-ID header")
+
+    try:
+        # Verify prep ownership
+        result = await db.execute(
+            select(InterviewPrep).where(
+                and_(InterviewPrep.id == prep_id, InterviewPrep.user_id == x_user_id)
+            )
+        )
+        prep = result.scalar_one_or_none()
+        if not prep:
+            raise HTTPException(status_code=404, detail="Interview prep not found")
+
+        messages_json = json.dumps(request.messages)
+        performance_json = json.dumps(request.performance) if request.performance else None
+
+        insert_result = await db.execute(
+            text("""
+                INSERT INTO mock_interview_sessions
+                    (interview_prep_id, user_id, interview_type, company, job_title, messages, performance, status, question_count, completed_at)
+                VALUES
+                    (:prep_id, :user_id, :interview_type, :company, :job_title, :messages::jsonb, :performance::jsonb, 'completed', :question_count, NOW())
+                RETURNING id, created_at
+            """),
+            {
+                "prep_id": prep_id,
+                "user_id": x_user_id,
+                "interview_type": request.interview_type,
+                "company": request.company,
+                "job_title": request.job_title,
+                "messages": messages_json,
+                "performance": performance_json,
+                "question_count": request.question_count,
+            }
+        )
+        row = insert_result.fetchone()
+        await db.commit()
+
+        return {
+            "success": True,
+            "data": {
+                "id": row[0],
+                "created_at": str(row[1]),
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Failed to save mock session: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to save mock session: {str(e)}")
+
+
+@router.get("/{prep_id}/mock-sessions")
+async def get_mock_sessions(
+    prep_id: int,
+    db: AsyncSession = Depends(get_db),
+    x_user_id: str = Header(None),
+):
+    """List mock interview sessions for a prep."""
+    if not x_user_id:
+        raise HTTPException(status_code=401, detail="Missing X-User-ID header")
+
+    try:
+        # Verify prep ownership
+        result = await db.execute(
+            select(InterviewPrep).where(
+                and_(InterviewPrep.id == prep_id, InterviewPrep.user_id == x_user_id)
+            )
+        )
+        prep = result.scalar_one_or_none()
+        if not prep:
+            raise HTTPException(status_code=404, detail="Interview prep not found")
+
+        sessions_result = await db.execute(
+            text("""
+                SELECT id, interview_type, company, job_title, messages, performance, question_count, status, created_at, completed_at
+                FROM mock_interview_sessions
+                WHERE interview_prep_id = :prep_id AND user_id = :user_id
+                ORDER BY created_at DESC
+            """),
+            {"prep_id": prep_id, "user_id": x_user_id}
+        )
+
+        sessions = []
+        for row in sessions_result.fetchall():
+            perf = row[5]
+            if isinstance(perf, str):
+                perf = json.loads(perf)
+            msgs = row[4]
+            if isinstance(msgs, str):
+                msgs = json.loads(msgs)
+            sessions.append({
+                "id": row[0],
+                "interview_type": row[1],
+                "company": row[2],
+                "job_title": row[3],
+                "messages": msgs,
+                "performance": perf,
+                "question_count": row[6],
+                "status": row[7],
+                "created_at": str(row[8]),
+                "completed_at": str(row[9]) if row[9] else None,
+            })
+
+        return {"success": True, "data": sessions}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Failed to get mock sessions: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get mock sessions: {str(e)}")
+
+
+@router.delete("/{prep_id}/mock-sessions/{session_id}")
+async def delete_mock_session(
+    prep_id: int,
+    session_id: int,
+    db: AsyncSession = Depends(get_db),
+    x_user_id: str = Header(None),
+):
+    """Delete a mock interview session."""
+    if not x_user_id:
+        raise HTTPException(status_code=401, detail="Missing X-User-ID header")
+
+    try:
+        # Verify ownership
+        result = await db.execute(
+            text("""
+                SELECT id FROM mock_interview_sessions
+                WHERE id = :session_id AND interview_prep_id = :prep_id AND user_id = :user_id
+            """),
+            {"session_id": session_id, "prep_id": prep_id, "user_id": x_user_id}
+        )
+        if not result.fetchone():
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        await db.execute(
+            text("DELETE FROM mock_interview_sessions WHERE id = :session_id"),
+            {"session_id": session_id}
+        )
+        await db.commit()
+
+        return {"success": True}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Failed to delete mock session: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete mock session: {str(e)}")

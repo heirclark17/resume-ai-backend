@@ -200,4 +200,55 @@ async def run_migrations():
         except Exception as e:
             print(f"  Migration warning (salary_cache): {e}")
 
+        # Ensure mock_interview_sessions table exists
+        try:
+            if is_postgres:
+                await conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS mock_interview_sessions (
+                        id SERIAL PRIMARY KEY,
+                        interview_prep_id INTEGER NOT NULL REFERENCES interview_preps(id) ON DELETE CASCADE,
+                        user_id VARCHAR(255) NOT NULL,
+                        interview_type VARCHAR(50) NOT NULL DEFAULT 'behavioral',
+                        company VARCHAR(500) NOT NULL,
+                        job_title VARCHAR(500) NOT NULL,
+                        messages JSONB NOT NULL DEFAULT '[]',
+                        performance JSONB,
+                        status VARCHAR(20) NOT NULL DEFAULT 'completed',
+                        question_count INTEGER DEFAULT 0,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        completed_at TIMESTAMP
+                    )
+                """))
+                await conn.execute(text("""
+                    CREATE INDEX IF NOT EXISTS idx_mock_sessions_prep ON mock_interview_sessions(interview_prep_id)
+                """))
+                await conn.execute(text("""
+                    CREATE INDEX IF NOT EXISTS idx_mock_sessions_user ON mock_interview_sessions(user_id)
+                """))
+                print("  Migration: mock_interview_sessions table and indexes ensured")
+            else:
+                result = await conn.execute(text(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='mock_interview_sessions'"
+                ))
+                if not result.fetchone():
+                    await conn.execute(text("""
+                        CREATE TABLE mock_interview_sessions (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            interview_prep_id INTEGER NOT NULL REFERENCES interview_preps(id) ON DELETE CASCADE,
+                            user_id VARCHAR(255) NOT NULL,
+                            interview_type VARCHAR(50) NOT NULL DEFAULT 'behavioral',
+                            company VARCHAR(500) NOT NULL,
+                            job_title VARCHAR(500) NOT NULL,
+                            messages TEXT NOT NULL DEFAULT '[]',
+                            performance TEXT,
+                            status VARCHAR(20) NOT NULL DEFAULT 'completed',
+                            question_count INTEGER DEFAULT 0,
+                            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                            completed_at DATETIME
+                        )
+                    """))
+                    print("  Migration: mock_interview_sessions table created (SQLite)")
+        except Exception as e:
+            print(f"  Migration warning (mock_interview_sessions): {e}")
+
     print("Migrations completed")
