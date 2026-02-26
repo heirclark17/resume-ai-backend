@@ -289,20 +289,31 @@ async def list_career_plans(
 
         plans = result.scalars().all()
 
-        return [
-            {
+        items = []
+        for plan in plans:
+            intake = plan.intake_json or {}
+            plan_data = plan.plan_json or {}
+            cert_path = plan_data.get("certification_path", [])
+            exp_plan = plan_data.get("experience_plan", [])
+            items.append({
                 "id": plan.id,
                 "target_roles": [
                     role["title"]
-                    for role in plan.plan_json.get("target_roles", [])
+                    for role in plan_data.get("target_roles", [])
                 ],
-                "dream_role": plan.intake_json.get("target_role_interest", "") if plan.intake_json else "",
+                "dream_role": intake.get("target_role_interest", ""),
+                "current_role": intake.get("current_role_title", ""),
+                "current_industry": intake.get("current_industry", ""),
+                "timeline": intake.get("timeline", ""),
+                "target_industries": intake.get("target_industries", []),
+                "num_certifications": len(cert_path) if isinstance(cert_path, list) else 0,
+                "num_projects": len(exp_plan) if isinstance(exp_plan, list) else 0,
+                "profile_summary": plan_data.get("profile_summary", ""),
                 "created_at": plan.created_at.isoformat(),
                 "updated_at": plan.updated_at.isoformat(),
                 "version": plan.version
-            }
-            for plan in plans
-        ]
+            })
+        return items
 
     except Exception as e:
         print(f"✗ Error listing plans: {e}")
