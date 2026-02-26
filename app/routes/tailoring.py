@@ -834,7 +834,7 @@ async def delete_tailored_resume(
 
     tailored.is_deleted = True
     tailored.deleted_at = datetime.utcnow()
-    tailored.deleted_by = user_id
+    tailored.deleted_by = None
     db.add(tailored)
     await db.commit()
 
@@ -870,7 +870,7 @@ async def bulk_delete_tailored_resumes(
     for resume in resumes:
         resume.is_deleted = True
         resume.deleted_at = now
-        resume.deleted_by = user_id
+        resume.deleted_by = None
         db.add(resume)
         deleted_count += 1
 
@@ -1006,72 +1006,3 @@ async def tailor_resume_batch(
     }
 
 
-@router.delete("/tailored/{tailored_id}")
-async def delete_tailored_resume(
-    tailored_id: int,
-    user_id: str = Depends(get_user_id),
-    db: AsyncSession = Depends(get_db)
-):
-    """Soft-delete a single tailored resume (requires ownership)"""
-    result = await db.execute(
-        select(TailoredResume).where(TailoredResume.id == tailored_id)
-    )
-    tailored = result.scalar_one_or_none()
-
-    if not tailored:
-        raise HTTPException(status_code=404, detail="Tailored resume not found")
-
-    if tailored.session_user_id != user_id:
-        raise HTTPException(status_code=403, detail="Access denied")
-
-    if tailored.is_deleted:
-        raise HTTPException(status_code=404, detail="Already deleted")
-
-    tailored.is_deleted = True
-    tailored.deleted_at = datetime.utcnow()
-    tailored.deleted_by = None
-    await db.commit()
-
-    return {"success": True, "message": "Tailored resume deleted"}
-
-
-class BulkDeleteRequest(BaseModel):
-    ids: List[int]
-
-
-@router.post("/tailored/bulk-delete")
-async def bulk_delete_tailored_resumes(
-    request: BulkDeleteRequest,
-    user_id: str = Depends(get_user_id),
-    db: AsyncSession = Depends(get_db)
-):
-    """Soft-delete multiple tailored resumes (requires ownership)"""
-    if len(request.ids) == 0:
-        raise HTTPException(status_code=400, detail="No IDs provided")
-
-    if len(request.ids) > 100:
-        raise HTTPException(status_code=400, detail="Maximum 100 IDs per request")
-
-    result = await db.execute(
-        select(TailoredResume).where(
-            TailoredResume.id.in_(request.ids),
-            TailoredResume.session_user_id == user_id,
-            TailoredResume.is_deleted == False,
-        )
-    )
-    resumes = result.scalars().all()
-
-    deleted_count = 0
-    for tailored in resumes:
-        tailored.is_deleted = True
-        tailored.deleted_at = datetime.utcnow()
-        tailored.deleted_by = None
-        deleted_count += 1
-
-    await db.commit()
-
-    return {
-        "success": True,
-        "deleted_count": deleted_count,
-        "requested_count": len(request.ids)
-    }
