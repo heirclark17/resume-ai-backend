@@ -69,11 +69,12 @@ FOCUS: {focus_instructions.get(focus, focus_instructions['program_management'])}
 
 REQUIREMENTS:
 - Write a complete cover letter with greeting, body paragraphs, and professional closing
+- Follow the LENGTH instruction for paragraph count and word count
+- Follow the FOCUS instruction to emphasize the right skills and experience
 - Reference specific job requirements from the description
 - If resume context is provided, connect the candidate's experience to the role
 - If company research is provided, reference the company's mission, values, or recent initiatives to demonstrate cultural fit and genuine interest
 - Include measurable achievements where possible
-- Keep it to one page (300-400 words)
 - Do NOT include placeholder brackets like [Your Name] — write it as a complete letter
 - Address it to the hiring manager at {company_name}
 - Sign off with the candidate's name if available

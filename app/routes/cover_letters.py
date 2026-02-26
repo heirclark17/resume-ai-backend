@@ -112,13 +112,31 @@ async def generate_cover_letter(
     if data.tone not in valid_tones:
         raise HTTPException(status_code=400, detail=f"Invalid tone. Must be one of: {', '.join(valid_tones)}")
 
-    # Validate that either job_description or job_url is provided
-    if not data.job_description and not data.job_url:
-        raise HTTPException(status_code=400, detail="Either job_description or job_url must be provided")
-
     try:
-        # Extract job description from URL if provided
+        from app.models.resume import TailoredResume, BaseResume
+        from app.models.job import Job
+
+        # Resolve job_description from tailored resume's Job if not provided directly
         job_description = data.job_description
+        if not job_description and not data.job_url and data.tailored_resume_id:
+            tr_result = await db.execute(
+                select(TailoredResume).where(TailoredResume.id == data.tailored_resume_id)
+            )
+            tr = tr_result.scalar_one_or_none()
+            if tr and tr.job_id:
+                job_result = await db.execute(
+                    select(Job).where(Job.id == tr.job_id)
+                )
+                job = job_result.scalar_one_or_none()
+                if job and job.description:
+                    job_description = job.description
+                    logger.info(f"Resolved job description from tailored resume {data.tailored_resume_id}, job {tr.job_id}")
+
+        # Validate that we have a job description from some source
+        if not job_description and not data.job_url:
+            raise HTTPException(status_code=400, detail="Either job_description or job_url must be provided")
+
+        # Extract job description from URL if provided
         if data.job_url:
             logger.info(f"Extracting job from URL: {data.job_url}")
             job_description = await extract_job_from_url(data.job_url)
@@ -132,7 +150,6 @@ async def generate_cover_letter(
 
         if not job_description:
             raise HTTPException(status_code=400, detail="No job description could be extracted")
-        from app.models.resume import TailoredResume, BaseResume
 
         # Fetch resume data if linked
         resume_context = None
