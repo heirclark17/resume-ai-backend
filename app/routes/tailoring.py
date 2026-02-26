@@ -742,6 +742,7 @@ async def list_tailored_resumes(
                 "job_id": tr.job_id,
                 "job_title": job.title if job else "Unknown Position",
                 "company_name": job.company if job else None,
+                "job_description": job.description if job else None,
                 "summary": tr.tailored_summary[:200] + "..." if tr.tailored_summary and len(tr.tailored_summary) > 200 else tr.tailored_summary,
                 "docx_path": tr.docx_path,
                 "quality_score": tr.quality_score,
