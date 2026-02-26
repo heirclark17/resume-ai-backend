@@ -41,8 +41,8 @@ class CareerPathSynthesisService:
                 print("[TEST MODE] CareerPathSynthesisService using mock data")
         else:
             self.client = OpenAI(api_key=settings.openai_api_key)
-            # Use GPT-4.1 for maximum detail and depth in career plans
-            self.model = "gpt-4.1"
+            # Use GPT-4.1-mini for career plans
+            self.model = "gpt-4.1-mini"
 
     def _compute_intake_variables(self, intake: IntakeRequest) -> Dict[str, Any]:
         """Compute derived variables from intake for prompt engineering"""
