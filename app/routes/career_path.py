@@ -10,6 +10,7 @@ from datetime import datetime
 import os
 
 from app.database import get_db, AsyncSessionLocal
+from app.middleware.auth import get_user_id
 from app.models.career_plan import CareerPlan as CareerPlanModel
 from app.schemas.career_plan import (
     IntakeRequest,
@@ -28,12 +29,6 @@ from app.services.perplexity_client import PerplexityClient
 
 
 router = APIRouter(prefix="/api/career-path", tags=["career-path"])
-
-
-def get_session_user_id() -> str:
-    """Get session user ID (placeholder - integrate with auth later)"""
-    # TODO: Integrate with actual auth system
-    return "user_session_temp"
 
 
 @router.post("/research")
@@ -85,7 +80,8 @@ async def research_career_path(
 @router.post("/generate")
 async def generate_career_plan(
     request: GenerateRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(get_user_id)
 ) -> GenerateResponse:
     """
     PASS 2: Complete career plan generation
@@ -98,8 +94,6 @@ async def generate_career_plan(
     5. Save to database
     6. Return plan
     """
-
-    session_user_id = get_session_user_id()
 
     print(f"📝 Generating career plan for {request.intake.current_role_title}")
 
@@ -196,7 +190,7 @@ async def generate_career_plan(
 
         # Step 4: Save to database
         career_plan = CareerPlanModel(
-            session_user_id=session_user_id,
+            session_user_id=user_id,
             intake_json=request.intake.dict(),
             research_json=research_data,
             plan_json=plan_data,
@@ -229,19 +223,18 @@ async def generate_career_plan(
 @router.get("/{plan_id}")
 async def get_career_plan(
     plan_id: int,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(get_user_id)
 ) -> GenerateResponse:
     """
     Retrieve a previously generated career plan
     """
 
-    session_user_id = get_session_user_id()
-
     try:
         result = await db.execute(
             select(CareerPlanModel).where(
                 CareerPlanModel.id == plan_id,
-                CareerPlanModel.session_user_id == session_user_id,
+                CareerPlanModel.session_user_id == user_id,
                 CareerPlanModel.is_deleted == False
             )
         )
@@ -269,19 +262,18 @@ async def get_career_plan(
 
 @router.get("/")
 async def list_career_plans(
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(get_user_id)
 ) -> List[CareerPlanListItem]:
     """
     List all career plans for the current user
     """
 
-    session_user_id = get_session_user_id()
-
     try:
         result = await db.execute(
             select(CareerPlanModel)
             .where(
-                CareerPlanModel.session_user_id == session_user_id,
+                CareerPlanModel.session_user_id == user_id,
                 CareerPlanModel.is_deleted == False
             )
             .order_by(CareerPlanModel.created_at.desc())
@@ -326,7 +318,8 @@ async def list_career_plans(
 @router.post("/refresh-events")
 async def refresh_events(
     request: RefreshEventsRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(get_user_id)
 ) -> GenerateResponse:
     """
     Refresh only the events section without regenerating entire plan
@@ -334,14 +327,12 @@ async def refresh_events(
     Useful for updating event data as registration dates change
     """
 
-    session_user_id = get_session_user_id()
-
     try:
         # Get existing plan
         result = await db.execute(
             select(CareerPlanModel).where(
                 CareerPlanModel.id == request.plan_id,
-                CareerPlanModel.session_user_id == session_user_id,
+                CareerPlanModel.session_user_id == user_id,
                 CareerPlanModel.is_deleted == False
             )
         )
@@ -408,7 +399,8 @@ async def refresh_events(
 @router.post("/generate-async")
 async def generate_career_plan_async(
     request: GenerateRequest,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    user_id: str = Depends(get_user_id)
 ):
     """
     ASYNC: Start career plan generation and return job_id immediately
@@ -420,14 +412,12 @@ async def generate_career_plan_async(
     4. Client polls /job/{job_id} for status
     """
 
-    session_user_id = get_session_user_id()
-
     print(f"📝 Creating async job for {request.intake.current_role_title}")
 
     try:
         # Create job in job store
         job_id = job_store.create_job(
-            user_id=session_user_id,
+            user_id=user_id,
             intake_data=request.intake.dict()
         )
 
@@ -435,7 +425,8 @@ async def generate_career_plan_async(
         background_tasks.add_task(
             process_career_plan_job,
             job_id,
-            request
+            request,
+            user_id
         )
 
         return {
@@ -631,7 +622,7 @@ async def get_job_status(job_id: str):
     return job
 
 
-async def process_career_plan_job(job_id: str, request: GenerateRequest):
+async def process_career_plan_job(job_id: str, request: GenerateRequest, user_id: str):
     """
     Background task: Run Perplexity research + OpenAI synthesis
 
@@ -648,7 +639,6 @@ async def process_career_plan_job(job_id: str, request: GenerateRequest):
     # Create new DB session for this background task
     async with AsyncSessionLocal() as db:
       try:
-          session_user_id = get_session_user_id()
 
           # Step 0: Extract job posting details if URL provided
           job_details = None
@@ -793,7 +783,7 @@ async def process_career_plan_job(job_id: str, request: GenerateRequest):
 
           # Step 3: Save to database
           career_plan = CareerPlanModel(
-              session_user_id=session_user_id,
+              session_user_id=user_id,
               intake_json=request.intake.dict(),
               research_json=research_data,
               plan_json=plan_data,
@@ -832,25 +822,24 @@ async def process_career_plan_job(job_id: str, request: GenerateRequest):
 
 @router.delete("/all")
 async def delete_all_career_plans(
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(get_user_id)
 ):
     """
     Soft delete all career plans for the current user
     """
 
-    session_user_id = get_session_user_id()
-
     try:
         result = await db.execute(
             update(CareerPlanModel)
             .where(
-                CareerPlanModel.session_user_id == session_user_id,
+                CareerPlanModel.session_user_id == user_id,
                 CareerPlanModel.is_deleted == False
             )
             .values(
                 is_deleted=True,
                 deleted_at=datetime.utcnow(),
-                deleted_by=session_user_id
+                deleted_by=user_id
             )
         )
         await db.commit()
@@ -868,25 +857,24 @@ async def delete_all_career_plans(
 @router.delete("/{plan_id}")
 async def delete_career_plan(
     plan_id: int,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(get_user_id)
 ):
     """
     Soft delete a career plan
     """
-
-    session_user_id = get_session_user_id()
 
     try:
         await db.execute(
             update(CareerPlanModel)
             .where(
                 CareerPlanModel.id == plan_id,
-                CareerPlanModel.session_user_id == session_user_id
+                CareerPlanModel.session_user_id == user_id
             )
             .values(
                 is_deleted=True,
                 deleted_at=datetime.utcnow(),
-                deleted_by=session_user_id
+                deleted_by=user_id
             )
         )
         await db.commit()
