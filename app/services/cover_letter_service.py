@@ -11,6 +11,8 @@ async def generate_cover_letter_content(
     company_name: str,
     job_description: str,
     tone: str = "professional",
+    length: str = "standard",
+    focus: str = "program_management",
     resume_context: Optional[dict] = None,
     company_research: Optional[dict] = None,
 ) -> str:
@@ -20,6 +22,21 @@ async def generate_cover_letter_content(
         "professional": "Use a formal, polished tone. Be direct and confident.",
         "enthusiastic": "Use an energetic, passionate tone. Show excitement for the role.",
         "conversational": "Use a friendly, approachable tone. Be personable and warm.",
+        "strategic": "Use a strategic, results-oriented tone. Emphasize vision and impact.",
+        "technical": "Use a technically precise tone. Highlight technical depth and expertise.",
+    }
+
+    length_instructions = {
+        "concise": "Write 3 paragraphs (250-300 words).",
+        "standard": "Write 4 paragraphs (300-400 words).",
+        "detailed": "Write 5 paragraphs (400-500 words).",
+    }
+
+    focus_instructions = {
+        "leadership": "Emphasize leadership experience, team management, and strategic decision-making.",
+        "technical": "Emphasize technical expertise, tools, frameworks, and hands-on experience.",
+        "program_management": "Emphasize program/project management, delivery, and cross-team coordination.",
+        "cross_functional": "Emphasize cross-functional collaboration, stakeholder management, and communication.",
     }
 
     resume_section = ""
@@ -47,9 +64,11 @@ JOB DETAILS:
 - Description: {job_description}
 {resume_section}{research_section}
 TONE: {tone_instructions.get(tone, tone_instructions['professional'])}
+LENGTH: {length_instructions.get(length, length_instructions['standard'])}
+FOCUS: {focus_instructions.get(focus, focus_instructions['program_management'])}
 
 REQUIREMENTS:
-- Write a complete cover letter with greeting, 3-4 body paragraphs, and professional closing
+- Write a complete cover letter with greeting, body paragraphs, and professional closing
 - Reference specific job requirements from the description
 - If resume context is provided, connect the candidate's experience to the role
 - If company research is provided, reference the company's mission, values, or recent initiatives to demonstrate cultural fit and genuine interest

@@ -23,6 +23,8 @@ class GenerateRequest(BaseModel):
     job_description: Optional[str] = None
     job_url: Optional[str] = None
     tone: str = "professional"
+    length: str = "standard"
+    focus: str = "program_management"
     tailored_resume_id: Optional[int] = None
     base_resume_id: Optional[int] = None
 
@@ -106,8 +108,9 @@ async def generate_cover_letter(
     user_id: str = Depends(get_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    if data.tone not in ("professional", "enthusiastic", "conversational"):
-        raise HTTPException(status_code=400, detail="Invalid tone")
+    valid_tones = ("professional", "enthusiastic", "conversational", "strategic", "technical")
+    if data.tone not in valid_tones:
+        raise HTTPException(status_code=400, detail=f"Invalid tone. Must be one of: {', '.join(valid_tones)}")
 
     # Validate that either job_description or job_url is provided
     if not data.job_description and not data.job_url:
@@ -188,6 +191,8 @@ async def generate_cover_letter(
             company_name=data.company_name,
             job_description=job_description,
             tone=data.tone,
+            length=data.length,
+            focus=data.focus,
             resume_context=resume_context,
             company_research=company_research,
         )
