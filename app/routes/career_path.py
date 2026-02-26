@@ -3,6 +3,7 @@ Career Path Designer API Routes
 Orchestrates research -> synthesis -> validation -> storage
 """
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from typing import List
@@ -259,11 +260,22 @@ async def get_career_plan(
         if not plan:
             raise HTTPException(status_code=404, detail="Career plan not found")
 
-        return GenerateResponse(
-            success=True,
-            plan=CareerPlan(**plan.plan_json),
-            plan_id=plan.id
-        )
+        # Try strict validation first; fall back to raw dict if stored data
+        # doesn't match current schema (old plans, relaxed AI output, etc.)
+        try:
+            plan_obj = CareerPlan(**plan.plan_json)
+            return GenerateResponse(
+                success=True,
+                plan=plan_obj,
+                plan_id=plan.id
+            )
+        except Exception:
+            # Return raw stored data directly, bypassing Pydantic response model
+            return JSONResponse(content={
+                "success": True,
+                "plan": plan.plan_json,
+                "plan_id": plan.id
+            })
 
     except HTTPException:
         raise
