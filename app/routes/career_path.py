@@ -296,17 +296,74 @@ async def list_career_plans(
 
         plans = result.scalars().all()
 
+        def _get(d, *keys, default=None):
+            """Safe lookup supporting both camelCase and snake_case keys."""
+            if not isinstance(d, dict):
+                return default
+            for k in keys:
+                val = d.get(k)
+                if val is not None:
+                    return val
+            return default
+
         items = []
         for plan in plans:
             intake = plan.intake_json or {}
             plan_data = plan.plan_json or {}
-            cert_path = plan_data.get("certification_path", [])
-            exp_plan = plan_data.get("experience_plan", [])
+            cert_path = _get(plan_data, "certification_path", "certificationPath", default=[])
+            exp_plan = _get(plan_data, "experience_plan", "experiencePlan", default=[])
+            target_roles_list = _get(plan_data, "target_roles", "targetRoles", default=[])
+            skills = _get(plan_data, "skills_analysis", "skillsAnalysis", default={})
+            timeline_data = _get(plan_data, "timeline", default={})
+            events = _get(plan_data, "events", default=[])
+            edu_options = _get(plan_data, "education_options", "educationOptions", default=[])
+
+            # Salary range from first target role
+            salary_range = None
+            if isinstance(target_roles_list, list) and len(target_roles_list) > 0:
+                salary_range = _get(target_roles_list[0], "salary_range", "salaryRange", default=None)
+
+            # Top 3 certification names
+            top_certs = []
+            if isinstance(cert_path, list):
+                for c in cert_path[:3]:
+                    name = _get(c, "name", "title", default=None) if isinstance(c, dict) else None
+                    if name:
+                        top_certs.append(name)
+
+            # Skills counts
+            need_to_build = _get(skills, "need_to_build", "needToBuild", default=[])
+            already_have = _get(skills, "already_have", "alreadyHave", default=[])
+            skills_gap_count = len(need_to_build) if isinstance(need_to_build, list) else 0
+            skills_have_count = len(already_have) if isinstance(already_have, list) else 0
+
+            # Bridge role from first target role
+            bridge_role = None
+            if isinstance(target_roles_list, list) and len(target_roles_list) > 0:
+                bridge_roles = _get(target_roles_list[0], "bridge_roles", "bridgeRoles", default=[])
+                if isinstance(bridge_roles, list) and len(bridge_roles) > 0:
+                    bridge_role = _get(bridge_roles[0], "title", "name", default=None)
+
+            # Top education option
+            top_education = None
+            if isinstance(edu_options, list) and len(edu_options) > 0:
+                top_education = _get(edu_options[0], "name", "title", default=None)
+
+            # Current phase from timeline
+            current_phase = None
+            if isinstance(timeline_data, dict):
+                phases = _get(timeline_data, "phases", default=[])
+                if isinstance(phases, list) and len(phases) > 0:
+                    current_phase = _get(phases[0], "name", "title", default=None)
+
+            # Number of events
+            num_events = len(events) if isinstance(events, list) else 0
+
             items.append({
                 "id": plan.id,
                 "target_roles": [
-                    role["title"]
-                    for role in plan_data.get("target_roles", [])
+                    role.get("title", "") if isinstance(role, dict) else ""
+                    for role in (target_roles_list if isinstance(target_roles_list, list) else [])
                 ],
                 "dream_role": intake.get("target_role_interest", ""),
                 "current_role": intake.get("current_role_title", ""),
@@ -315,7 +372,15 @@ async def list_career_plans(
                 "target_industries": intake.get("target_industries", []),
                 "num_certifications": len(cert_path) if isinstance(cert_path, list) else 0,
                 "num_projects": len(exp_plan) if isinstance(exp_plan, list) else 0,
-                "profile_summary": plan_data.get("profile_summary", ""),
+                "profile_summary": _get(plan_data, "profile_summary", "profileSummary", default=""),
+                "salary_range": salary_range,
+                "top_certifications": top_certs,
+                "skills_gap_count": skills_gap_count,
+                "skills_have_count": skills_have_count,
+                "bridge_role": bridge_role,
+                "top_education": top_education,
+                "current_phase": current_phase,
+                "num_events": num_events,
                 "created_at": plan.created_at.isoformat(),
                 "updated_at": plan.updated_at.isoformat(),
                 "version": plan.version
