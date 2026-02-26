@@ -118,19 +118,19 @@ class SkillsAnalysis(BaseModel):
 class SkillGuidanceItem(BaseModel):
     """Individual skill with guidance on why and how to develop it"""
     skill_name: str
-    why_needed: str = Field(..., min_length=10, description="Detailed explanation of why this skill is critical for the target role")
-    how_to_improve: str = Field(..., min_length=10, description="Specific actionable steps to develop this skill")
+    why_needed: str = Field(..., min_length=3, description="Detailed explanation of why this skill is critical for the target role")
+    how_to_improve: str = Field(..., min_length=3, description="Specific actionable steps to develop this skill")
     importance: str = Field(..., description="critical/high/medium - priority level")
     estimated_time: str = Field(..., description="Time to develop proficiency (e.g., '3-6 months', '1-2 years')")
     resources: List[str] = Field(default_factory=list, max_items=5, description="Specific learning resources (courses, books, platforms)")
-    real_world_application: str = Field(..., min_length=10, description="How this skill is used in day-to-day work")
+    real_world_application: str = Field(..., min_length=3, description="How this skill is used in day-to-day work")
 
 
 class SkillsGuidance(BaseModel):
     """Comprehensive guidance on soft and hard skills needed for target role"""
-    soft_skills: List[SkillGuidanceItem] = Field(..., min_items=3, max_items=8, description="Essential soft skills for the target role")
-    hard_skills: List[SkillGuidanceItem] = Field(..., min_items=3, max_items=10, description="Essential technical/hard skills for the target role")
-    skill_development_strategy: str = Field(..., min_length=20, description="Overall strategy for building these skills in parallel")
+    soft_skills: List[SkillGuidanceItem] = Field(..., min_items=1, max_items=8, description="Essential soft skills for the target role")
+    hard_skills: List[SkillGuidanceItem] = Field(..., min_items=1, max_items=10, description="Essential technical/hard skills for the target role")
+    skill_development_strategy: str = Field(..., min_length=5, description="Overall strategy for building these skills in parallel")
 
 
 # ========== Certification Schemas ==========
@@ -138,28 +138,28 @@ class StudyMaterial(BaseModel):
     """Study materials for certification prep"""
     type: str = Field(..., description="official-course/book/video-series/practice-exams/hands-on-labs")
     title: str
-    provider: str  # e.g., "Official Certification Body", "Udemy", "Pluralsight", "O'Reilly"
-    url: str = Field(..., description="Direct link to resource")
-    cost: str  # e.g., "Free", "$49.99", "Included in subscription"
-    duration: str  # e.g., "40 hours", "350 pages", "12 practice exams"
-    description: str = Field(..., min_length=5, max_length=500)
-    recommended_order: int = Field(..., ge=1, le=20, description="Order to study this material")
+    provider: str = Field(default="")
+    url: str = Field(default="", description="Direct link to resource")
+    cost: str = Field(default="")
+    duration: str = Field(default="")
+    description: str = Field(default="", max_length=500)
+    recommended_order: int = Field(default=1, ge=1, le=20, description="Order to study this material")
 
 class Certification(BaseModel):
     """A specific certification with real data and detailed study path"""
     name: str
-    certifying_body: str = Field(..., description="e.g., CompTIA, AWS, Microsoft, ISC2")
-    level: str = Field(..., description="foundation/intermediate/advanced")
+    certifying_body: str = Field(default="", description="e.g., CompTIA, AWS, Microsoft, ISC2")
+    level: str = Field(default="foundation", description="foundation/intermediate/advanced")
     prerequisites: List[str] = Field(default_factory=list)
-    est_study_weeks: int = Field(..., ge=1, le=104)
-    est_cost_range: str
+    est_study_weeks: int = Field(default=8, ge=1, le=104)
+    est_cost_range: str = Field(default="")
     exam_details: Dict[str, Any] = Field(default_factory=dict, description="exam_code, passing_score, duration, num_questions")
-    official_links: List[str] = Field(..., min_items=1, description="ONLY web-grounded URLs")
-    what_it_unlocks: str
+    official_links: List[str] = Field(default_factory=list, description="ONLY web-grounded URLs")
+    what_it_unlocks: str = Field(default="")
     alternatives: List[str] = Field(default_factory=list)
-    study_materials: List[StudyMaterial] = Field(..., min_items=1, description="Detailed study resources in recommended order")
+    study_materials: List[StudyMaterial] = Field(default_factory=list, description="Detailed study resources in recommended order")
     study_plan_weeks: List[Dict[str, str]] = Field(default_factory=list, description="Week-by-week study plan")
-    source_citations: List[str] = Field(..., min_items=1)
+    source_citations: List[str] = Field(default_factory=list)
     # Journey fields (Optional for backward compat)
     journey_order: Optional[int] = Field(None, ge=1, le=20, description="Sequential order in the certification journey")
     tier: Optional[str] = Field(None, description="foundation/intermediate/advanced tier grouping")
@@ -172,12 +172,12 @@ class EducationOption(BaseModel):
     """Degree, bootcamp, or self-study path"""
     type: str = Field(..., description="degree/bootcamp/self-study/online-course")
     name: str
-    duration: str
-    cost_range: str
-    format: str = Field(..., description="online/in-person/hybrid")
+    duration: str = Field(default="")
+    cost_range: str = Field(default="")
+    format: str = Field(default="online", description="online/in-person/hybrid")
     official_link: Optional[str] = None
-    pros: List[str] = Field(..., min_items=1, max_items=5)
-    cons: List[str] = Field(..., min_items=1, max_items=5)
+    pros: List[str] = Field(default_factory=list, max_items=5)
+    cons: List[str] = Field(default_factory=list, max_items=5)
     source_citations: List[str] = Field(default_factory=list)
     # Enhanced detail fields (Optional for backward compat)
     description: Optional[str] = Field(None, max_length=800, description="Program overview")
@@ -192,22 +192,22 @@ class EducationOption(BaseModel):
 class TechStackDetail(BaseModel):
     """Specific technology or tool in the stack"""
     name: str  # e.g., "React", "PostgreSQL", "AWS Lambda"
-    category: str  # e.g., "Frontend Framework", "Database", "Cloud Service"
-    why_this_tech: str = Field(..., min_length=5, description="Why this specific technology is valuable for the target role")
-    learning_resources: List[str] = Field(..., min_items=1, description="URLs to learn this specific tech")
+    category: str = Field(default="")  # e.g., "Frontend Framework", "Database", "Cloud Service"
+    why_this_tech: str = Field(default="", description="Why this specific technology is valuable for the target role")
+    learning_resources: List[str] = Field(default_factory=list, description="URLs to learn this specific tech")
 
 class ExperienceProject(BaseModel):
     """Portfolio project, volunteer work, or lab with detailed tech stack"""
     type: str = Field(..., description="portfolio/volunteer/lab/side-project/freelance")
     title: str
-    description: str = Field(..., min_length=10, max_length=1000)
-    skills_demonstrated: List[str] = Field(..., min_items=1)
-    detailed_tech_stack: List[TechStackDetail] = Field(..., min_items=1, description="Specific technologies and why to use them")
-    architecture_overview: str = Field(..., min_length=10, description="How the project is structured technically")
-    time_commitment: str
-    difficulty_level: str = Field(..., description="beginner/intermediate/advanced")
-    step_by_step_guide: List[str] = Field(..., min_items=3, description="High-level steps to build this project")
-    how_to_showcase: str = Field(..., description="How to present on resume/LinkedIn")
+    description: str = Field(..., min_length=3, max_length=2000)
+    skills_demonstrated: List[str] = Field(default_factory=list)
+    detailed_tech_stack: List[TechStackDetail] = Field(default_factory=list, description="Specific technologies and why to use them")
+    architecture_overview: str = Field(default="", description="How the project is structured technically")
+    time_commitment: str = Field(default="")
+    difficulty_level: str = Field(default="intermediate", description="beginner/intermediate/advanced")
+    step_by_step_guide: List[str] = Field(default_factory=list, description="High-level steps to build this project")
+    how_to_showcase: str = Field(default="", description="How to present on resume/LinkedIn")
     example_resources: List[str] = Field(default_factory=list)
     github_example_repos: List[str] = Field(default_factory=list, description="Similar projects on GitHub for reference")
 
@@ -216,22 +216,22 @@ class ExperienceProject(BaseModel):
 class Event(BaseModel):
     """Real networking/learning event with verified data"""
     name: str
-    organizer: str = Field(..., description="Who runs this event - e.g., 'Linux Foundation', 'local tech meetup group'")
+    organizer: str = Field(default="", description="Who runs this event")
     type: str = Field(..., description="conference/meetup/virtual/career-fair/workshop")
-    date_or_season: str
-    location: str
-    scope: str = Field(..., description="local/regional/national/international")
-    price_range: str
+    date_or_season: str = Field(default="")
+    location: str = Field(default="")
+    scope: str = Field(default="national", description="local/regional/national/international")
+    price_range: str = Field(default="")
     attendee_count: Optional[str] = Field(None, description="e.g., '500-1000 attendees', 'small group 20-30'")
-    beginner_friendly: bool
-    target_audience: str = Field(..., description="Who this event is for - e.g., 'Junior Developers', 'Security Professionals'")
-    why_attend: str = Field(..., min_length=10, description="Detailed explanation of networking/learning opportunities")
+    beginner_friendly: bool = Field(default=False)
+    target_audience: str = Field(default="", description="Who this event is for")
+    why_attend: str = Field(default="", description="Detailed explanation of networking/learning opportunities")
     key_topics: List[str] = Field(default_factory=list, description="Main topics covered at event")
     notable_speakers: List[str] = Field(default_factory=list, description="Known speakers or companies presenting")
     registration_link: Optional[str] = Field(None, description="MUST be web-grounded, not hallucinated")
     recurring: bool = Field(default=False, description="Is this an annual/recurring event?")
     virtual_option_available: bool = Field(default=False)
-    source_citations: List[str] = Field(..., min_items=1, description="Where this data came from")
+    source_citations: List[str] = Field(default_factory=list, description="Where this data came from")
 
 
 # ========== Timeline Schemas ==========
@@ -246,69 +246,69 @@ class WeeklyTask(BaseModel):
 class MonthlyPhase(BaseModel):
     """Tasks for a specific month"""
     month_number: int = Field(..., ge=1, le=12)
-    phase_name: str
-    goals: List[str] = Field(..., min_items=1, max_items=4)
-    deliverables: List[str] = Field(..., min_items=1)
+    phase_name: str = Field(default="")
+    goals: List[str] = Field(default_factory=list, max_items=4)
+    deliverables: List[str] = Field(default_factory=list)
     checkpoint: Optional[str] = None
 
 
 class Timeline(BaseModel):
     """12-week and 6-month plans"""
-    twelve_week_plan: List[WeeklyTask] = Field(..., min_items=4, max_items=16)
-    six_month_plan: List[MonthlyPhase] = Field(..., min_items=3, max_items=8)
-    apply_ready_checkpoint: str = Field(..., description="When user can start applying")
+    twelve_week_plan: List[WeeklyTask] = Field(..., min_items=1, max_items=16)
+    six_month_plan: List[MonthlyPhase] = Field(..., min_items=1, max_items=8)
+    apply_ready_checkpoint: str = Field(default="", description="When user can start applying")
 
 
 # ========== Resume Assets Schemas ==========
 class ResumeBullet(BaseModel):
     """Single resume bullet with detailed guidance"""
-    bullet_text: str = Field(..., min_length=10, max_length=500)
-    why_this_works: str = Field(..., min_length=5, description="Detailed explanation of why this bullet is effective")
-    what_to_emphasize: str = Field(..., description="What aspect of your experience to highlight")
-    keywords_included: List[str] = Field(..., description="ATS keywords naturally incorporated")
-    structure_explanation: str = Field(..., description="How this follows STAR/CAR method")
+    bullet_text: str = Field(..., min_length=3, max_length=500)
+    why_this_works: str = Field(default="", description="Detailed explanation of why this bullet is effective")
+    what_to_emphasize: str = Field(default="", description="What aspect of your experience to highlight")
+    keywords_included: List[str] = Field(default_factory=list, description="ATS keywords naturally incorporated")
+    structure_explanation: str = Field(default="", description="How this follows STAR/CAR method")
 
 class SkillGrouping(BaseModel):
     """Grouped skills by category with explanations"""
     category: str  # e.g., "Technical Skills", "Cloud Platforms", "Programming Languages"
     skills: List[str] = Field(..., min_items=1)
-    why_group_these: str = Field(..., min_length=5, description="Why these skills are grouped together")
-    priority: str = Field(..., description="core/important/supplementary")
+    why_group_these: str = Field(default="", description="Why these skills are grouped together")
+    priority: str = Field(default="core", description="core/important/supplementary")
 
 class ResumeAssets(BaseModel):
     """AI-generated resume content with extreme detail and guidance"""
     # Headline & Summary
     headline: str = Field(..., max_length=300)
-    headline_explanation: str = Field(..., min_length=10, description="Why this headline positions you effectively")
+    headline_explanation: str = Field(default="", description="Why this headline positions you effectively")
 
-    summary: str = Field(..., min_length=20, max_length=2000)
-    summary_breakdown: str = Field(..., min_length=20, description="Detailed explanation of each sentence in the summary")
-    summary_strategy: str = Field(..., min_length=10, description="Overall strategy behind this summary")
+    summary: str = Field(..., min_length=5, max_length=2000)
+    summary_breakdown: str = Field(default="", description="Detailed explanation of each sentence in the summary")
+    summary_strategy: str = Field(default="", description="Overall strategy behind this summary")
 
     # Skills Section with Grouping
-    skills_grouped: List[SkillGrouping] = Field(..., min_items=2, description="Skills organized by category")
-    skills_ordering_rationale: str = Field(..., min_length=10, description="Why skills are ordered this way")
+    skills_grouped: List[SkillGrouping] = Field(..., min_items=1, description="Skills organized by category")
+    skills_ordering_rationale: str = Field(default="", description="Why skills are ordered this way")
 
     # Achievement Bullets
-    target_role_bullets: List[ResumeBullet] = Field(..., min_items=3, max_items=10)
-    bullets_overall_strategy: str = Field(..., min_length=10, description="How these bullets collectively position you")
+    target_role_bullets: List[ResumeBullet] = Field(..., min_items=1, max_items=10)
+    bullets_overall_strategy: str = Field(default="", description="How these bullets collectively position you")
 
     # Experience Reframing Guide
-    how_to_reframe_current_role: str = Field(..., min_length=20, description="Detailed guide on repositioning current experience")
-    experience_gaps_to_address: List[str] = Field(..., description="How to address gaps or pivots")
+    how_to_reframe_current_role: str = Field(default="", description="Detailed guide on repositioning current experience")
+    experience_gaps_to_address: List[str] = Field(default_factory=list, description="How to address gaps or pivots")
 
     # Keywords & ATS
-    keywords_for_ats: List[str] = Field(..., min_items=5)
-    keyword_placement_strategy: str = Field(..., min_length=10, description="Where and how to naturally incorporate keywords")
+    keywords_for_ats: List[str] = Field(..., min_items=1)
+    keyword_placement_strategy: str = Field(default="", description="Where and how to naturally incorporate keywords")
 
     # LinkedIn Guidance
-    linkedin_headline: str
-    linkedin_about_section: str = Field(..., min_length=20, max_length=3000)
-    linkedin_strategy: str = Field(..., min_length=10, description="How to optimize LinkedIn for this transition")
+    linkedin_headline: str = Field(default="")
+    linkedin_about_section: str = Field(default="", max_length=3000)
+    linkedin_strategy: str = Field(default="", description="How to optimize LinkedIn for this transition")
 
     # Cover Letter Template
-    cover_letter_template: str = Field(..., min_length=20, description="Customizable cover letter framework")
-    cover_letter_guidance: str = Field(..., min_length=20, description="How to adapt this template")
+    cover_letter_template: str = Field(default="", description="Customizable cover letter framework")
+    cover_letter_guidance: str = Field(default="", description="How to adapt this template")
 
 
 # ========== Complete Career Plan Schema ==========
@@ -319,19 +319,19 @@ class CareerPlan(BaseModel):
     version: str = Field(default="1.0")
 
     # Core sections
-    profile_summary: str = Field(..., min_length=10, max_length=1000)
+    profile_summary: str = Field(..., min_length=3, max_length=1000)
     target_roles: List[TargetRole] = Field(..., min_items=1, max_items=6)
     skills_analysis: SkillsAnalysis
     skills_guidance: SkillsGuidance
-    certification_path: List[Certification] = Field(..., min_items=1, max_items=8)
-    education_options: List[EducationOption] = Field(..., min_items=1, max_items=5)
-    experience_plan: List[ExperienceProject] = Field(..., min_items=1, max_items=10)
-    events: List[Event] = Field(..., min_items=1, max_items=15)
+    certification_path: List[Certification] = Field(default_factory=list, max_items=8)
+    education_options: List[EducationOption] = Field(default_factory=list, max_items=5)
+    experience_plan: List[ExperienceProject] = Field(default_factory=list, max_items=10)
+    events: List[Event] = Field(default_factory=list, max_items=15)
     timeline: Timeline
     resume_assets: ResumeAssets
 
     # Source tracking
-    research_sources: List[str] = Field(..., min_items=1, description="All web-grounded sources")
+    research_sources: List[str] = Field(default_factory=list, description="All web-grounded sources")
 
     # Top-level summary fields (Optional for backward compat)
     certification_journey_summary: Optional[str] = Field(None, description="Overview of the cert progression path")
