@@ -3,6 +3,7 @@
 import os
 import json
 from openai import AsyncOpenAI
+from app.services.gateway import get_gateway
 from typing import Optional
 
 
@@ -81,7 +82,9 @@ REQUIREMENTS:
 
 Return ONLY the cover letter text, no JSON or markdown formatting."""
 
-    response = await client.chat.completions.create(
+    response = await get_gateway().execute(
+        "openai",
+        client.chat.completions.create,
         model="gpt-4.1-mini",
         messages=[
             {"role": "system", "content": "You are an expert career coach who writes compelling, deeply tailored cover letters. When company research is provided, weave in references to the company's mission, values, recent initiatives, and culture to show genuine knowledge and alignment. When resume context is provided, connect the candidate's specific experience and achievements to the job requirements."},

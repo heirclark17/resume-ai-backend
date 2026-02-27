@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException, Header, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, text
 from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
 from typing import List, Optional, Dict
-from app.database import get_db
+from app.database import get_db, AsyncSessionLocal
 from app.models.interview_prep import InterviewPrep
 from app.models.resume import TailoredResume, BaseResume
 from app.models.job import Job
@@ -2561,3 +2561,163 @@ async def delete_mock_session(
     except Exception as e:
         print(f"Failed to delete mock session: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to delete mock session: {str(e)}")
+
+
+# ---------------------------------------------------------------------------
+# Async interview prep generation (non-blocking, polls for result)
+# ---------------------------------------------------------------------------
+
+@router.post("/generate-async/{tailored_resume_id}")
+async def generate_interview_prep_async(
+    tailored_resume_id: int,
+    background_tasks: BackgroundTasks,
+    x_user_id: str = Header(None, alias="X-User-ID"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Start interview prep generation asynchronously.
+
+    Returns a job_id immediately. Client polls GET /api/interview-prep/job/{job_id}
+    for progress and final result.
+    """
+    from app.services import job_manager
+
+    job_id = await job_manager.enqueue_job(
+        db=db,
+        job_type="interview_prep",
+        user_id=x_user_id or "anonymous",
+        input_data={"tailored_resume_id": tailored_resume_id},
+    )
+
+    background_tasks.add_task(_process_interview_prep_job, job_id, tailored_resume_id)
+
+    return {"success": True, "job_id": job_id, "message": "Poll /api/interview-prep/job/{job_id}"}
+
+
+@router.get("/job/{job_id}")
+async def get_interview_prep_job_status(job_id: str, db: AsyncSession = Depends(get_db)):
+    """Get status of an async interview prep generation job."""
+    from app.services import job_manager
+
+    status = await job_manager.get_job_status(db, job_id)
+    if not status:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return status
+
+
+async def _process_interview_prep_job(job_id: str, tailored_resume_id: int):
+    """Background task that runs the full interview prep generation pipeline."""
+    from app.services import job_manager
+
+    async with AsyncSessionLocal() as db:
+        try:
+            await job_manager.update_progress(db, job_id, 10, "Loading resume and job data...")
+
+            # Fetch tailored resume
+            result = await db.execute(
+                select(TailoredResume).where(
+                    TailoredResume.id == tailored_resume_id,
+                    TailoredResume.is_deleted == False
+                )
+            )
+            tailored_resume = result.scalar_one_or_none()
+            if not tailored_resume:
+                await job_manager.fail_job(db, job_id, "Tailored resume not found")
+                return
+
+            # Fetch job
+            result = await db.execute(select(Job).where(Job.id == tailored_resume.job_id))
+            job = result.scalar_one_or_none()
+            if not job:
+                await job_manager.fail_job(db, job_id, "Job not found")
+                return
+
+            # Fetch company research
+            result = await db.execute(
+                select(CompanyResearch).where(CompanyResearch.job_id == job.id)
+            )
+            company_research = result.scalar_one_or_none()
+            if not company_research:
+                await job_manager.fail_job(db, job_id, "Company research not found")
+                return
+
+            await job_manager.update_progress(db, job_id, 30, "Generating interview prep with AI...")
+
+            # Check for existing prep
+            result = await db.execute(
+                select(InterviewPrep).where(InterviewPrep.tailored_resume_id == tailored_resume_id)
+            )
+            existing_prep = result.scalar_one_or_none()
+
+            if existing_prep and not existing_prep.is_deleted:
+                await job_manager.complete_job(db, job_id, {
+                    "interview_prep_id": existing_prep.id,
+                    "cached": True,
+                })
+                return
+
+            ai_service = OpenAIInterviewPrep()
+
+            job_description = f"""
+Job Title: {job.title}
+Company: {job.company}
+Location: {job.location or 'Not specified'}
+Posted: {job.posted_date or 'Unknown'}
+Salary: {job.salary or 'Not specified'}
+
+Job Description:
+{job.description or 'No description available'}
+
+Requirements:
+{job.requirements or 'No requirements listed'}
+"""
+
+            company_data = {
+                'industry': company_research.industry or 'Unknown',
+                'mission_values': company_research.mission_values or '',
+                'initiatives': company_research.initiatives or '',
+                'team_culture': company_research.team_culture or '',
+                'compliance': company_research.compliance or '',
+                'tech_stack': company_research.tech_stack or '',
+                'sources': company_research.sources or [],
+            }
+
+            await job_manager.update_progress(db, job_id, 60, "AI generating interview questions...")
+
+            prep_data = await ai_service.generate_interview_prep(
+                job_description=job_description,
+                company_research=company_data,
+                company_name=job.company,
+                job_title=job.title,
+            )
+
+            await job_manager.update_progress(db, job_id, 90, "Saving...")
+
+            if existing_prep and existing_prep.is_deleted:
+                existing_prep.prep_data = prep_data
+                existing_prep.is_deleted = False
+                existing_prep.deleted_at = None
+                existing_prep.created_at = datetime.utcnow()
+                existing_prep.updated_at = datetime.utcnow()
+                await db.commit()
+                await db.refresh(existing_prep)
+                interview_prep = existing_prep
+            else:
+                interview_prep = InterviewPrep(
+                    tailored_resume_id=tailored_resume_id,
+                    prep_data=prep_data,
+                    created_at=datetime.utcnow(),
+                )
+                db.add(interview_prep)
+                await db.commit()
+                await db.refresh(interview_prep)
+
+            await job_manager.complete_job(db, job_id, {
+                "interview_prep_id": interview_prep.id,
+                "cached": False,
+            })
+
+        except Exception as exc:
+            import traceback
+            traceback.print_exc()
+            await job_manager.fail_job(db, job_id, str(exc))

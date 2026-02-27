@@ -1,10 +1,11 @@
-from openai import OpenAI
+from openai import AsyncOpenAI
 from app.config import get_settings
+from app.services.gateway import get_gateway
 
 settings = get_settings()
 
 class PerplexityClient:
-    """Client for Perplexity AI company research"""
+    """Client for Perplexity AI company research (async)"""
 
     def __init__(self):
         if not settings.perplexity_api_key:
@@ -15,7 +16,7 @@ class PerplexityClient:
             )
 
         try:
-            self.client = OpenAI(
+            self.client = AsyncOpenAI(
                 api_key=settings.perplexity_api_key,
                 base_url="https://api.perplexity.ai"
             )
@@ -124,7 +125,7 @@ Format your response with clear section headers and bullet points. Include speci
 
 
         try:
-            response = self.client.chat.completions.create(
+            response = await get_gateway().execute("perplexity", self.client.chat.completions.create,
                 model="sonar",
                 messages=[
                     {
@@ -203,7 +204,7 @@ Format your response with clear section headers and bullet points. Include speci
             # Use Perplexity's sonar model for web search with citations
             # Note: Perplexity automatically returns citations in the response
             # Model updated to latest: https://docs.perplexity.ai/guides/model-cards
-            response = self.client.chat.completions.create(
+            response = await get_gateway().execute("perplexity", self.client.chat.completions.create,
                 model="sonar",  # Latest Perplexity model with web search
                 messages=[
                     {
@@ -296,7 +297,7 @@ Format your response with clear section headers and bullet points. Include speci
             return {"error": "No job URL or description provided"}
 
         try:
-            response = self.client.chat.completions.create(
+            response = await get_gateway().execute("perplexity", self.client.chat.completions.create,
                 model="sonar",
                 messages=[
                     {
@@ -323,7 +324,7 @@ Format your response with clear section headers and bullet points. Include speci
             print(f"Perplexity API error: {str(e)}")
             return {"error": str(e)}
 
-    def research_salary_insights(
+    async def research_salary_insights(
         self,
         job_title: str,
         location: str = None,
@@ -373,7 +374,7 @@ Please provide:
 Focus on data from 2024-2025. Include citations from sources like Glassdoor, Levels.fyi, Bureau of Labor Statistics, Payscale, LinkedIn Salary, or company-specific data."""
 
         try:
-            response = self.client.chat.completions.create(
+            response = await get_gateway().execute("perplexity", self.client.chat.completions.create,
                 model="sonar",  # Sonar model has real-time web access
                 messages=[
                     {

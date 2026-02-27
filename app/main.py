@@ -9,6 +9,7 @@ from app.database import init_db
 from app.routes import resumes, tailoring, auth, admin, interview_prep, star_stories, resume_analysis, certifications, saved_comparisons, jobs, career_path, applications, cover_letters, resume_versions, reminders, auth_test, recordings, debug, auth_debug, templates, builder
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.middleware.waf import WAFMiddleware
+from app.middleware.correlation import CorrelationMiddleware
 from app.utils.logger import logger
 
 settings = get_settings()
@@ -19,6 +20,9 @@ limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(title=settings.app_name, version=settings.app_version)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Correlation ID - request tracing (innermost, runs first)
+app.add_middleware(CorrelationMiddleware)
 
 # Web Application Firewall - Block malicious requests
 app.add_middleware(WAFMiddleware)
@@ -36,7 +40,7 @@ app.add_middleware(
     allow_origins=allowed_origins,  # Explicit origins from config
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "X-API-Key", "Authorization", "X-TOTP-Code", "X-User-ID"],
+    allow_headers=["Content-Type", "X-API-Key", "Authorization", "X-TOTP-Code", "X-User-ID", "X-Correlation-ID"],
     expose_headers=["*"],
     max_age=3600,
 )
@@ -75,32 +79,68 @@ async def startup_event():
     await init_db()
     logger.info(f"Backend ready at http://{settings.backend_host}:{settings.backend_port}")
 
-# Health check endpoint (minimal response to prevent information disclosure)
+# Health check endpoint - shallow (for Railway routing / load balancer)
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
+
+
+# Deep health check - verifies DB, queue depth, circuit states
+@app.get("/health/ready")
+async def health_ready():
+    from app.database import AsyncSessionLocal
+    from sqlalchemy import text
+    checks = {"database": "unknown", "queue_depth": -1}
+    healthy = True
+
+    # Check database connectivity
+    try:
+        async with AsyncSessionLocal() as session:
+            await session.execute(text("SELECT 1"))
+            checks["database"] = "ok"
+    except Exception as e:
+        checks["database"] = f"error: {type(e).__name__}"
+        healthy = False
+
+    # Check job queue depth (if table exists)
+    try:
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                text("SELECT COUNT(*) FROM async_jobs WHERE status IN ('pending', 'processing')")
+            )
+            checks["queue_depth"] = result.scalar() or 0
+    except Exception:
+        checks["queue_depth"] = 0  # Table may not exist yet
+
+    # Check circuit breaker states
+    try:
+        from app.services.gateway import get_gateway
+        gw = get_gateway()
+        checks["circuits"] = gw.get_circuit_states()
+    except Exception:
+        checks["circuits"] = {}
+
+    status_code = 200 if healthy else 503
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=status_code,
+        content={"status": "ok" if healthy else "degraded", "checks": checks}
+    )
+
+
+# Metrics endpoint — lightweight in-process metrics snapshot
+@app.get("/metrics")
+async def metrics_endpoint():
+    from app.utils.metrics import get_snapshot
+    return get_snapshot()
+
 
 # Root endpoint (minimal response to prevent information disclosure)
 @app.get("/")
 async def root():
     return {"status": "ok"}
 
-# Request logging middleware
-@app.middleware("http")
-async def log_requests(request, call_next):
-    logger.info(f"{request.method} {request.url.path}")
-
-    # Sanitize headers before logging (remove sensitive data)
-    if logger.level <= 10:  # DEBUG level
-        sanitized_headers = {
-            k: v if k.lower() not in ['x-api-key', 'authorization', 'cookie'] else '***REDACTED***'
-            for k, v in request.headers.items()
-        }
-        logger.debug(f"Headers: {sanitized_headers}")
-
-    response = await call_next(request)
-    logger.info(f"Response: {response.status_code}")
-    return response
+# Request logging is now handled by CorrelationMiddleware (structured JSON with correlation IDs)
 
 # Register routes
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
@@ -119,8 +159,11 @@ app.include_router(cover_letters.router, prefix="/api/cover-letters", tags=["Cov
 app.include_router(resume_versions.router, prefix="/api/resumes", tags=["Resume Versions"])
 app.include_router(reminders.router, prefix="/api/reminders", tags=["Reminders"])
 app.include_router(recordings.router)  # Prefix already in router definition
-app.include_router(debug.router)  # Debug endpoints - prefix already in router definition
-app.include_router(auth_debug.router)  # Auth debug endpoints - prefix already in router definition
+# Gate debug endpoints behind DEBUG flag - never expose in production
+if settings.debug:
+    app.include_router(debug.router)
+    app.include_router(auth_debug.router)
+    logger.warning("Debug endpoints enabled (DEBUG=true)")
 app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 app.include_router(templates.router)  # Prefix already in router definition
 app.include_router(builder.router)  # Prefix already in router definition

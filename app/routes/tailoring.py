@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
-from app.database import get_db
+from app.database import get_db, AsyncSessionLocal
 from app.models.resume import BaseResume, TailoredResume
 from app.models.job import Job
 from app.models.company import CompanyResearch
@@ -84,7 +84,7 @@ async def get_or_fetch_salary_data(
 
     try:
         perplexity = PerplexityClient()
-        raw = perplexity.research_salary_insights(
+        raw = await perplexity.research_salary_insights(
             job_title=job_title,
             location=location if location else None,
         )
@@ -1007,3 +1007,167 @@ async def tailor_resume_batch(
     }
 
 
+# ---------------------------------------------------------------------------
+# Async tailoring (non-blocking, polls for result)
+# ---------------------------------------------------------------------------
+
+@router.post("/tailor-async")
+async def tailor_resume_async(
+    tailor_request: TailorRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    auth_result: tuple = Depends(get_current_user_unified),
+):
+    """
+    Start resume tailoring asynchronously.
+
+    Returns a job_id immediately. Client polls GET /api/tailor/job/{job_id}
+    for progress and final result.
+    """
+    from app.services import job_manager
+
+    user, user_id = auth_result
+
+    job_id = await job_manager.enqueue_job(
+        db=db,
+        job_type="tailor_resume",
+        user_id=user_id,
+        input_data={
+            "base_resume_id": tailor_request.base_resume_id,
+            "job_url": tailor_request.job_url,
+            "company": tailor_request.company,
+            "job_title": tailor_request.job_title,
+            "job_description": tailor_request.job_description,
+        },
+    )
+
+    background_tasks.add_task(_process_tailor_job, job_id, tailor_request, user_id)
+
+    return {"success": True, "job_id": job_id, "message": "Poll /api/tailor/job/{job_id}"}
+
+
+@router.get("/job/{job_id}")
+async def get_tailor_job_status(job_id: str, db: AsyncSession = Depends(get_db)):
+    """Get status of an async tailoring job."""
+    from app.services import job_manager
+
+    status = await job_manager.get_job_status(db, job_id)
+    if not status:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return status
+
+
+async def _process_tailor_job(job_id: str, tailor_request: TailorRequest, user_id: str):
+    """Background task that runs the full tailoring pipeline."""
+    from app.services import job_manager
+
+    async with AsyncSessionLocal() as db:
+        try:
+            await job_manager.update_progress(db, job_id, 10, "Extracting job details...")
+
+            # Reuse existing sync tailor logic inline
+            firecrawl = None
+            extracted_job_data = None
+            needs_extraction = tailor_request.job_url and (not tailor_request.company or not tailor_request.job_title)
+
+            if needs_extraction:
+                try:
+                    firecrawl = FirecrawlClient()
+                    extracted_job_data = await firecrawl.extract_job_details(tailor_request.job_url)
+                    if not tailor_request.company:
+                        tailor_request.company = extracted_job_data['company']
+                    if not tailor_request.job_title:
+                        tailor_request.job_title = extracted_job_data['title']
+                    if not tailor_request.job_description:
+                        tailor_request.job_description = extracted_job_data['description']
+                except Exception:
+                    if not tailor_request.company:
+                        tailor_request.company = "Company"
+                    if not tailor_request.job_title:
+                        tailor_request.job_title = "Position"
+
+            await job_manager.update_progress(db, job_id, 30, "Researching company...")
+
+            perplexity = PerplexityClient()
+            company_research = await perplexity.research_company(
+                company_name=tailor_request.company or "Unknown",
+                job_title=tailor_request.job_title or "",
+            )
+
+            await job_manager.update_progress(db, job_id, 50, "Tailoring resume with AI...")
+
+            # Fetch base resume
+            result = await db.execute(
+                select(BaseResume).where(BaseResume.id == tailor_request.base_resume_id)
+            )
+            base_resume = result.scalar_one_or_none()
+            if not base_resume:
+                await job_manager.fail_job(db, job_id, "Base resume not found")
+                return
+
+            base_resume_data = {
+                "summary": base_resume.summary or "",
+                "skills": safe_json_loads(base_resume.skills, []),
+                "experience": safe_json_loads(base_resume.experience, []),
+                "education": base_resume.education or "",
+                "certifications": base_resume.certifications or "",
+            }
+
+            openai_tailor = OpenAITailor()
+            job_details = {
+                "company": tailor_request.company or "Unknown",
+                "title": tailor_request.job_title or "Unknown",
+                "url": tailor_request.job_url or "",
+                "description": tailor_request.job_description or "",
+            }
+
+            tailored_content = await openai_tailor.tailor_resume(
+                base_resume=base_resume_data,
+                company_research=company_research,
+                job_details=job_details,
+            )
+
+            await job_manager.update_progress(db, job_id, 80, "Generating document...")
+
+            # Save tailored resume to DB
+            from app.models.job import Job
+
+            job_record = Job(
+                url=tailor_request.job_url or f"manual_{datetime.utcnow().timestamp()}",
+                company=tailor_request.company or "Unknown",
+                title=tailor_request.job_title or "Unknown",
+                description=tailor_request.job_description or "",
+                is_active=True,
+                session_user_id=user_id,
+            )
+            db.add(job_record)
+            await db.commit()
+            await db.refresh(job_record)
+
+            tailored_resume = TailoredResume(
+                base_resume_id=base_resume.id,
+                job_id=job_record.id,
+                session_user_id=user_id,
+                tailored_summary=tailored_content.get("summary", ""),
+                tailored_skills=json.dumps(tailored_content.get("competencies", [])),
+                tailored_experience=json.dumps(tailored_content.get("experience", [])),
+                alignment_statement=tailored_content.get("alignment_statement", ""),
+                quality_score=0,
+            )
+            db.add(tailored_resume)
+            await db.commit()
+            await db.refresh(tailored_resume)
+
+            await job_manager.complete_job(db, job_id, {
+                "tailored_resume_id": tailored_resume.id,
+                "job_id": job_record.id,
+                "company": job_record.company,
+                "title": job_record.title,
+                "summary": tailored_content.get("summary", ""),
+                "competencies": tailored_content.get("competencies", []),
+            })
+
+        except Exception as exc:
+            import traceback
+            traceback.print_exc()
+            await job_manager.fail_job(db, job_id, str(exc))

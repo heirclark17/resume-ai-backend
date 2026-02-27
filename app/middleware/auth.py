@@ -6,6 +6,7 @@ from app.models.user import User
 from typing import Optional
 import jwt
 import os
+import time
 import httpx
 from functools import lru_cache
 
@@ -14,18 +15,21 @@ SUPABASE_JWT_SECRET = os.getenv('SUPABASE_JWT_SECRET')
 SUPABASE_URL = os.getenv('SUPABASE_URL', '')
 SUPABASE_ANON_KEY = os.getenv('SUPABASE_ANON_KEY', '')
 
-# Cache for Supabase public key (ES256)
+# Cache for Supabase public key (ES256) with TTL
 _supabase_public_key_cache = None
+_supabase_public_key_cached_at = 0.0
+_JWKS_CACHE_TTL_SECONDS = 6 * 3600  # 6 hours
 
 
 async def get_supabase_public_key():
     """
     Fetch Supabase public key for ES256 JWT verification
-    Caches the key to avoid repeated requests
+    Caches the key with a 6-hour TTL to pick up key rotations
     """
-    global _supabase_public_key_cache
+    global _supabase_public_key_cache, _supabase_public_key_cached_at
 
-    if _supabase_public_key_cache:
+    now = time.monotonic()
+    if _supabase_public_key_cache and (now - _supabase_public_key_cached_at) < _JWKS_CACHE_TTL_SECONDS:
         print("[Auth] Using cached Supabase public key")
         return _supabase_public_key_cache
 
@@ -58,7 +62,8 @@ async def get_supabase_public_key():
                 raise ValueError(f"Unsupported key type: {key_data.get('kty')}")
 
             _supabase_public_key_cache = public_key
-            print(f"[Auth] Cached Supabase public key (type: {key_data.get('kty')})")
+            _supabase_public_key_cached_at = time.monotonic()
+            print(f"[Auth] Cached Supabase public key (type: {key_data.get('kty')}, TTL: {_JWKS_CACHE_TTL_SECONDS}s)")
             return public_key
         else:
             raise ValueError("No keys found in JWKS")

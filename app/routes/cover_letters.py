@@ -1,13 +1,13 @@
 """Cover Letter Generation Routes"""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 
-from app.database import get_db
+from app.database import get_db, AsyncSessionLocal
 from app.models.cover_letter import CoverLetter
 from app.middleware.auth import get_user_id, ownership_filter
 from app.services.cover_letter_service import generate_cover_letter_content
@@ -319,3 +319,184 @@ async def export_cover_letter(
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# ---------------------------------------------------------------------------
+# Async cover letter generation (non-blocking, polls for result)
+# ---------------------------------------------------------------------------
+
+@router.post("/generate-async")
+async def generate_cover_letter_async(
+    data: GenerateRequest,
+    background_tasks: BackgroundTasks,
+    user_id: str = Depends(get_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Start cover letter generation asynchronously.
+
+    Returns a job_id immediately. Client polls GET /api/cover-letters/job/{job_id}
+    for progress and final result.
+    """
+    from app.services import job_manager
+
+    job_id = await job_manager.enqueue_job(
+        db=db,
+        job_type="cover_letter",
+        user_id=user_id,
+        input_data={
+            "job_title": data.job_title,
+            "company_name": data.company_name,
+            "job_description": data.job_description,
+            "job_url": data.job_url,
+            "tone": data.tone,
+            "length": data.length,
+            "focus": data.focus,
+            "tailored_resume_id": data.tailored_resume_id,
+            "base_resume_id": data.base_resume_id,
+        },
+    )
+
+    background_tasks.add_task(_process_cover_letter_job, job_id, data, user_id)
+
+    return {"success": True, "job_id": job_id, "message": "Poll /api/cover-letters/job/{job_id}"}
+
+
+@router.get("/job/{job_id}")
+async def get_cover_letter_job_status(job_id: str, db: AsyncSession = Depends(get_db)):
+    """Get status of an async cover letter generation job."""
+    from app.services import job_manager
+
+    status = await job_manager.get_job_status(db, job_id)
+    if not status:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return status
+
+
+async def _process_cover_letter_job(job_id: str, data: GenerateRequest, user_id: str):
+    """Background task that runs the full cover letter generation pipeline."""
+    from app.services import job_manager
+    from app.models.resume import TailoredResume, BaseResume
+    from app.models.job import Job
+
+    async with AsyncSessionLocal() as db:
+        try:
+            await job_manager.update_progress(db, job_id, 10, "Preparing job details...")
+
+            # Normalize job_url
+            effective_job_url = data.job_url
+            if effective_job_url and not (effective_job_url.startswith('http://') or effective_job_url.startswith('https://')):
+                effective_job_url = None
+
+            # Resolve job_description from tailored resume if not provided
+            job_description = data.job_description
+            if not job_description and data.tailored_resume_id:
+                tr_result = await db.execute(
+                    select(TailoredResume).where(TailoredResume.id == data.tailored_resume_id)
+                )
+                tr = tr_result.scalar_one_or_none()
+                if tr and tr.job_id:
+                    job_result = await db.execute(select(Job).where(Job.id == tr.job_id))
+                    job = job_result.scalar_one_or_none()
+                    if job and job.description:
+                        job_description = job.description
+
+            if not job_description and not effective_job_url:
+                await job_manager.fail_job(db, job_id, "Either job_description or job_url must be provided")
+                return
+
+            # Extract from URL if needed
+            if effective_job_url and not job_description:
+                await job_manager.update_progress(db, job_id, 20, "Extracting job from URL...")
+                job_description = await extract_job_from_url(effective_job_url)
+
+            if not job_description:
+                await job_manager.fail_job(db, job_id, "No job description could be extracted")
+                return
+
+            await job_manager.update_progress(db, job_id, 30, "Fetching resume context...")
+
+            # Fetch resume context
+            resume_context = None
+            resolved_base_resume_id = None
+
+            if data.tailored_resume_id:
+                tr_result = await db.execute(
+                    select(TailoredResume).where(TailoredResume.id == data.tailored_resume_id)
+                )
+                tr = tr_result.scalar_one_or_none()
+                if tr:
+                    resolved_base_resume_id = tr.base_resume_id
+                    br_result = await db.execute(select(BaseResume).where(BaseResume.id == tr.base_resume_id))
+                    br = br_result.scalar_one_or_none()
+                    if br:
+                        resume_context = {
+                            "summary": tr.tailored_summary or br.summary,
+                            "experience": tr.tailored_experience or br.experience,
+                            "skills": tr.tailored_skills or br.skills,
+                            "name": br.candidate_name,
+                        }
+            elif data.base_resume_id:
+                resolved_base_resume_id = data.base_resume_id
+                br_result = await db.execute(select(BaseResume).where(BaseResume.id == data.base_resume_id))
+                br = br_result.scalar_one_or_none()
+                if br:
+                    resume_context = {
+                        "summary": br.summary or "",
+                        "experience": br.experience or "",
+                        "skills": br.skills or "",
+                        "name": br.candidate_name,
+                    }
+
+            await job_manager.update_progress(db, job_id, 50, "Researching company...")
+
+            # Research company
+            company_research = None
+            try:
+                from app.services.perplexity_client import PerplexityClient
+                perplexity = PerplexityClient()
+                company_research = await perplexity.research_company(
+                    company_name=data.company_name, job_title=data.job_title
+                )
+            except Exception as e:
+                logger.warning(f"Perplexity research failed: {e}")
+
+            await job_manager.update_progress(db, job_id, 70, "Generating cover letter...")
+
+            content = await generate_cover_letter_content(
+                job_title=data.job_title,
+                company_name=data.company_name,
+                job_description=job_description,
+                tone=data.tone,
+                length=data.length,
+                focus=data.focus,
+                resume_context=resume_context,
+                company_research=company_research,
+            )
+
+            await job_manager.update_progress(db, job_id, 90, "Saving...")
+
+            letter = CoverLetter(
+                session_user_id=user_id,
+                tailored_resume_id=data.tailored_resume_id,
+                base_resume_id=resolved_base_resume_id,
+                job_title=data.job_title,
+                company_name=data.company_name,
+                job_description=job_description,
+                tone=data.tone,
+                content=content,
+            )
+            db.add(letter)
+            await db.commit()
+            await db.refresh(letter)
+
+            await job_manager.complete_job(db, job_id, {
+                "cover_letter_id": letter.id,
+                "company_name": letter.company_name,
+                "job_title": letter.job_title,
+            })
+
+        except Exception as exc:
+            import traceback
+            traceback.print_exc()
+            await job_manager.fail_job(db, job_id, str(exc))

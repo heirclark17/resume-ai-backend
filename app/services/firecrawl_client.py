@@ -6,6 +6,7 @@ import asyncio
 from typing import Dict, Any, Optional, List
 from functools import partial
 from app.config import get_settings
+from app.services.gateway import get_gateway
 
 settings = get_settings()
 
@@ -87,7 +88,7 @@ class FirecrawlClient:
 
             # Run synchronous Firecrawl operations in thread pool
             # Scrape the page to get clean content (v2 API uses scrape() with keyword args)
-            scrape_result = await asyncio.to_thread(
+            scrape_result = await get_gateway().execute("firecrawl", asyncio.to_thread,
                 app.scrape,
                 job_url,
                 formats=['markdown'],
@@ -104,7 +105,7 @@ class FirecrawlClient:
             # Now use Firecrawl's extract feature to get structured data (v2 API uses scrape with JSON format)
             print("Extracting structured job data...")
 
-            extract_result = await asyncio.to_thread(
+            extract_result = await get_gateway().execute("firecrawl", asyncio.to_thread,
                 app.scrape,
                 job_url,
                 formats=[{
@@ -201,7 +202,7 @@ Return ONLY a JSON object with this structure:
 Do not include any other text, only the JSON."""
 
                 try:
-                    ai_response = await asyncio.to_thread(
+                    ai_response = await get_gateway().execute("firecrawl", asyncio.to_thread,
                         openai_client.chat.completions.create,
                         model="gpt-4.1-mini",
                         messages=[
@@ -326,7 +327,7 @@ Do not include any other text, only the JSON."""
             print(f"Scraping page: {url}")
 
             # Use Firecrawl v2 scrape API
-            scrape_result = await asyncio.to_thread(
+            scrape_result = await get_gateway().execute("firecrawl", asyncio.to_thread,
                 app.scrape,
                 url,
                 formats=formats,

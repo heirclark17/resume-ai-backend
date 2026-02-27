@@ -1,5 +1,6 @@
-from openai import OpenAI
+from openai import AsyncOpenAI
 from app.config import get_settings
+from app.services.gateway import get_gateway
 import json
 import os
 import re
@@ -7,7 +8,7 @@ import re
 settings = get_settings()
 
 class OpenAITailor:
-    """AI service for resume tailoring using OpenAI GPT-4o"""
+    """AI service for resume tailoring using OpenAI GPT-4.1-mini (async)"""
 
     def __init__(self):
         openai_api_key = os.getenv('OPENAI_API_KEY') or settings.openai_api_key
@@ -20,7 +21,7 @@ class OpenAITailor:
             )
 
         try:
-            self.client = OpenAI(api_key=openai_api_key)
+            self.client = AsyncOpenAI(api_key=openai_api_key)
         except Exception as e:
             raise ValueError(
                 f"Failed to initialize OpenAI client: {str(e)}. "
@@ -200,11 +201,13 @@ Return ONLY a valid JSON object with this structure:
             for model_name in models_to_try:
                 try:
                     print(f"Attempting to use model: {model_name}")
-                    response = self.client.chat.completions.create(
+                    response = await get_gateway().execute(
+                        "openai",
+                        self.client.chat.completions.create,
                         model=model_name,
                         max_tokens=4000,
                         temperature=0.7,
-                        response_format={"type": "json_object"},  # Force JSON response
+                        response_format={"type": "json_object"},
                         messages=[
                             {
                                 "role": "system",

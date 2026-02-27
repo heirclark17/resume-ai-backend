@@ -5,13 +5,16 @@ from app.config import get_settings
 
 settings = get_settings()
 
-# Create async engine
+# Create async engine with production pool tuning
 engine = create_async_engine(
     settings.database_url,
     echo=settings.debug,
     future=True,
     pool_pre_ping=True,  # Detect and recycle stale/broken connections
-    pool_recycle=300,  # Recycle connections every 5 minutes
+    pool_recycle=300,    # Recycle connections every 5 minutes
+    pool_size=10,        # Steady-state connections
+    max_overflow=20,     # Burst capacity (total max: 30)
+    pool_timeout=30,     # Seconds to wait for connection before error
 )
 
 # Create session factory
@@ -39,7 +42,7 @@ async def init_db():
     # Import models to register them with Base
     from app.models import resume, job, company, user, interview_prep, star_story, analysis_cache
     from app.models import application, cover_letter, resume_version, follow_up_reminder, career_plan, saved_comparison
-    from app.models import batch_job_url, template_preview, salary_cache
+    from app.models import batch_job_url, template_preview, salary_cache, async_job
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

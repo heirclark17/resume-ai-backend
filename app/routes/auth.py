@@ -20,7 +20,7 @@ from app.models.cover_letter import CoverLetter
 from app.models.application import Application
 from app.models.resume_version import ResumeVersion
 from app.models.follow_up_reminder import FollowUpReminder
-from app.middleware.auth import get_current_user
+from app.middleware.auth import get_current_user, get_current_user_unified
 from app.utils.two_factor_auth import get_two_factor_auth
 from app.utils.recaptcha import get_recaptcha_verifier
 from app.utils.logger import get_logger
@@ -478,3 +478,80 @@ async def migrate_session(
         logger.error(f"Session migration error: {str(e)}")
         await db.rollback()
         raise HTTPException(status_code=500, detail="Migration failed")
+
+
+# Account Deletion (Apple App Store requirement 5.1.1v)
+class DeleteAccountResponse(BaseModel):
+    success: bool
+    deleted_records: int
+    message: str
+
+
+@router.delete("/delete-account", response_model=DeleteAccountResponse)
+async def delete_account(
+    auth_result: tuple = Depends(get_current_user_unified),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Permanently delete a user account and all associated data.
+    Required for Apple App Store compliance (Guideline 5.1.1v).
+    """
+    user_obj, user_id = auth_result
+
+    try:
+        logger.info(f"Account deletion requested for user_id: {user_id}")
+
+        total = 0
+
+        # Delete all user data from every table
+        tables = [
+            ("follow_up_reminders", FollowUpReminder),
+            ("resume_versions", ResumeVersion),
+            ("applications", Application),
+            ("cover_letters", CoverLetter),
+            ("career_plans", CareerPlan),
+            ("saved_comparisons", SavedComparison),
+            ("tailored_resume_edits", TailoredResumeEdit),
+            ("star_stories", StarStory),
+            ("tailored_resumes", TailoredResume),
+            ("jobs", Job),
+            ("base_resumes", BaseResume),
+        ]
+
+        from app.middleware.auth import ownership_filter
+
+        for table_name, model in tables:
+            try:
+                from sqlalchemy import delete as sql_delete
+                stmt = sql_delete(model).where(
+                    ownership_filter(model.session_user_id, user_id)
+                )
+                result = await db.execute(stmt)
+                count = result.rowcount
+                total += count
+                if count > 0:
+                    logger.info(f"  Deleted {count} records from {table_name}")
+            except Exception as table_err:
+                logger.warning(f"  Error deleting from {table_name}: {table_err}")
+
+        # Delete user record if we have one
+        if user_obj:
+            await db.delete(user_obj)
+            total += 1
+
+        await db.commit()
+
+        logger.info(f"Account deletion complete: {total} total records deleted for {user_id}")
+
+        return DeleteAccountResponse(
+            success=True,
+            deleted_records=total,
+            message="Account and all associated data have been permanently deleted."
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Account deletion error for {user_id}: {str(e)}")
+        await db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to delete account")

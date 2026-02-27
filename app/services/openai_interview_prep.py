@@ -1,5 +1,6 @@
-from openai import OpenAI
+from openai import AsyncOpenAI
 from app.config import get_settings
+from app.services.gateway import get_gateway
 from app.services.company_research_service import CompanyResearchService
 from app.services.news_aggregator_service import NewsAggregatorService
 import json
@@ -8,7 +9,7 @@ import os
 settings = get_settings()
 
 class OpenAIInterviewPrep:
-    """AI service for interview prep generation using OpenAI GPT-4o"""
+    """AI service for interview prep generation using OpenAI GPT-4.1-mini (async)"""
 
     def __init__(self):
         openai_api_key = os.getenv('OPENAI_API_KEY') or settings.openai_api_key
@@ -19,7 +20,7 @@ class OpenAIInterviewPrep:
             )
 
         try:
-            self.client = OpenAI(api_key=openai_api_key)
+            self.client = AsyncOpenAI(api_key=openai_api_key)
             self.company_research_service = CompanyResearchService()
             self.news_aggregator_service = NewsAggregatorService()
         except Exception as e:
@@ -392,11 +393,13 @@ or extra text."""
             for model_name in models_to_try:
                 try:
                     print(f"Attempting to generate interview prep with model: {model_name}")
-                    response = self.client.chat.completions.create(
+                    response = await get_gateway().execute(
+                        "openai",
+                        self.client.chat.completions.create,
                         model=model_name,
                         max_tokens=4000,
                         temperature=0.7,
-                        response_format={"type": "json_object"},  # Force JSON response
+                        response_format={"type": "json_object"},
                         messages=[
                             {
                                 "role": "system",

@@ -25,7 +25,7 @@ from app.schemas.career_plan import (
 )
 from app.services.career_path_research_service import CareerPathResearchService
 from app.services.career_path_synthesis_service import CareerPathSynthesisService
-from app.services.job_store import job_store
+from app.services import job_manager
 from app.services.perplexity_client import PerplexityClient
 
 
@@ -155,7 +155,7 @@ async def generate_career_plan(
 
         for role in target_roles[:3]:
             try:
-                salary_data = perplexity.research_salary_insights(
+                salary_data = await perplexity.research_salary_insights(
                     job_title=role,
                     location=request.intake.location,
                     experience_level=f"{request.intake.years_experience} years, career changer from {request.intake.current_role_title}" if request.intake.years_experience else None
@@ -492,28 +492,31 @@ async def refresh_events(
 async def generate_career_plan_async(
     request: GenerateRequest,
     background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
     user_id: str = Depends(get_user_id)
 ):
     """
     ASYNC: Start career plan generation and return job_id immediately
 
     This endpoint:
-    1. Creates a background job
+    1. Creates a durable job in PostgreSQL
     2. Returns job_id immediately (no timeout)
     3. Runs Perplexity research + OpenAI synthesis in background
     4. Client polls /job/{job_id} for status
     """
 
-    print(f"📝 Creating async job for {request.intake.current_role_title}")
+    print(f"Creating async job for {request.intake.current_role_title}")
 
     try:
-        # Create job in job store
-        job_id = job_store.create_job(
+        # Create job in PostgreSQL (survives restarts)
+        job_id = await job_manager.enqueue_job(
+            db=db,
+            job_type="career_plan",
             user_id=user_id,
-            intake_data=request.intake.dict()
+            input_data=request.intake.dict(),
         )
 
-        # Start background task (no db session - task creates its own)
+        # Start background task (creates its own db session)
         background_tasks.add_task(
             process_career_plan_job,
             job_id,
@@ -528,7 +531,7 @@ async def generate_career_plan_async(
         }
 
     except Exception as e:
-        print(f"✗ Error creating async job: {e}")
+        print(f"Error creating async job: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(
@@ -694,7 +697,7 @@ async def generate_tasks_for_role(request: dict):
 
 
 @router.get("/job/{job_id}")
-async def get_job_status(job_id: str):
+async def get_job_status(job_id: str, db: AsyncSession = Depends(get_db)):
     """
     Get status of async career plan generation job
 
@@ -702,11 +705,11 @@ async def get_job_status(job_id: str):
     - status: pending/researching/synthesizing/completed/failed
     - progress: 0-100
     - message: Current step
-    - plan: Complete plan (when status=completed)
+    - result: Complete plan data (when status=completed)
     - error: Error message (when status=failed)
     """
 
-    job = job_store.get_job(job_id)
+    job = await job_manager.get_job_status(db, job_id)
 
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -736,12 +739,7 @@ async def process_career_plan_job(job_id: str, request: GenerateRequest, user_id
           job_details = None
           if getattr(request.intake, 'job_url', None):
               try:
-                  job_store.update_job(
-                      job_id,
-                      status="extracting",
-                      progress=5,
-                      message="Extracting job posting details..."
-                  )
+                  await job_manager.update_progress(db, job_id, 5, "Extracting job posting details...")
                   from app.services.firecrawl_client import FirecrawlClient
                   firecrawl = FirecrawlClient()
                   job_details = await firecrawl.extract_job_details(request.intake.job_url)
@@ -758,12 +756,7 @@ async def process_career_plan_job(job_id: str, request: GenerateRequest, user_id
 
           if request.research_data:
               research_data = request.research_data.dict()
-              job_store.update_job(
-                  job_id,
-                  status="researching",
-                  progress=50,
-                  message="Using provided research data"
-              )
+              await job_manager.update_progress(db, job_id, 50, "Using provided research data")
           else:
               # Determine target roles for research
               target_roles = []
@@ -780,12 +773,7 @@ async def process_career_plan_job(job_id: str, request: GenerateRequest, user_id
 
               print(f"  [Job {job_id}] Running Perplexity research for: {', '.join(target_roles)}")
 
-              job_store.update_job(
-                  job_id,
-                  status="researching",
-                  progress=10,
-                  message=f"Researching certifications, education, and events for {', '.join(target_roles)}"
-              )
+              await job_manager.update_progress(db, job_id, 10, f"Researching certifications, education, and events for {', '.join(target_roles)}")
 
               # Build intake context for enhanced research queries
               intake_context = {
@@ -811,13 +799,7 @@ async def process_career_plan_job(job_id: str, request: GenerateRequest, user_id
               )
               research_data = research_result
 
-              job_store.update_job(
-                  job_id,
-                  status="researching",
-                  progress=50,
-                  message="Research completed - starting plan synthesis",
-                  research_data=research_data
-              )
+              await job_manager.update_progress(db, job_id, 50, "Research completed - starting plan synthesis")
 
           # Step 2: Synthesize plan with OpenAI
           print(f"  [Job {job_id}] Synthesizing plan with OpenAI GPT-4.1-mini...")
@@ -830,7 +812,7 @@ async def process_career_plan_job(job_id: str, request: GenerateRequest, user_id
 
           for role in target_roles[:3]:
               try:
-                  salary_data = perplexity.research_salary_insights(
+                  salary_data = await perplexity.research_salary_insights(
                       job_title=role,
                       location=request.intake.location,
                       experience_level=f"{request.intake.years_experience} years, career changer from {request.intake.current_role_title}" if request.intake.years_experience else None
@@ -851,12 +833,7 @@ async def process_career_plan_job(job_id: str, request: GenerateRequest, user_id
 
           research_data["salary_insights"] = salary_insights
 
-          job_store.update_job(
-              job_id,
-              status="synthesizing",
-              progress=60,
-              message="Generating personalized career plan with AI"
-          )
+          await job_manager.update_progress(db, job_id, 60, "Generating personalized career plan with AI")
 
           synthesis_service = CareerPathSynthesisService()
           synthesis_result = await synthesis_service.generate_career_plan(
@@ -873,23 +850,12 @@ async def process_career_plan_job(job_id: str, request: GenerateRequest, user_id
                   for i, err in enumerate(validation_errors[:10]):
                       print(f"    {i+1}. {err.get('field', 'unknown')}: {err.get('error', 'unknown')}")
 
-              job_store.update_job(
-                  job_id,
-                  status="failed",
-                  progress=100,
-                  message="Plan generation failed",
-                  error=synthesis_result.get("error", "Synthesis failed")
-              )
+              await job_manager.fail_job(db, job_id, synthesis_result.get("error", "Synthesis failed"))
               return
 
           plan_data = synthesis_result["plan"]
 
-          job_store.update_job(
-              job_id,
-              status="synthesizing",
-              progress=80,
-              message="Plan validated - saving to database"
-          )
+          await job_manager.update_progress(db, job_id, 80, "Plan validated - saving to database")
 
           # Step 3: Save to database
           career_plan = CareerPlanModel(
@@ -907,27 +873,17 @@ async def process_career_plan_job(job_id: str, request: GenerateRequest, user_id
           print(f"  [Job {job_id}] ✓ Saved plan ID: {career_plan.id}")
 
           # Step 4: Mark job as completed
-          job_store.update_job(
-              job_id,
-              status="completed",
-              progress=100,
-              message="Career plan generated successfully",
-              plan=plan_data,
-              plan_id=career_plan.id
-          )
+          await job_manager.complete_job(db, job_id, {
+              "plan": plan_data,
+              "plan_id": career_plan.id,
+          })
 
       except Exception as e:
           print(f"✗ [Job {job_id}] Error: {e}")
           import traceback
           traceback.print_exc()
 
-          job_store.update_job(
-              job_id,
-              status="failed",
-              progress=100,
-              message="Job failed",
-              error=str(e)
-          )
+          await job_manager.fail_job(db, job_id, str(e))
 
 
 @router.delete("/all")

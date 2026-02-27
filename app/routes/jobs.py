@@ -90,7 +90,7 @@ async def extract_job_details(
                 print(f"Researching salary data with Perplexity for {job_title}...")
                 try:
                     perplexity = PerplexityClient()
-                    perplexity_salary = perplexity.research_salary_insights(
+                    perplexity_salary = await perplexity.research_salary_insights(
                         job_title=job_title,
                         location=location if location else None
                     )
