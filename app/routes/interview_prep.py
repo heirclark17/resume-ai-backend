@@ -237,6 +237,67 @@ async def list_interview_preps(
         )
 
 
+# ─── MOCK INTERVIEW AI CONVERSATION ──────────────────────────────────────────
+
+class MockInterviewRequest(BaseModel):
+    systemPrompt: str
+    messages: list
+    company: str
+    jobTitle: str
+    interviewType: str = "behavioral"
+
+
+@router.post("/mock-interview")
+async def generate_mock_interview(
+    request: MockInterviewRequest,
+    x_user_id: str = Header(None, alias="X-User-ID"),
+):
+    """Conduct an AI mock interview conversation turn."""
+    if not x_user_id:
+        raise HTTPException(status_code=401, detail="Missing X-User-ID header")
+
+    try:
+        import openai
+        from app.config import get_settings
+        settings = get_settings()
+
+        client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
+
+        # Build message list: system prompt + conversation history
+        api_messages = [{"role": "system", "content": request.systemPrompt}]
+        for msg in request.messages:
+            api_messages.append({
+                "role": msg.get("role", "user"),
+                "content": msg.get("content", ""),
+            })
+
+        # If no conversation history, this is the opening — ask first question
+        if not request.messages:
+            api_messages.append({
+                "role": "user",
+                "content": "Please begin the interview.",
+            })
+
+        response = await client.chat.completions.create(
+            model="gpt-4.1-mini",
+            messages=api_messages,
+            temperature=0.7,
+            max_tokens=800,
+        )
+
+        ai_message = response.choices[0].message.content
+        return {"success": True, "message": ai_message}
+
+    except Exception as e:
+        print(f"Mock interview error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate interview response: {str(e)}"
+        )
+
+
 @router.get("/{tailored_resume_id}")
 async def get_interview_prep(
     tailored_resume_id: int,
