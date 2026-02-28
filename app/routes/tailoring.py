@@ -54,7 +54,15 @@ async def get_or_fetch_salary_data(
         company, job_title, location
     )
 
-    # --- 1. Check the cache -------------------------------------------------
+    # --- 0. Redis L1 cache (sub-millisecond) --------------------------------
+    from app.services.cache import cache_get, cache_set
+    redis_key = f"salary:{norm_company}:{norm_title}:{norm_location}"
+    redis_hit = await cache_get(redis_key)
+    if redis_hit:
+        print(f"[SalaryCache] REDIS HIT (key={redis_key!r})")
+        return redis_hit
+
+    # --- 1. Check the DB cache -----------------------------------------------
     cache_result = await db.execute(
         select(SalaryCache).where(
             SalaryCache.company == norm_company,
@@ -66,10 +74,13 @@ async def get_or_fetch_salary_data(
 
     if cached and not cached.is_expired():
         print(
-            f"[SalaryCache] HIT (company={norm_company!r}, title={norm_title!r}, "
+            f"[SalaryCache] DB HIT (company={norm_company!r}, title={norm_title!r}, "
             f"location={norm_location!r}, age={cached.days_old()}d) — skipping Perplexity"
         )
-        return cached.to_salary_dict()
+        result = cached.to_salary_dict()
+        # Warm Redis for next request (1hr TTL)
+        await cache_set(redis_key, result, ttl=3600)
+        return result
 
     # --- 2. Cache miss or expired: call Perplexity --------------------------
     if cached:
@@ -144,7 +155,7 @@ async def get_or_fetch_salary_data(
         print(f"[SalaryCache] WARNING — failed to persist cache row: {exc}")
         await db.rollback()
 
-    return {
+    fresh_result = {
         "salary_range": new_salary_range,
         "median_salary": new_median,
         "market_insights": new_insights,
@@ -154,6 +165,9 @@ async def get_or_fetch_salary_data(
         "days_old": 0,
         "from_cache": False,
     }
+    # Warm Redis with fresh data (1hr TTL)
+    await cache_set(redis_key, fresh_result, ttl=3600)
+    return fresh_result
 
 
 def safe_json_loads(json_str: str, default=None):

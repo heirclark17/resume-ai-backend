@@ -10,6 +10,7 @@ from app.routes import resumes, tailoring, auth, admin, interview_prep, star_sto
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.middleware.waf import WAFMiddleware
 from app.middleware.correlation import CorrelationMiddleware
+from app.middleware.rate_limit import RedisRateLimitMiddleware
 from app.utils.logger import logger
 
 settings = get_settings()
@@ -23,6 +24,9 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Correlation ID - request tracing (innermost, runs first)
 app.add_middleware(CorrelationMiddleware)
+
+# Redis rate limiting (optional — no-op when Redis unavailable, slowapi remains as fallback)
+app.add_middleware(RedisRateLimitMiddleware)
 
 # Web Application Firewall - Block malicious requests
 app.add_middleware(WAFMiddleware)
@@ -78,12 +82,23 @@ async def startup_event():
     logger.info("Starting ResumeAI Backend...")
     await init_db()
 
+    # Optional Redis connection
+    from app.services.redis_client import init_redis
+    await init_redis()
+
     # Register worker job handlers so standalone worker can dispatch
     from app.worker import _register_default_handlers
     _register_default_handlers()
     logger.info("Worker handlers registered")
 
     logger.info(f"Backend ready at http://{settings.backend_host}:{settings.backend_port}")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    from app.services.redis_client import close_redis
+    await close_redis()
+    logger.info("ResumeAI Backend stopped")
 
 # Health check endpoint - shallow (for Railway routing / load balancer)
 @app.get("/health")
@@ -125,6 +140,16 @@ async def health_ready():
         checks["circuits"] = gw.get_circuit_states()
     except Exception:
         checks["circuits"] = {}
+
+    # Check Redis (optional — "not_configured" is fine, not unhealthy)
+    from app.services.redis_client import get_redis, is_redis_healthy
+    if get_redis() is None:
+        from app.config import get_settings as _gs
+        checks["redis"] = "not_configured" if not _gs().redis_url else "disconnected"
+    elif await is_redis_healthy():
+        checks["redis"] = "ok"
+    else:
+        checks["redis"] = "degraded"
 
     status_code = 200 if healthy else 503
     from fastapi.responses import JSONResponse

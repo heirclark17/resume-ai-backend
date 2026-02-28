@@ -27,3 +27,4 @@ aiohttp==3.11.11
 beautifulsoup4==4.12.3
 resend==2.21.0
 tenacity>=9.0.0
+redis[hiredis]==5.2.1

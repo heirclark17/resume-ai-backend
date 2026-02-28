@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     firecrawl_api_key: str = ""
     claude_api_key: str = ""  # For backward compatibility with .env
 
+    # Redis (optional - falls back gracefully when not configured)
+    redis_url: str = os.getenv("REDIS_URL", "")
+
     # Test Mode - explicitly read from environment
     test_mode: bool = os.getenv("TEST_MODE", "false").lower() == "true"
 
