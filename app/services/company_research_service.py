@@ -514,7 +514,7 @@ class CompanyResearchService:
             direct_content = await self._fetch_direct_sources(values_urls)
 
             # Structure the values data
-            structured_data = self._structure_values_data(
+            structured_data = await self._structure_values_data(
                 perplexity_result,
                 direct_content,
                 company_name
@@ -672,7 +672,7 @@ class CompanyResearchService:
 
         return urls[:5]
 
-    def _structure_values_data(
+    async def _structure_values_data(
         self,
         perplexity_result: Dict,
         direct_content: List[Dict],
@@ -681,7 +681,7 @@ class CompanyResearchService:
         """Structure values and culture data from research"""
 
         # Extract values from Perplexity citations and content
-        stated_values = self._extract_values(
+        stated_values = await self._extract_values(
             perplexity_result.get("content", ""),
             perplexity_result.get("citations", []),
             company_name  # Pass company name for source filtering
@@ -712,7 +712,7 @@ class CompanyResearchService:
             "company_name": company_name
         }
 
-    def _extract_values(self, content: str, citations: List[Dict], company_name: str) -> List[Dict]:
+    async def _extract_values(self, content: str, citations: List[Dict], company_name: str) -> List[Dict]:
         """
         Extract company values from Perplexity content with citations
 
