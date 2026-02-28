@@ -1863,7 +1863,7 @@ async def generate_practice_questions(
             job_description = tailored_resume.job.description or ""
 
         service = PracticeQuestionsService()
-        questions = service.generate_job_specific_questions(
+        questions = await service.generate_job_specific_questions(
             job_description=job_description,
             job_title=job_title,
             core_responsibilities=core_responsibilities,
@@ -1942,7 +1942,7 @@ async def generate_practice_star_story(
             job_description = tailored_resume.job.description or ""
 
         service = PracticeQuestionsService()
-        star_story = service.generate_star_story(
+        star_story = await service.generate_star_story(
             question=request.question,
             candidate_background=candidate_background,
             job_description=job_description,

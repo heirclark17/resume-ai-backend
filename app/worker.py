@@ -119,7 +119,39 @@ async def main() -> None:
 def _register_default_handlers() -> None:
     """Register built-in job type handlers."""
     # Import handlers lazily to avoid circular imports
-    pass  # Handlers are registered via startup event in main.py
+    from app.routes.tailoring import _process_tailor_job
+    from app.routes.cover_letters import _process_cover_letter_job
+    from app.routes.interview_prep import _process_interview_prep_job
+
+    async def handle_tailor(db, job):
+        from app.routes.tailoring import TailorRequest
+        import json
+        data = json.loads(job.input_data) if isinstance(job.input_data, str) else job.input_data
+        request = TailorRequest(**data.get("request", data))
+        await _process_tailor_job(str(job.id), request, job.user_id)
+
+    async def handle_cover_letter(db, job):
+        from app.routes.cover_letters import GenerateRequest
+        import json
+        data = json.loads(job.input_data) if isinstance(job.input_data, str) else job.input_data
+        request = GenerateRequest(**data.get("request", data))
+        await _process_cover_letter_job(str(job.id), request, job.user_id)
+
+    async def handle_interview_prep(db, job):
+        import json
+        data = json.loads(job.input_data) if isinstance(job.input_data, str) else job.input_data
+        tailored_resume_id = data.get("tailored_resume_id")
+        await _process_interview_prep_job(str(job.id), tailored_resume_id)
+
+    async def handle_career_plan(db, job):
+        """Career plan jobs are processed inline by career_path.py — mark complete."""
+        logger.info("worker.career_plan_skip", extra={"job_id": str(job.id),
+            "note": "Career plan jobs use inline processing in career_path.py"})
+
+    register_handler("tailor_resume", handle_tailor)
+    register_handler("cover_letter", handle_cover_letter)
+    register_handler("interview_prep", handle_interview_prep)
+    register_handler("career_plan", handle_career_plan)
 
 
 if __name__ == "__main__":

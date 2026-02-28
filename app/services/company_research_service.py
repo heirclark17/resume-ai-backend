@@ -784,7 +784,7 @@ class CompanyResearchService:
         # STRATEGY 4: Use GPT-4 extraction if we haven't found enough values
         if len(values) < 3 and content:
             print("⚠️ Low value count, using GPT-4 extraction fallback...")
-            gpt_values = self._extract_values_with_gpt(content, primary_values_url)
+            gpt_values = await self._extract_values_with_gpt(content, primary_values_url)
             values.extend(gpt_values)
             print(f"✓ GPT-4 extracted {len(gpt_values)} additional values")
 
@@ -984,15 +984,16 @@ class CompanyResearchService:
 
         return values
 
-    def _extract_values_with_gpt(self, content: str, primary_url: str) -> List[Dict]:
+    async def _extract_values_with_gpt(self, content: str, primary_url: str) -> List[Dict]:
         """Use GPT-4 to extract company values from content as fallback"""
 
         try:
             import os
-            from openai import OpenAI
+            from openai import AsyncOpenAI
+            from app.services.gateway import get_gateway
             import json
 
-            openai_client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+            openai_client = AsyncOpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
             # Truncate content to avoid token limits
             content_snippet = content[:4000]
@@ -1014,7 +1015,9 @@ Return ONLY a JSON array, no other text. Example format:
 
 If no clear values are found, return an empty array: []"""
 
-            response = openai_client.chat.completions.create(
+            response = await get_gateway().execute(
+                "openai",
+                openai_client.chat.completions.create,
                 model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": "You are an expert at extracting company values from text. Return only valid JSON."},

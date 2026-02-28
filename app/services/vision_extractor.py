@@ -15,8 +15,10 @@ class VisionJobExtractor:
     """Extract job details using GPT-4 Vision (screenshot → extraction)"""
 
     def __init__(self):
-        from openai import OpenAI
-        self.client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+        from openai import AsyncOpenAI
+        from app.services.gateway import get_gateway
+        self.client = AsyncOpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+        self._get_gateway = get_gateway
 
     async def extract_from_url(self, job_url: str) -> Dict[str, str]:
         """
@@ -152,7 +154,8 @@ If any field is not visible in the screenshot, use empty string "" or empty arra
 Be thorough in extracting the job description - include all responsibilities and requirements visible."""
 
         try:
-            response = await asyncio.to_thread(
+            response = await self._get_gateway().execute(
+                "openai",
                 self.client.chat.completions.create,
                 model="gpt-4-turbo-2024-04-09",  # GPT-4 Turbo with vision
                 messages=[
@@ -227,7 +230,8 @@ Return ONLY valid JSON in this format:
 If any field is not found in the text, use empty string "" or empty array []."""
 
         try:
-            response = await asyncio.to_thread(
+            response = await self._get_gateway().execute(
+                "openai",
                 self.client.chat.completions.create,
                 model="gpt-4.1-mini",  # Use text model (cheaper than vision)
                 messages=[

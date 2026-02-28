@@ -77,6 +77,12 @@ async def global_exception_handler(request: Request, exc: Exception):
 async def startup_event():
     logger.info("Starting ResumeAI Backend...")
     await init_db()
+
+    # Register worker job handlers so standalone worker can dispatch
+    from app.worker import _register_default_handlers
+    _register_default_handlers()
+    logger.info("Worker handlers registered")
+
     logger.info(f"Backend ready at http://{settings.backend_host}:{settings.backend_port}")
 
 # Health check endpoint - shallow (for Railway routing / load balancer)

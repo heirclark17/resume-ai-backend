@@ -185,8 +185,8 @@ class FirecrawlClient:
                 print("Company or title missing, using OpenAI to extract from markdown content...")
 
                 # Use OpenAI to extract company and title from the scraped markdown
-                from openai import OpenAI
-                openai_client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+                from openai import AsyncOpenAI
+                openai_client = AsyncOpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
                 extraction_prompt = f"""Extract the company name and job title from this job posting.
 
@@ -202,7 +202,7 @@ Return ONLY a JSON object with this structure:
 Do not include any other text, only the JSON."""
 
                 try:
-                    ai_response = await get_gateway().execute("firecrawl", asyncio.to_thread,
+                    ai_response = await get_gateway().execute("openai",
                         openai_client.chat.completions.create,
                         model="gpt-4.1-mini",
                         messages=[

@@ -4,7 +4,7 @@ Uses Perplexity AI for web-grounded, thoroughly researched career plans with rea
 Includes schema validation and JSON repair
 """
 from typing import Dict, Any, Optional
-from openai import OpenAI
+from openai import AsyncOpenAI
 from pydantic import ValidationError
 import json
 import os
@@ -16,6 +16,7 @@ from app.schemas.career_plan import (
     ValidationError as SchemaValidationError
 )
 from app.config import get_settings
+from app.services.gateway import get_gateway
 
 settings = get_settings()
 
@@ -40,7 +41,7 @@ class CareerPathSynthesisService:
                 self.model = "test"
                 print("[TEST MODE] CareerPathSynthesisService using mock data")
         else:
-            self.client = OpenAI(api_key=settings.openai_api_key)
+            self.client = AsyncOpenAI(api_key=settings.openai_api_key)
             # Use GPT-4.1-mini for career plans
             self.model = "gpt-4.1-mini"
 
@@ -189,7 +190,9 @@ class CareerPathSynthesisService:
 
         try:
             # Call OpenAI with JSON mode for guaranteed valid JSON
-            response = self.client.chat.completions.create(
+            response = await get_gateway().execute(
+                "openai",
+                self.client.chat.completions.create,
                 model=self.model,
                 messages=[
                     {
@@ -1322,7 +1325,9 @@ Requirements:
 Return the fixed JSON now:"""
 
         try:
-            response = self.client.chat.completions.create(
+            response = await get_gateway().execute(
+                "openai",
+                self.client.chat.completions.create,
                 model=self.model,
                 messages=[
                     {

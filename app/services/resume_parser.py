@@ -5,7 +5,8 @@ import re
 from docx import Document
 import pdfplumber
 import os
-from openai import OpenAI
+from openai import AsyncOpenAI
+from app.services.gateway import get_gateway
 from app.utils.file_encryption import FileEncryption
 import io
 
@@ -27,12 +28,12 @@ class ResumeParser:
         # Initialize OpenAI API
         self.openai_api_key = os.getenv('OPENAI_API_KEY')
         if self.openai_api_key:
-            self.client = OpenAI(api_key=self.openai_api_key)
+            self.client = AsyncOpenAI(api_key=self.openai_api_key)
             self.use_ai_parsing = True
         else:
             self.use_ai_parsing = False
 
-    def parse_file(self, file_path: str) -> Dict:
+    async def parse_file(self, file_path: str) -> Dict:
         """
         Parse resume file (DOCX or PDF)
 
@@ -48,13 +49,13 @@ class ResumeParser:
         file_ext = Path(file_path).suffix.lower()
 
         if file_ext == '.docx':
-            return self.parse_docx(file_path)
+            return await self.parse_docx(file_path)
         elif file_ext == '.pdf':
-            return self.parse_pdf(file_path)
+            return await self.parse_pdf(file_path)
         else:
             raise ValueError(f"Unsupported file type: {file_ext}")
 
-    def parse_docx(self, file_path: str) -> Dict:
+    async def parse_docx(self, file_path: str) -> Dict:
         """Parse DOCX resume"""
         # Decrypt file before parsing (files encrypted at rest for security)
         decrypted_bytes = self.encryption.decrypt_file(file_path)
@@ -71,7 +72,7 @@ class ResumeParser:
         if self.use_ai_parsing:
             try:
                 print(f"[DOCX Parser] Attempting AI parsing with OpenAI GPT-4.1-mini...")
-                result = self._parse_with_ai(full_text)
+                result = await self._parse_with_ai(full_text)
                 result['parsing_method'] = 'ai'
                 result['parsing_warnings'] = []
                 print(f"[DOCX Parser] AI parsing SUCCESS - Summary length: {len(result.get('summary', ''))}, Skills: {len(result.get('skills', []))}, Jobs: {len(result.get('experience', []))}")
@@ -98,7 +99,7 @@ class ResumeParser:
             ]
             return result
 
-    def parse_pdf(self, file_path: str) -> Dict:
+    async def parse_pdf(self, file_path: str) -> Dict:
         """Parse PDF resume using pdfplumber for better text extraction"""
         # Decrypt file before parsing (files encrypted at rest for security)
         decrypted_bytes = self.encryption.decrypt_file(file_path)
@@ -123,7 +124,7 @@ class ResumeParser:
         if self.use_ai_parsing:
             try:
                 print(f"[PDF Parser] Attempting AI parsing with OpenAI GPT-4.1-mini...")
-                result = self._parse_with_ai(full_text)
+                result = await self._parse_with_ai(full_text)
                 result['parsing_method'] = 'ai'
                 result['parsing_warnings'] = []
                 print(f"[PDF Parser] AI parsing SUCCESS - Summary length: {len(result.get('summary', ''))}, Skills: {len(result.get('skills', []))}, Jobs: {len(result.get('experience', []))}")
@@ -291,7 +292,7 @@ class ResumeParser:
         ]
         return any(re.search(pattern, line, re.IGNORECASE) for pattern in date_patterns)
 
-    def _parse_with_ai(self, resume_text: str) -> Dict:
+    async def _parse_with_ai(self, resume_text: str) -> Dict:
         """Parse resume using Claude AI for better accuracy"""
 
         prompt = f"""You are a resume parser. Extract structured information from this resume and return ONLY a valid JSON object.
@@ -355,7 +356,9 @@ IMPORTANT:
 }}"""
 
         try:
-            response = self.client.chat.completions.create(
+            response = await get_gateway().execute(
+                "openai",
+                self.client.chat.completions.create,
                 model="gpt-4.1-mini",  # Latest 2026 model - outperforms gpt-4o-mini, optimized for structured extraction
                 max_tokens=8000,
                 temperature=0.2,

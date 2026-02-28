@@ -2,16 +2,18 @@
 Service for generating job-specific practice questions and AI-generated STAR stories
 """
 from typing import List, Dict, Any, Optional
-from openai import OpenAI
+from openai import AsyncOpenAI
 import os
 import json
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+from app.services.gateway import get_gateway
+
+client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 class PracticeQuestionsService:
     """Generate job-specific practice questions and STAR stories"""
 
-    def generate_job_specific_questions(
+    async def generate_job_specific_questions(
         self,
         job_description: str,
         job_title: str,
@@ -80,7 +82,9 @@ Example format:
 """
 
         try:
-            response = client.chat.completions.create(
+            response = await get_gateway().execute(
+                "openai",
+                client.chat.completions.create,
                 model="gpt-4",
                 messages=[
                     {"role": "system", "content": "You are an expert interview coach who generates highly specific, role-tailored interview questions. Return only valid JSON."},
@@ -117,7 +121,7 @@ Example format:
             print(f"✗ Error generating practice questions: {e}")
             return self._get_fallback_questions(job_title, core_responsibilities)
 
-    def generate_star_story(
+    async def generate_star_story(
         self,
         question: str,
         candidate_background: str,
@@ -199,7 +203,9 @@ Return ONLY a valid JSON object with keys: situation, task, action, result. No m
 """
 
         try:
-            response = client.chat.completions.create(
+            response = await get_gateway().execute(
+                "openai",
+                client.chat.completions.create,
                 model="gpt-4.1-mini",
                 messages=[
                     {"role": "system", "content": "You are an elite interview coach who creates exceptionally detailed STAR stories. Your stories are so well-crafted that candidates who use them consistently receive offers. You always return valid JSON only, no markdown."},

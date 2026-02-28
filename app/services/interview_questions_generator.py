@@ -10,9 +10,10 @@ Produces:
 - 10 technical questions based on company tech stack vs. candidate skills
 """
 
-from openai import OpenAI
+from openai import AsyncOpenAI
 from app.config import get_settings
 from app.services.perplexity_client import PerplexityClient
+from app.services.gateway import get_gateway
 import json
 import re
 import os
@@ -82,7 +83,7 @@ class InterviewQuestionsGenerator:
             )
 
         try:
-            self.client = OpenAI(api_key=openai_api_key)
+            self.client = AsyncOpenAI(api_key=openai_api_key)
             self.perplexity_client = PerplexityClient()
         except Exception as e:
             raise ValueError(
@@ -128,7 +129,7 @@ Cite sources with URLs."""
             result = await self.perplexity_client.research_with_citations(query)
 
             # Parse the result to extract tech stack
-            tech_data = self._parse_tech_stack_from_research(
+            tech_data = await self._parse_tech_stack_from_research(
                 result.get('content', ''),
                 result.get('citations', []),
                 job_description
@@ -139,9 +140,9 @@ Cite sources with URLs."""
         except Exception as e:
             print(f"Tech stack research failed: {e}")
             # Return extracted from job description as fallback
-            return self._extract_tech_from_job_description(job_description)
+            return await self._extract_tech_from_job_description(job_description)
 
-    def _parse_tech_stack_from_research(
+    async def _parse_tech_stack_from_research(
         self,
         content: str,
         citations: list,
@@ -172,7 +173,9 @@ Extract and return a JSON object with these fields:
 Only include items explicitly mentioned. Return valid JSON only."""
 
         try:
-            response = self.client.chat.completions.create(
+            response = await get_gateway().execute(
+                "openai",
+                self.client.chat.completions.create,
                 model="gpt-4.1-mini",
                 max_tokens=1000,
                 temperature=0.3,
@@ -189,9 +192,9 @@ Only include items explicitly mentioned. Return valid JSON only."""
 
         except Exception as e:
             print(f"Tech stack parsing failed: {e}")
-            return self._extract_tech_from_job_description(job_description)
+            return await self._extract_tech_from_job_description(job_description)
 
-    def _extract_tech_from_job_description(self, job_description: str) -> dict:
+    async def _extract_tech_from_job_description(self, job_description: str) -> dict:
         """Fallback: Extract tech stack from job description"""
 
         prompt = f"""Extract technology requirements from this job description.
@@ -213,7 +216,9 @@ Return a JSON object:
 Only include items explicitly mentioned in the job description."""
 
         try:
-            response = self.client.chat.completions.create(
+            response = await get_gateway().execute(
+                "openai",
+                self.client.chat.completions.create,
                 model="gpt-4.1-mini",
                 max_tokens=800,
                 temperature=0.2,
@@ -349,7 +354,9 @@ REQUIREMENTS:
 - Job alignment must reference actual job requirements"""
 
         try:
-            response = self.client.chat.completions.create(
+            response = await get_gateway().execute(
+                "openai",
+                self.client.chat.completions.create,
                 model="gpt-4.1-mini",
                 max_tokens=6000,
                 temperature=0.7,
@@ -374,7 +381,9 @@ REQUIREMENTS:
             # Repair failed - retry once with lower temperature
             print(f"Behavioral questions JSON repair failed, retrying: {e}")
             try:
-                response = self.client.chat.completions.create(
+                response = await get_gateway().execute(
+                "openai",
+                self.client.chat.completions.create,
                     model="gpt-4.1-mini",
                     max_tokens=6000,
                     temperature=0.3,
@@ -558,7 +567,9 @@ REQUIREMENTS:
 - Questions should be the type actually asked at {company_name} or similar companies"""
 
         try:
-            response = self.client.chat.completions.create(
+            response = await get_gateway().execute(
+                "openai",
+                self.client.chat.completions.create,
                 model="gpt-4.1-mini",
                 max_tokens=8000,
                 temperature=0.7,
@@ -583,7 +594,9 @@ REQUIREMENTS:
             # Repair failed too - retry once with lower temperature
             print(f"Technical questions JSON repair failed, retrying with lower temperature: {e}")
             try:
-                response = self.client.chat.completions.create(
+                response = await get_gateway().execute(
+                "openai",
+                self.client.chat.completions.create,
                     model="gpt-4.1-mini",
                     max_tokens=8000,
                     temperature=0.3,

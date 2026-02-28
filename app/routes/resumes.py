@@ -72,7 +72,7 @@ async def upload_resume(
         # Parse resume
         logger.info("Step 2: Parsing resume...")
         try:
-            parsed_data = resume_parser.parse_file(file_info['file_path'])
+            parsed_data = await resume_parser.parse_file(file_info['file_path'])
             logger.info(f"Resume parsed: {len(parsed_data.get('skills', []))} skills, {len(parsed_data.get('experience', []))} jobs")
         except Exception as e:
             logger.error(f"Parsing failed: {type(e).__name__}: {str(e)}", exc_info=True)
