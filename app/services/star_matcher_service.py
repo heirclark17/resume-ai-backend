@@ -3,6 +3,7 @@
 import os
 import json
 from openai import AsyncOpenAI
+from app.services.gateway import get_gateway
 from typing import List
 
 
@@ -51,7 +52,9 @@ Return a JSON object:
   ]
 }}"""
 
-    response = await client.chat.completions.create(
+    response = await get_gateway().execute(
+        "openai",
+        client.chat.completions.create,
         model="gpt-4.1-mini",
         messages=[
             {"role": "system", "content": "You are an expert interview coach matching STAR stories to interview questions."},

@@ -2,8 +2,10 @@
 Career Path Designer API Routes
 Orchestrates research -> synthesis -> validation -> storage
 """
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
 from fastapi.responses import JSONResponse
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from typing import List
@@ -27,14 +29,18 @@ from app.services.career_path_research_service import CareerPathResearchService
 from app.services.career_path_synthesis_service import CareerPathSynthesisService
 from app.services import job_manager
 from app.services.perplexity_client import PerplexityClient
+from app.utils.logger import logger
 
 
 router = APIRouter(prefix="/api/career-path", tags=["career-path"])
+limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("/research")
+@limiter.limit("10/hour")
 async def research_career_path(
-    request: ResearchRequest,
+    request: Request,
+    data: ResearchRequest,
     db: AsyncSession = Depends(get_db)
 ) -> ResearchResponse:
     """
@@ -46,17 +52,17 @@ async def research_career_path(
     - Events (with registration links)
     """
 
-    print(f"🔍 Starting research for roles: {', '.join(request.target_roles)}")
+    logger.info(f"Starting research for roles: {', '.join(data.target_roles)}")
 
     try:
         research_service = CareerPathResearchService()
 
         # Run comprehensive research
         research_data = await research_service.research_all(
-            target_roles=request.target_roles,
-            location=request.location,
+            target_roles=data.target_roles,
+            location=data.location,
             current_experience=5.0,  # TODO: Get from intake
-            current_education=request.education_level,
+            current_education=data.education_level,
             budget="flexible",  # Budget field removed from intake form
             format_preference="online"  # TODO: Get from intake
         )
@@ -69,9 +75,7 @@ async def research_career_path(
         )
 
     except Exception as e:
-        print(f"✗ Research error: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"Research error: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"Research failed: {str(e)}"
@@ -79,8 +83,10 @@ async def research_career_path(
 
 
 @router.post("/generate")
+@limiter.limit("5/hour")
 async def generate_career_plan(
-    request: GenerateRequest,
+    request: Request,
+    data: GenerateRequest,
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(get_user_id)
 ) -> GenerateResponse:
@@ -96,30 +102,29 @@ async def generate_career_plan(
     6. Return plan
     """
 
-    print(f"📝 Generating career plan for {request.intake.current_role_title}")
+    logger.info(f"Generating career plan for {data.intake.current_role_title}")
 
     try:
         # Build intake context dict for enhanced research queries
         intake_context = {
-            "current_role_title": request.intake.current_role_title,
-            "current_industry": request.intake.current_industry,
-            "tools": request.intake.tools,
-            "existing_certifications": getattr(request.intake, 'existing_certifications', []),
-            "already_started": getattr(request.intake, 'already_started', False),
-            "steps_already_taken": getattr(request.intake, 'steps_already_taken', ''),
-            "preferred_platforms": request.intake.preferred_platforms,
-            "specific_companies": request.intake.specific_companies,
+            "current_role_title": data.intake.current_role_title,
+            "current_industry": data.intake.current_industry,
+            "tools": data.intake.tools,
+            "existing_certifications": getattr(data.intake, 'existing_certifications', []),
+            "already_started": getattr(data.intake, 'already_started', False),
+            "steps_already_taken": getattr(data.intake, 'steps_already_taken', ''),
+            "preferred_platforms": data.intake.preferred_platforms,
+            "specific_companies": data.intake.specific_companies,
         }
 
         # Step 1: Research if not provided
         research_data = None
         skip_research = os.getenv("SKIP_RESEARCH", "false").lower() == "true"
 
-        if request.research_data:
-            research_data = request.research_data.dict()
+        if data.research_data:
+            research_data = data.research_data.dict()
         elif skip_research:
-            # Skip research to avoid Railway timeout (60s limit)
-            print("  ⚠ Skipping research (SKIP_RESEARCH=true)")
+            logger.warning("Skipping research (SKIP_RESEARCH=true)")
             research_data = {
                 "certifications": [],
                 "education_options": [],
@@ -129,45 +134,45 @@ async def generate_career_plan(
         else:
             # Determine target roles for research
             target_roles = []
-            if request.intake.target_role_interest:
-                target_roles = [request.intake.target_role_interest]
+            if data.intake.target_role_interest:
+                target_roles = [data.intake.target_role_interest]
             else:
-                target_roles = [f"{request.intake.current_industry} Professional"]
+                target_roles = [f"{data.intake.current_industry} Professional"]
 
-            print(f"  Running research for: {', '.join(target_roles)}")
+            logger.info(f"Running research for: {', '.join(target_roles)}")
             research_service = CareerPathResearchService()
             research_result = await research_service.research_all(
                 target_roles=target_roles,
-                location=request.intake.location,
-                current_experience=request.intake.years_experience,
-                current_education=request.intake.education_level,
-                budget=getattr(request.intake, 'training_budget', None) or "flexible",
-                format_preference=request.intake.in_person_vs_remote,
+                location=data.intake.location,
+                current_experience=data.intake.years_experience,
+                current_education=data.intake.education_level,
+                budget=getattr(data.intake, 'training_budget', None) or "flexible",
+                format_preference=data.intake.in_person_vs_remote,
                 intake_context=intake_context
             )
             research_data = research_result
 
         # Step 1.5: Research salary data with Perplexity for each target role
-        print(f"  Researching salary data with Perplexity...")
+        logger.info("Researching salary data with Perplexity...")
         perplexity = PerplexityClient()
         salary_insights = {}
-        current_salary = getattr(request.intake, 'current_salary_range', None)
+        current_salary = getattr(data.intake, 'current_salary_range', None)
 
         for role in target_roles[:3]:
             try:
                 salary_data = await perplexity.research_salary_insights(
                     job_title=role,
-                    location=request.intake.location,
-                    experience_level=f"{request.intake.years_experience} years, career changer from {request.intake.current_role_title}" if request.intake.years_experience else None
+                    location=data.intake.location,
+                    experience_level=f"{data.intake.years_experience} years, career changer from {data.intake.current_role_title}" if data.intake.years_experience else None
                 )
                 # Add career changer salary context
                 if current_salary and isinstance(salary_data, dict):
                     salary_data["current_salary"] = current_salary
                     salary_data["career_changer_note"] = f"Candidate currently earns {current_salary}. First-role salary as career changer may differ from established median."
                 salary_insights[role] = salary_data
-                print(f"  ✓ Salary research for {role}: {salary_data.get('salary_range', 'N/A')}")
+                logger.info(f"Salary research for {role}: {salary_data.get('salary_range', 'N/A')}")
             except Exception as e:
-                print(f"  ⚠ Salary research failed for {role}: {e}")
+                logger.warning(f"Salary research failed for {role}: {e}")
                 salary_insights[role] = {
                     "salary_range": "Competitive",
                     "market_insights": "Data unavailable",
@@ -178,10 +183,10 @@ async def generate_career_plan(
         research_data["salary_insights"] = salary_insights
 
         # Step 2: Synthesize plan with OpenAI
-        print(f"  Synthesizing plan with OpenAI...")
+        logger.info("Synthesizing plan with OpenAI...")
         synthesis_service = CareerPathSynthesisService()
         synthesis_result = await synthesis_service.generate_career_plan(
-            intake=request.intake,
+            intake=data.intake,
             research_data=research_data
         )
 
@@ -189,9 +194,9 @@ async def generate_career_plan(
             # Log validation errors if present
             validation_errors = synthesis_result.get("validation_errors", [])
             if validation_errors:
-                print(f"  ✗ Validation errors ({len(validation_errors)} total):")
+                logger.error(f"Validation errors ({len(validation_errors)} total)")
                 for i, err in enumerate(validation_errors[:10]):
-                    print(f"    {i+1}. {err.get('field', 'unknown')}: {err.get('error', 'unknown')}")
+                    logger.error(f"  {i+1}. {err.get('field', 'unknown')}: {err.get('error', 'unknown')}")
 
             return GenerateResponse(
                 success=False,
@@ -202,12 +207,12 @@ async def generate_career_plan(
         plan_data = synthesis_result["plan"]
 
         # Step 3: Validate (already done in synthesis service)
-        print(f"  ✓ Plan validated")
+        logger.info("Plan validated")
 
         # Step 4: Save to database
         career_plan = CareerPlanModel(
             session_user_id=user_id,
-            intake_json=request.intake.dict(),
+            intake_json=data.intake.dict(),
             research_json=research_data,
             plan_json=plan_data,
             version="1.0"
@@ -217,7 +222,7 @@ async def generate_career_plan(
         await db.commit()
         await db.refresh(career_plan)
 
-        print(f"  ✓ Saved plan ID: {career_plan.id}")
+        logger.info(f"Saved plan ID: {career_plan.id}")
 
         # Step 5: Return plan
         return GenerateResponse(
@@ -227,9 +232,7 @@ async def generate_career_plan(
         )
 
     except Exception as e:
-        print(f"✗ Generation error: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"Generation error: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"Plan generation failed: {str(e)}"
@@ -280,7 +283,7 @@ async def get_career_plan(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"✗ Error retrieving plan: {e}")
+        logger.error(f"Error retrieving plan: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to retrieve plan: {str(e)}"
@@ -400,7 +403,7 @@ async def list_career_plans(
         return items
 
     except Exception as e:
-        print(f"✗ Error listing plans: {e}")
+        logger.error(f"Error listing plans: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to list plans: {str(e)}"
@@ -442,7 +445,7 @@ async def refresh_events(
             raise HTTPException(status_code=400, detail="No target roles in plan")
 
         # Research fresh events
-        print(f"🔄 Refreshing events for: {', '.join(target_roles)}")
+        logger.info(f"Refreshing events for: {', '.join(target_roles)}")
         research_service = CareerPathResearchService()
         new_events = await research_service.research_events(
             target_roles=target_roles,
@@ -468,7 +471,7 @@ async def refresh_events(
         # Refresh to get updated data
         await db.refresh(plan)
 
-        print(f"  ✓ Refreshed {len(new_events)} events")
+        logger.info(f"Refreshed {len(new_events)} events")
 
         return GenerateResponse(
             success=True,
@@ -479,7 +482,7 @@ async def refresh_events(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"✗ Error refreshing events: {e}")
+        logger.error(f"Error refreshing events: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(
@@ -505,7 +508,7 @@ async def generate_career_plan_async(
     4. Client polls /job/{job_id} for status
     """
 
-    print(f"Creating async job for {request.intake.current_role_title}")
+    logger.info(f"Creating async job for {request.intake.current_role_title}")
 
     try:
         # Create job in PostgreSQL (survives restarts)
@@ -531,9 +534,7 @@ async def generate_career_plan_async(
         }
 
     except Exception as e:
-        print(f"Error creating async job: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"Error creating async job: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"Failed to create job: {str(e)}"
@@ -617,7 +618,7 @@ async def generate_tasks_for_role(request: dict):
                 }
             # If extraction didn't produce enough tasks, fall through to Perplexity
         except Exception as e:
-            print(f"✗ Error extracting tasks from resume: {e}")
+            logger.error(f"Error extracting tasks from resume: {e}")
             import traceback
             traceback.print_exc()
             # Fall through to Perplexity generation
@@ -678,7 +679,7 @@ async def generate_tasks_for_role(request: dict):
         }
 
     except Exception as e:
-        print(f"✗ Error generating tasks: {e}")
+        logger.error(f"Error generating tasks: {e}")
         import traceback
         traceback.print_exc()
 
@@ -744,11 +745,11 @@ async def process_career_plan_job(job_id: str, request: GenerateRequest, user_id
                   firecrawl = FirecrawlClient()
                   job_details = await firecrawl.extract_job_details(request.intake.job_url)
                   if job_details:
-                      print(f"  [Job {job_id}] ✓ Extracted job: {job_details.get('title', 'Unknown')} at {job_details.get('company', 'Unknown')}")
+                      logger.info(f"[Job {job_id}] ✓ Extracted job: {job_details.get('title', 'Unknown')} at {job_details.get('company', 'Unknown')}")
                   else:
-                      print(f"  [Job {job_id}] ⚠ Job extraction returned empty, continuing without")
+                      logger.info(f"[Job {job_id}] ⚠ Job extraction returned empty, continuing without")
               except Exception as e:
-                  print(f"  [Job {job_id}] ⚠ Job extraction failed (non-fatal): {e}")
+                  logger.warning(f"[Job {job_id}] Job extraction failed (non-fatal): {e}")
                   job_details = None
 
           # Step 1: Research with Perplexity (if not provided)
@@ -771,7 +772,7 @@ async def process_career_plan_job(job_id: str, request: GenerateRequest, user_id
                   # Use current role + industry as hint
                   target_roles = [f"{request.intake.current_industry} Professional"]
 
-              print(f"  [Job {job_id}] Running Perplexity research for: {', '.join(target_roles)}")
+              logger.info(f"[Job {job_id}] Running Perplexity research for: {', '.join(target_roles)}")
 
               await job_manager.update_progress(db, job_id, 10, f"Researching certifications, education, and events for {', '.join(target_roles)}")
 
@@ -802,10 +803,10 @@ async def process_career_plan_job(job_id: str, request: GenerateRequest, user_id
               await job_manager.update_progress(db, job_id, 50, "Research completed - starting plan synthesis")
 
           # Step 2: Synthesize plan with OpenAI
-          print(f"  [Job {job_id}] Synthesizing plan with OpenAI GPT-4.1-mini...")
+          logger.info(f"[Job {job_id}] Synthesizing plan with OpenAI GPT-4.1-mini...")
 
           # Research salary data with Perplexity (career changer context)
-          print(f"  [Job {job_id}] Researching salary data with Perplexity...")
+          logger.info(f"[Job {job_id}] Researching salary data with Perplexity...")
           perplexity = PerplexityClient()
           salary_insights = {}
           current_salary = getattr(request.intake, 'current_salary_range', None)
@@ -822,9 +823,9 @@ async def process_career_plan_job(job_id: str, request: GenerateRequest, user_id
                       salary_data["current_salary"] = current_salary
                       salary_data["career_changer_note"] = f"Candidate currently earns {current_salary}. First-role salary as career changer may differ from established median."
                   salary_insights[role] = salary_data
-                  print(f"  [Job {job_id}] ✓ Salary: {role} - {salary_data.get('salary_range', 'N/A')}")
+                  logger.info(f"[Job {job_id}] ✓ Salary: {role} - {salary_data.get('salary_range', 'N/A')}")
               except Exception as e:
-                  print(f"  [Job {job_id}] ⚠ Salary research failed for {role}: {e}")
+                  logger.warning(f"[Job {job_id}] Salary research failed for {role}: {e}")
                   salary_insights[role] = {
                       "salary_range": "Competitive",
                       "market_insights": "Data unavailable",
@@ -846,9 +847,9 @@ async def process_career_plan_job(job_id: str, request: GenerateRequest, user_id
               # Synthesis failed
               validation_errors = synthesis_result.get("validation_errors", [])
               if validation_errors:
-                  print(f"  [Job {job_id}] ✗ Validation errors ({len(validation_errors)} total):")
+                  logger.info(f"[Job {job_id}] ✗ Validation errors ({len(validation_errors)} total):")
                   for i, err in enumerate(validation_errors[:10]):
-                      print(f"    {i+1}. {err.get('field', 'unknown')}: {err.get('error', 'unknown')}")
+                      logger.error(f"    {i+1}. {err.get('field', 'unknown')}: {err.get('error', 'unknown')}")
 
               await job_manager.fail_job(db, job_id, synthesis_result.get("error", "Synthesis failed"))
               return
@@ -870,7 +871,7 @@ async def process_career_plan_job(job_id: str, request: GenerateRequest, user_id
           await db.commit()
           await db.refresh(career_plan)
 
-          print(f"  [Job {job_id}] ✓ Saved plan ID: {career_plan.id}")
+          logger.info(f"[Job {job_id}] Saved plan ID: {career_plan.id}")
 
           # Step 4: Mark job as completed
           await job_manager.complete_job(db, job_id, {
@@ -879,7 +880,7 @@ async def process_career_plan_job(job_id: str, request: GenerateRequest, user_id
           })
 
       except Exception as e:
-          print(f"✗ [Job {job_id}] Error: {e}")
+          logger.error(f"[Job {job_id}] Error: {e}")
           import traceback
           traceback.print_exc()
 
@@ -913,7 +914,7 @@ async def delete_all_career_plans(
         return {"success": True, "message": f"All career plans deleted", "count": result.rowcount}
 
     except Exception as e:
-        print(f"✗ Error deleting all plans: {e}")
+        logger.error(f"Error deleting all plans: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to delete plans: {str(e)}"
@@ -948,7 +949,7 @@ async def delete_career_plan(
         return {"success": True, "message": "Career plan deleted"}
 
     except Exception as e:
-        print(f"✗ Error deleting plan: {e}")
+        logger.error(f"Error deleting plan: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to delete plan: {str(e)}"

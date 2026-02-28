@@ -11,6 +11,7 @@ from sqlalchemy import select
 from app.config import get_settings
 from app.database import AsyncSessionLocal
 from app.models.template_preview import TemplatePreview
+from app.services.gateway import get_gateway
 from app.utils.logger import logger
 
 # Template visual descriptions for DALL-E prompt generation
@@ -164,7 +165,9 @@ async def generate_template_preview(template_id: str) -> dict:
 
     logger.info(f"Generating DALL-E preview for template: {template_id}")
 
-    response = await client.images.generate(
+    response = await get_gateway().execute(
+        "openai",
+        client.images.generate,
         model="dall-e-3",
         prompt=prompt,
         size="1024x1792",

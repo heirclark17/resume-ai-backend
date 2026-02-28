@@ -7,6 +7,8 @@ using GPT-4.1-mini based on target role, industry, and current skills.
 
 import os
 from openai import AsyncOpenAI
+from app.services.gateway import get_gateway
+from app.utils.logger import logger
 import json
 from typing import Dict, Any, List
 
@@ -126,7 +128,9 @@ CRITICAL REQUIREMENTS:
 - Return valid JSON only"""
 
         try:
-            response = await self.client.chat.completions.create(
+            response = await get_gateway().execute(
+                "openai",
+                self.client.chat.completions.create,
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -140,5 +144,5 @@ CRITICAL REQUIREMENTS:
             return result
 
         except Exception as e:
-            print(f"Error generating certification recommendations: {e}")
+            logger.error(f"Error generating certification recommendations: {e}")
             raise Exception(f"Failed to generate recommendations: {str(e)}")

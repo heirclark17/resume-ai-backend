@@ -17,6 +17,7 @@ class User(Base):
 
     # Simple API key authentication (legacy, optional for Supabase users)
     api_key = Column(String, unique=True, nullable=True, index=True)
+    api_key_prefix = Column(String(8), nullable=True, index=True)  # First 8 chars for O(1) lookup
 
     # User metadata
     is_active = Column(Boolean, default=True)
@@ -43,6 +44,11 @@ class User(Base):
         return hashed.decode('utf-8')
 
     @staticmethod
+    def get_key_prefix(api_key: str) -> str:
+        """Return first 8 chars of plaintext key for O(1) lookup"""
+        return api_key[:8]
+
+    @staticmethod
     def verify_api_key(api_key: str, hashed_key: str) -> bool:
         """Verify an API key against its hash"""
         try:
@@ -56,11 +62,12 @@ class User(Base):
         # Generate plaintext key (to return to user)
         plaintext_key = secrets.token_urlsafe(32)
 
-        # Store hashed version in database
+        # Store hashed version in database with prefix for O(1) lookup
         user = cls(
             email=email,
             username=username,
-            api_key=cls.hash_api_key(plaintext_key)
+            api_key=cls.hash_api_key(plaintext_key),
+            api_key_prefix=cls.get_key_prefix(plaintext_key)
         )
 
         # Attach plaintext key for one-time return (not stored)

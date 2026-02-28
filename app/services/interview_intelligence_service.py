@@ -8,6 +8,8 @@ from typing import Dict, List, Optional
 from datetime import datetime
 from openai import AsyncOpenAI
 from app.config import get_settings
+from app.services.gateway import get_gateway
+from app.utils.logger import logger
 
 
 class InterviewIntelligenceService:
@@ -40,7 +42,7 @@ class InterviewIntelligenceService:
             Enhanced content items with relevance_score (0-10), priority, and alignment details
         """
 
-        print(f"Scoring relevance for {len(content_items)} {content_type} items...")
+        logger.info(f"Scoring relevance for {len(content_items)} {content_type} items...")
 
         # Build scoring prompt
         prompt = f"""You are an interview preparation expert. Score how relevant each piece of company information is for a candidate interviewing for this role.
@@ -95,7 +97,9 @@ Return ONLY a JSON object with this structure:
 }}"""
 
         try:
-            response = await self.openai_client.chat.completions.create(
+            response = await get_gateway().execute(
+                "openai",
+                self.openai_client.chat.completions.create,
                 model="gpt-4.1-mini",
                 messages=[
                     {
@@ -112,11 +116,11 @@ Return ONLY a JSON object with this structure:
             result = json.loads(response.choices[0].message.content)
             scored_items = result.get("scored_items", [])
 
-            print(f"✓ Scored {len(scored_items)} items with relevance ratings")
+            logger.info(f"Scored {len(scored_items)} items with relevance ratings")
             return scored_items
 
         except Exception as e:
-            print(f"⚠️ Relevance scoring failed: {e}")
+            logger.error(f"Relevance scoring failed: {e}")
             # Return original items with default scores
             return [{
                 "original_item": item,
@@ -151,7 +155,7 @@ Return ONLY a JSON object with this structure:
         }
         """
 
-        print(f"Generating talking points for {company_name} {job_title} interview...")
+        logger.info(f"Generating talking points for {company_name} {job_title} interview...")
 
         prompt = f"""You are an interview coach helping a candidate prepare for this role.
 
@@ -189,7 +193,9 @@ Generate actionable talking points. Return ONLY a JSON object:
 }}"""
 
         try:
-            response = await self.openai_client.chat.completions.create(
+            response = await get_gateway().execute(
+                "openai",
+                self.openai_client.chat.completions.create,
                 model="gpt-4.1-mini",
                 messages=[
                     {
@@ -204,11 +210,11 @@ Generate actionable talking points. Return ONLY a JSON object:
             )
 
             result = json.loads(response.choices[0].message.content)
-            print("✓ Generated talking points")
+            logger.info("Generated talking points")
             return result
 
         except Exception as e:
-            print(f"⚠️ Talking points generation failed: {e}")
+            logger.error(f"Talking points generation failed: {e}")
             return {
                 "how_to_use_in_interview": "Reference this information when discussing your fit for the role.",
                 "example_statements": [],
@@ -243,7 +249,7 @@ Generate actionable talking points. Return ONLY a JSON object:
         }
         """
 
-        print(f"Analyzing job alignment for {job_title} at {company_name}...")
+        logger.info(f"Analyzing job alignment for {job_title} at {company_name}...")
 
         prompt = f"""You are an interview strategist. Analyze how this company's initiatives align with the job requirements.
 
@@ -275,7 +281,9 @@ Map job requirements to company initiatives. Return ONLY a JSON object:
 Focus on the TOP 5-7 most important requirements from the job description."""
 
         try:
-            response = await self.openai_client.chat.completions.create(
+            response = await get_gateway().execute(
+                "openai",
+                self.openai_client.chat.completions.create,
                 model="gpt-4.1-mini",
                 messages=[
                     {
@@ -290,11 +298,11 @@ Focus on the TOP 5-7 most important requirements from the job description."""
             )
 
             result = json.loads(response.choices[0].message.content)
-            print(f"✓ Mapped {len(result.get('requirement_mapping', []))} job requirements")
+            logger.info(f"Mapped {len(result.get('requirement_mapping', []))} job requirements")
             return result
 
         except Exception as e:
-            print(f"⚠️ Job alignment analysis failed: {e}")
+            logger.error(f"Job alignment analysis failed: {e}")
             return {
                 "requirement_mapping": [],
                 "overall_alignment_score": 7.0,
@@ -332,7 +340,7 @@ Focus on the TOP 5-7 most important requirements from the job description."""
         }
         """
 
-        print("Calculating interview readiness score...")
+        logger.info("Calculating interview readiness score...")
 
         # Define sections and their weights
         section_weights = {
@@ -420,7 +428,7 @@ Focus on the TOP 5-7 most important requirements from the job description."""
             "recommendation": self._get_recommendation(weighted_score, critical_gaps)
         }
 
-        print(f"✓ Readiness score: {result['readiness_score']}/10 ({progress_percentage}% complete)")
+        logger.info(f"Readiness score: {result['readiness_score']}/10 ({progress_percentage}% complete)")
         return result
 
     def _get_readiness_status(self, score: float) -> str:
@@ -475,7 +483,7 @@ Focus on the TOP 5-7 most important requirements from the job description."""
         }
         """
 
-        print(f"Generating values alignment scorecard for {company_name}...")
+        logger.info(f"Generating values alignment scorecard for {company_name}...")
 
         prompt = f"""You are an interview coach. Analyze how well this candidate aligns with company values.
 
@@ -517,7 +525,9 @@ Create a values alignment scorecard. Return ONLY a JSON object:
 }}"""
 
         try:
-            response = await self.openai_client.chat.completions.create(
+            response = await get_gateway().execute(
+                "openai",
+                self.openai_client.chat.completions.create,
                 model="gpt-4.1-mini",
                 messages=[
                     {
@@ -532,11 +542,11 @@ Create a values alignment scorecard. Return ONLY a JSON object:
             )
 
             result = json.loads(response.choices[0].message.content)
-            print(f"✓ Generated alignment scorecard for {len(result.get('value_matches', []))} values")
+            logger.info(f"Generated alignment scorecard for {len(result.get('value_matches', []))} values")
             return result
 
         except Exception as e:
-            print(f"⚠️ Values alignment scorecard failed: {e}")
+            logger.error(f"Values alignment scorecard failed: {e}")
             return {
                 "overall_culture_fit": 7.5,
                 "value_matches": [],

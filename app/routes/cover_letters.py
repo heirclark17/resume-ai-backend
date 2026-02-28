@@ -1,11 +1,13 @@
 """Cover Letter Generation Routes"""
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.database import get_db, AsyncSessionLocal
 from app.models.cover_letter import CoverLetter
@@ -14,6 +16,7 @@ from app.services.cover_letter_service import generate_cover_letter_content
 from app.utils.logger import get_logger
 
 router = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
 logger = get_logger()
 
 
@@ -103,7 +106,9 @@ async def extract_job_from_url(url: str) -> str:
 
 
 @router.post("/generate")
+@limiter.limit("10/hour")
 async def generate_cover_letter(
+    request: Request,
     data: GenerateRequest,
     user_id: str = Depends(get_user_id),
     db: AsyncSession = Depends(get_db),

@@ -9,6 +9,7 @@ import os
 import time
 import httpx
 from functools import lru_cache
+from app.utils.logger import logger
 
 # Get Supabase configuration from environment
 SUPABASE_JWT_SECRET = os.getenv('SUPABASE_JWT_SECRET')
@@ -30,21 +31,21 @@ async def get_supabase_public_key():
 
     now = time.monotonic()
     if _supabase_public_key_cache and (now - _supabase_public_key_cached_at) < _JWKS_CACHE_TTL_SECONDS:
-        print("[Auth] Using cached Supabase public key")
+        logger.debug("[Auth] Using cached Supabase public key")
         return _supabase_public_key_cache
 
-    print(f"[Auth] SUPABASE_URL configured: {bool(SUPABASE_URL)} (length: {len(SUPABASE_URL)})")
+    logger.info(f"[Auth] SUPABASE_URL configured: {bool(SUPABASE_URL)} (length: {len(SUPABASE_URL)})")
 
     try:
         # Supabase JWKS endpoint (public .well-known endpoint - no auth required)
         jwks_url = f"{SUPABASE_URL}/auth/v1/.well-known/jwks.json"
-        print(f"[Auth] Fetching JWKS from: {jwks_url}")
+        logger.info(f"[Auth] Fetching JWKS from: {jwks_url}")
 
         async with httpx.AsyncClient() as client:
             response = await client.get(jwks_url, timeout=5.0)
             response.raise_for_status()
             jwks = response.json()
-            print(f"[Auth] JWKS response received, keys count: {len(jwks.get('keys', []))}")
+            logger.info(f"[Auth] JWKS response received, keys count: {len(jwks.get('keys', []))}")
 
         # Extract the first key (Supabase typically has one ES256 key)
         if 'keys' in jwks and len(jwks['keys']) > 0:
@@ -63,15 +64,13 @@ async def get_supabase_public_key():
 
             _supabase_public_key_cache = public_key
             _supabase_public_key_cached_at = time.monotonic()
-            print(f"[Auth] Cached Supabase public key (type: {key_data.get('kty')}, TTL: {_JWKS_CACHE_TTL_SECONDS}s)")
+            logger.info(f"[Auth] Cached Supabase public key (type: {key_data.get('kty')}, TTL: {_JWKS_CACHE_TTL_SECONDS}s)")
             return public_key
         else:
             raise ValueError("No keys found in JWKS")
 
     except Exception as e:
-        print(f"[Auth] Failed to fetch Supabase public key: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"[Auth] Failed to fetch Supabase public key: {e}", exc_info=True)
         # Cannot fall back for ES256 tokens - they require public key
         raise Exception(f"Cannot verify ES256 token: JWKS fetch failed: {e}")
 
@@ -95,25 +94,32 @@ async def get_current_user(
             headers={"WWW-Authenticate": "ApiKey"}
         )
 
-    # Get all active users (we need to check hashed keys)
-    result = await db.execute(select(User))
-    users = result.scalars().all()
+    # O(1) lookup: query by key prefix, then verify with bcrypt
+    prefix = x_api_key[:8]
+    result = await db.execute(
+        select(User).where(User.api_key_prefix == prefix)
+    )
+    candidates = result.scalars().all()
 
-    # Find user by verifying API key against hashed keys
     user = None
-    for potential_user in users:
-        # Try hashed comparison first (new format)
-        if User.verify_api_key(x_api_key, potential_user.api_key):
-            user = potential_user
+    for candidate in candidates:
+        if User.verify_api_key(x_api_key, candidate.api_key):
+            user = candidate
             break
-        # Fallback: Check if it's a plaintext key (migration compatibility)
-        elif potential_user.api_key == x_api_key:
-            user = potential_user
-            # Auto-migrate: rehash the key
-            potential_user.api_key = User.hash_api_key(x_api_key)
-            db.add(potential_user)
+
+    # Fallback for keys without prefix (migration): try plaintext match
+    if not user:
+        result = await db.execute(
+            select(User).where(User.api_key == x_api_key)
+        )
+        legacy_user = result.scalar_one_or_none()
+        if legacy_user:
+            user = legacy_user
+            # Auto-migrate: rehash the key and store prefix
+            legacy_user.api_key = User.hash_api_key(x_api_key)
+            legacy_user.api_key_prefix = User.get_key_prefix(x_api_key)
+            db.add(legacy_user)
             await db.commit()
-            break
 
     if not user:
         raise HTTPException(
@@ -243,14 +249,14 @@ async def get_current_user_from_jwt(
         unverified_header = jwt.get_unverified_header(token)
         token_algorithm = unverified_header.get('alg', 'HS256')
 
-        print(f"[Auth] JWT algorithm: {token_algorithm}")
+        logger.info(f"[Auth] JWT algorithm: {token_algorithm}")
 
         # Get appropriate key for verification
         if token_algorithm == 'ES256':
             # ES256 tokens - use public key from JWKS
             verification_key = await get_supabase_public_key()
             algorithms = ['ES256', 'RS256']  # Support both EC and RSA
-            print("[Auth] Using public key verification (ES256/RS256)")
+            logger.info("[Auth] Using public key verification (ES256/RS256)")
         else:
             # HS256 tokens - use shared secret
             if not SUPABASE_JWT_SECRET:
@@ -260,7 +266,7 @@ async def get_current_user_from_jwt(
                 )
             verification_key = SUPABASE_JWT_SECRET
             algorithms = ['HS256']
-            print("[Auth] Using shared secret verification (HS256)")
+            logger.info("[Auth] Using shared secret verification (HS256)")
 
         # Decode and validate JWT with appropriate key and algorithm
         payload = jwt.decode(
@@ -296,7 +302,7 @@ async def get_current_user_from_jwt(
             db.add(user)
             await db.commit()
             await db.refresh(user)
-            print(f"[Auth] Created new user from Supabase JWT: {user_email}")
+            logger.info(f"[Auth] Created new user from Supabase JWT: {user_email}")
 
         if not user.is_active:
             raise HTTPException(
@@ -319,9 +325,7 @@ async def get_current_user_from_jwt(
             headers={"WWW-Authenticate": "Bearer"}
         )
     except Exception as e:
-        print(f"[Auth] JWT validation error: {type(e).__name__}: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"[Auth] JWT validation error: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=401,
             detail=f"Authentication failed: {type(e).__name__}",
@@ -345,20 +349,20 @@ async def get_current_user_unified(
 
     Priority order: JWT > API Key > Session ID
     """
-    print(f"[Auth] Unified auth called with: auth={bool(authorization)}, api_key={bool(x_api_key)}, user_id={bool(x_user_id)}")
+    logger.info(f"[Auth] Unified auth called with: auth={bool(authorization)}, api_key={bool(x_api_key)}, user_id={bool(x_user_id)}")
 
     # Try Supabase JWT authentication first
     if authorization:
         try:
-            print(f"[Auth] Attempting JWT auth with token: {authorization[:30]}...")
+            logger.info(f"[Auth] Attempting JWT auth with token: {authorization[:30]}...")
             user = await get_current_user_from_jwt(authorization, db)
-            print(f"[Auth] JWT auth succeeded for user: {user.email}")
+            logger.info(f"[Auth] JWT auth succeeded for user: {user.email}")
             return (user, f"supa_{user.supabase_id}")
         except HTTPException as e:
-            print(f"[Auth] JWT auth failed: {e.detail}")
+            logger.warning(f"[Auth] JWT auth failed: {e.detail}")
             pass  # Fall through to next method
         except Exception as e:
-            print(f"[Auth] JWT auth error: {type(e).__name__}: {str(e)}")
+            logger.warning(f"[Auth] JWT auth error: {type(e).__name__}: {str(e)}")
             pass  # Fall through to next method
 
     # Try API key authentication
@@ -399,47 +403,47 @@ async def get_current_user_from_form(
 
     Returns: (user_object_or_None, user_id_string)
     """
-    print(f"[Auth] Form auth called - Headers: auth={bool(authorization)}, api_key={bool(x_api_key)}, user_id={bool(x_user_id)}")
+    logger.info(f"[Auth] Form auth called - Headers: auth={bool(authorization)}, api_key={bool(x_api_key)}, user_id={bool(x_user_id)}")
 
     # First try standard header-based auth
     try:
         return await get_current_user_unified(authorization, x_api_key, x_user_id, db)
     except HTTPException as header_error:
-        print(f"[Auth] Header auth failed: {header_error.detail}")
-        print("[Auth] Checking form fields for iOS mobile compatibility...")
+        logger.warning(f"[Auth] Header auth failed: {header_error.detail}")
+        logger.info("[Auth] Checking form fields for iOS mobile compatibility...")
 
         # iOS fallback: Check form fields
         try:
             # Read form data (for multipart/form-data requests)
             form = await request.form()
-            print(f"[Auth] Form fields received: {list(form.keys())}")
+            logger.info(f"[Auth] Form fields received: {list(form.keys())}")
 
             # Check for authorization token in form
             form_auth = form.get('authorization')
             form_user_id = form.get('x_user_id')
 
-            print(f"[Auth] Form fields: authorization={bool(form_auth)}, x_user_id={bool(form_user_id)}")
+            logger.info(f"[Auth] Form fields: authorization={bool(form_auth)}, x_user_id={bool(form_user_id)}")
 
             if form_auth:
                 # Try JWT authentication from form field
-                print(f"[Auth] Attempting JWT auth from form field: {str(form_auth)[:30]}...")
+                logger.info(f"[Auth] Attempting JWT auth from form field: {str(form_auth)[:30]}...")
                 user = await get_current_user_from_jwt(str(form_auth), db)
-                print(f"[Auth] Form JWT auth succeeded for user: {user.email}")
+                logger.info(f"[Auth] Form JWT auth succeeded for user: {user.email}")
                 return (user, f"supa_{user.supabase_id}")
 
             if form_user_id:
                 # Fall back to session ID from form
                 user_id_str = str(form_user_id)
                 if user_id_str.startswith('user_') or user_id_str.startswith('supa_'):
-                    print(f"[Auth] Using form user_id: {user_id_str[:20]}...")
+                    logger.info(f"[Auth] Using form user_id: {user_id_str[:20]}...")
                     return (None, user_id_str)
 
             # No valid form auth found either
-            print("[Auth] No valid auth in headers OR form fields")
+            logger.info("[Auth] No valid auth in headers OR form fields")
             raise header_error  # Re-raise original error
 
         except HTTPException:
             raise  # Re-raise auth errors
         except Exception as e:
-            print(f"[Auth] Form parsing error: {type(e).__name__}: {str(e)}")
+            logger.error(f"[Auth] Form parsing error: {type(e).__name__}: {str(e)}")
             raise header_error  # Re-raise original header error if form parsing fails

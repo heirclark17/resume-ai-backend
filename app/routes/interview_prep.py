@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, Header, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Header, BackgroundTasks, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, text
 from sqlalchemy.orm import selectinload
@@ -24,9 +26,12 @@ from datetime import datetime
 import json
 
 router = APIRouter(prefix="/api/interview-prep", tags=["interview_prep"])
+limiter = Limiter(key_func=get_remote_address)
 
 @router.post("/generate/{tailored_resume_id}")
+@limiter.limit("10/hour")
 async def generate_interview_prep(
+    request: Request,
     tailored_resume_id: int,
     db: AsyncSession = Depends(get_db)
 ):

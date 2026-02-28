@@ -4,6 +4,7 @@ import os
 import json
 from openai import AsyncOpenAI
 from typing import Optional
+from app.services.gateway import get_gateway
 
 
 class BuilderAIService:
@@ -42,7 +43,9 @@ Requirements:
 
 Return ONLY a JSON array of 3 strings. No other text."""
 
-        response = await self.client.chat.completions.create(
+        response = await get_gateway().execute(
+            "openai",
+            self.client.chat.completions.create,
             model=self.model,
             messages=[
                 {"role": "system", "content": "You are an expert resume writer. Return only valid JSON."},
@@ -87,7 +90,9 @@ Requirements:
 
 Return ONLY a JSON array of strings. No other text."""
 
-        response = await self.client.chat.completions.create(
+        response = await get_gateway().execute(
+            "openai",
+            self.client.chat.completions.create,
             model=self.model,
             messages=[
                 {"role": "system", "content": "You are an expert resume writer. Return only valid JSON."},
@@ -133,7 +138,9 @@ Return ONLY a JSON object with this structure:
 {{"categories": {{"Category Name": ["skill1", "skill2", ...]}}, "suggested_skills": ["all", "skills", "flat"]}}
 No other text."""
 
-        response = await self.client.chat.completions.create(
+        response = await get_gateway().execute(
+            "openai",
+            self.client.chat.completions.create,
             model=self.model,
             messages=[
                 {"role": "system", "content": "You are a career coach and ATS optimization expert. Return only valid JSON."},

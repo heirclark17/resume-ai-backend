@@ -7,6 +7,8 @@ identifies keywords, and calculates match scores using GPT-4.1-mini
 
 import os
 from openai import AsyncOpenAI
+from app.services.gateway import get_gateway
+from app.utils.logger import logger
 import json
 from typing import Dict, Any, List
 
@@ -132,7 +134,9 @@ CRITICAL REQUIREMENTS:
 - Return valid JSON only"""
 
         try:
-            response = await self.client.chat.completions.create(
+            response = await get_gateway().execute(
+                "openai",
+                self.client.chat.completions.create,
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -146,7 +150,7 @@ CRITICAL REQUIREMENTS:
             return result
 
         except Exception as e:
-            print(f"Error analyzing section {section_name}: {e}")
+            logger.error(f"Error analyzing section {section_name}: {e}")
             return None
 
     async def analyze_keywords(
@@ -211,7 +215,9 @@ CRITICAL REQUIREMENTS:
 - Return valid JSON only"""
 
         try:
-            response = await self.client.chat.completions.create(
+            response = await get_gateway().execute(
+                "openai",
+                self.client.chat.completions.create,
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -225,7 +231,7 @@ CRITICAL REQUIREMENTS:
             return result
 
         except Exception as e:
-            print(f"Error analyzing keywords: {e}")
+            logger.error(f"Error analyzing keywords: {e}")
             raise Exception(f"Failed to analyze keywords: {str(e)}")
 
     async def calculate_match_score(
@@ -296,7 +302,9 @@ CRITICAL REQUIREMENTS:
 - Return valid JSON only"""
 
         try:
-            response = await self.client.chat.completions.create(
+            response = await get_gateway().execute(
+                "openai",
+                self.client.chat.completions.create,
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -317,5 +325,5 @@ CRITICAL REQUIREMENTS:
             return result
 
         except Exception as e:
-            print(f"Error calculating match score: {e}")
+            logger.error(f"Error calculating match score: {e}")
             raise Exception(f"Failed to calculate match score: {str(e)}")

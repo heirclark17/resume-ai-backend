@@ -13,28 +13,20 @@ async def debug_headers(
 ):
     """Debug endpoint to check what headers Railway receives"""
     return {
-        "all_headers": dict(request.headers),
-        "authorization_param": authorization,
-        "x_api_key_param": x_api_key,
-        "x_user_id_param": x_user_id,
         "has_authorization": "authorization" in request.headers,
         "has_x_api_key": "x-api-key" in request.headers,
         "has_x_user_id": "x-user-id" in request.headers,
+        "content_type": request.headers.get("content-type", ""),
+        "user_agent": request.headers.get("user-agent", ""),
     }
 
 @router.get("/env")
 async def debug_env():
-    """Debug endpoint to check environment configuration"""
-    supabase_url = os.getenv('SUPABASE_URL', '')
-    supabase_jwt_secret = os.getenv('SUPABASE_JWT_SECRET', '')
-    supabase_anon_key = os.getenv('SUPABASE_ANON_KEY', '')
-
+    """Debug endpoint to check environment configuration (no secrets exposed)"""
     return {
-        "supabase_url_configured": bool(supabase_url),
-        "supabase_url_length": len(supabase_url),
-        "supabase_url_starts_with_https": supabase_url.startswith('https://'),
-        "supabase_jwt_secret_configured": bool(supabase_jwt_secret),
-        "supabase_anon_key_configured": bool(supabase_anon_key),
-        "supabase_anon_key_length": len(supabase_anon_key),
-        "jwks_url": f"{supabase_url}/auth/v1/jwks" if supabase_url else "NOT_CONFIGURED",
+        "supabase_url_configured": bool(os.getenv('SUPABASE_URL', '')),
+        "supabase_jwt_secret_configured": bool(os.getenv('SUPABASE_JWT_SECRET', '')),
+        "supabase_anon_key_configured": bool(os.getenv('SUPABASE_ANON_KEY', '')),
+        "openai_api_key_configured": bool(os.getenv('OPENAI_API_KEY', '')),
+        "database_url_configured": bool(os.getenv('DATABASE_URL', '')),
     }

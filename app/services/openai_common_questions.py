@@ -10,6 +10,8 @@ Sources consulted for best practices:
 
 import os
 from openai import AsyncOpenAI
+from app.services.gateway import get_gateway
+from app.utils.logger import logger
 import json
 from typing import Dict, Any
 
@@ -213,7 +215,9 @@ CRITICAL REQUIREMENTS:
 Generate all 10 now. Return valid JSON only."""
 
         try:
-            response = await self.client.chat.completions.create(
+            response = await get_gateway().execute(
+                "openai",
+                self.client.chat.completions.create,
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -228,5 +232,5 @@ Generate all 10 now. Return valid JSON only."""
             return result
 
         except Exception as e:
-            print(f"Error generating common questions: {e}")
+            logger.error(f"Error generating common questions: {e}")
             raise Exception(f"Failed to generate common questions: {str(e)}")

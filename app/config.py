@@ -1,6 +1,9 @@
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+import logging
 import os
+
+_log = logging.getLogger(__name__)
 
 class Settings(BaseSettings):
     # API Keys
@@ -52,22 +55,22 @@ class Settings(BaseSettings):
         if railway_db:
             # Sanitize URL for logging (hide credentials)
             sanitized = self._sanitize_db_url(railway_db)
-            print(f"[CONFIG] Railway DATABASE_URL detected: {sanitized}")
+            _log.info(f"[CONFIG] Railway DATABASE_URL detected: {sanitized}")
 
             # Convert to async driver
             if railway_db.startswith("postgres://"):
                 url = railway_db.replace("postgres://", "postgresql+asyncpg://", 1)
-                print(f"[CONFIG] Converted to: {self._sanitize_db_url(url)}")
+                _log.info(f"[CONFIG] Converted to: {self._sanitize_db_url(url)}")
                 return url
             elif railway_db.startswith("postgresql://"):
                 url = railway_db.replace("postgresql://", "postgresql+asyncpg://", 1)
-                print(f"[CONFIG] Converted to: {self._sanitize_db_url(url)}")
+                _log.info(f"[CONFIG] Converted to: {self._sanitize_db_url(url)}")
                 return url
             else:
-                print(f"[CONFIG] Using DATABASE_URL as-is")
+                _log.info("[CONFIG] Using DATABASE_URL as-is")
                 return railway_db
         else:
-            print("[CONFIG] No DATABASE_URL found, using SQLite")
+            _log.info("[CONFIG] No DATABASE_URL found, using SQLite")
             return "sqlite+aiosqlite:///./database/resume_ai.db"
 
     @staticmethod

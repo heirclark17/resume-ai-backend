@@ -58,7 +58,28 @@ async def upload_resume(
 
     try:
         logger.info("=== UPLOAD START ===")
-        logger.info(f"Received file: {file.filename}, Content-Type: {file.content_type}, Size: {file.size if hasattr(file, 'size') else 'unknown'}")
+
+        # Validate file size (max 10MB)
+        MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+        contents = await file.read()
+        if len(contents) > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large. Maximum size is 10MB, got {len(contents) / 1024 / 1024:.1f}MB"
+            )
+        await file.seek(0)  # Reset for downstream readers
+
+        # Validate file type
+        allowed_types = {".pdf", ".docx", ".doc", ".txt"}
+        import os as _os
+        ext = _os.path.splitext(file.filename or "")[1].lower()
+        if ext not in allowed_types:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported file type '{ext}'. Allowed: {', '.join(allowed_types)}"
+            )
+
+        logger.info(f"Received file: {file.filename}, Content-Type: {file.content_type}, Size: {len(contents)} bytes")
 
         # Save file
         logger.info("Step 1: Saving file...")
