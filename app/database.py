@@ -133,6 +133,7 @@ async def run_migrations():
             'totp_secret': 'VARCHAR',
             'twofa_enabled': 'BOOLEAN DEFAULT FALSE',
             'twofa_backup_codes': 'VARCHAR',
+            'api_key_prefix': 'VARCHAR',
         }
         for col, col_type in users_columns.items():
             try:
@@ -148,6 +149,48 @@ async def run_migrations():
                 if is_postgres:
                     await conn.execute(text(f"ALTER TABLE users ALTER COLUMN {nullable_col} DROP NOT NULL"))
                     print(f"  Migration: users.{nullable_col} now allows NULL")
+            except Exception as e:
+                pass
+
+        # Add soft-delete and audit columns to base_resumes table
+        base_resume_columns = {
+            'file_signature': 'VARCHAR',
+            'is_deleted': 'BOOLEAN DEFAULT FALSE',
+            'deleted_at': 'TIMESTAMP',
+            'deleted_by': 'INTEGER',
+            'candidate_phone': 'VARCHAR',
+            'candidate_location': 'VARCHAR',
+            'candidate_linkedin': 'VARCHAR',
+        }
+        for col, col_type in base_resume_columns.items():
+            try:
+                if is_postgres:
+                    await conn.execute(text(f"ALTER TABLE base_resumes ADD COLUMN IF NOT EXISTS {col} {col_type}"))
+                else:
+                    result = await conn.execute(text("PRAGMA table_info(base_resumes)"))
+                    existing_cols = [row[1] for row in result.fetchall()]
+                    if col not in existing_cols:
+                        await conn.execute(text(f"ALTER TABLE base_resumes ADD COLUMN {col} {col_type}"))
+                print(f"  Migration: ensured column {col} exists on base_resumes")
+            except Exception as e:
+                pass
+
+        # Add soft-delete columns to tailored_resumes table
+        tailored_resume_columns = {
+            'is_deleted': 'BOOLEAN DEFAULT FALSE',
+            'deleted_at': 'TIMESTAMP',
+            'deleted_by': 'INTEGER',
+        }
+        for col, col_type in tailored_resume_columns.items():
+            try:
+                if is_postgres:
+                    await conn.execute(text(f"ALTER TABLE tailored_resumes ADD COLUMN IF NOT EXISTS {col} {col_type}"))
+                else:
+                    result = await conn.execute(text("PRAGMA table_info(tailored_resumes)"))
+                    existing_cols = [row[1] for row in result.fetchall()]
+                    if col not in existing_cols:
+                        await conn.execute(text(f"ALTER TABLE tailored_resumes ADD COLUMN {col} {col_type}"))
+                print(f"  Migration: ensured column {col} exists on tailored_resumes")
             except Exception as e:
                 pass
 
